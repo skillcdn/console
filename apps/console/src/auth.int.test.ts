@@ -163,11 +163,10 @@ describe("signing in", () => {
       signIn: [{ key: "gh", label: "GitHub", admits: { organization: null, domains: [] } }],
     });
     expect(await me(h)).toEqual({
+      // Nobody is told what the organization's accounts are named from: its short name, its
+      // domain and the services its agents work with are its members' to read (ADR-0089).
       workspace: {
         name: "Acme",
-        handle: null,
-        domain: null,
-        services: {},
         tokenDaysAtMost: null,
         skills: { source: "https://skillcdn.ai", address: null, packToken: null },
         peopleVisibility: "everyone",
@@ -618,9 +617,6 @@ describe("a deployment where nobody signs in", () => {
     expect(await me(h)).toEqual({
       workspace: {
         name: "Acme",
-        handle: null,
-        domain: null,
-        services: {},
         tokenDaysAtMost: null,
         skills: { source: "https://skillcdn.ai", address: null, packToken: null },
         peopleVisibility: "everyone",

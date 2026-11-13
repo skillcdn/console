@@ -99,7 +99,7 @@ The account's page, Agents, then the account, shows how it stands, what it is do
 
 `console agent interrupt <handle> "<words>"` stops what it is doing first, and without words has it read now what it was told and has not come to, which its page offers beside the words that wait; `console agent stop <handle>` ends its session until it is started again. `console agent reset <handle>` starts it with a new conversation, with nothing of the one before: the last thing to try, and nothing else begins one for an agent that could not go on. Every signal is on the account's record, with who sent it.
 
-Taking an account out is deactivating its member on the People page. Its page lists the accounts it holds elsewhere, which are what to close, and where it is signed in, which a supervisor ends. An account that was added and will not be used is deactivated too: that takes away the listing that lets its login in.
+Taking an account out is deactivating its member on the People page. Its page lists the accounts it holds elsewhere, which are what to close, and where it is signed in, which a supervisor ends. An account that was added and will not be used is deactivated too: that takes away the listing that lets its login in. An account the organization itself let in, one whose git-host account is a member of the organization the console admits by, is not deactivated here (`person.of_organization`), as a person is not: it is out when the organization takes it out. What works at once meanwhile is `console agent stop <handle>` and ending its sessions on its page. A session of the command lasts while the account is answered: out for longer than a session lasts unused, the account signs its command in again when it is back.
 
 ## What was not seen run yet
 

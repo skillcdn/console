@@ -4,9 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import {
+  CLAIM_PATH,
+  connectPath,
   pluginPath,
   projectPath,
   REST_ROUTES,
+  restClaimSchema,
+  restConnectionSchema,
   restErrorSchema,
   restEventsSchema,
   restPluginDetailSchema,
@@ -404,6 +408,51 @@ describe("an endpoint of the plugin", () => {
     expect(leaky.headers.get("content-type")).toBe("text/html");
     expect(leaky.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
     expect(await leaky.text()).toBe("<b>hi</b>");
+  });
+
+  it("takes the command signed in as the member as it takes a token, with no page behind it (ADR-0084)", async () => {
+    // The command asks to be the member, the member says so on the console's own pages, and
+    // the command holds a session it presents as a token is presented.
+    const begun = await h.request(REST_ROUTES.connect, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ agent: "console on a desk", as: "self" }),
+    });
+    expect(begun.status).toBe(201);
+    const connection = restConnectionSchema.parse(await begun.json());
+    const approved = await h.request(connectPath(connection.code, "approve"), {
+      method: "POST",
+      headers: { cookie: member, origin: SIGN_IN_URL },
+    });
+    expect(approved.status).toBe(200);
+    const claimed = await h.request(CLAIM_PATH, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: connection.secret }),
+    });
+    const claim = restClaimSchema.parse(await claimed.json());
+    if (claim.status !== "signed_in") {
+      throw new Error(`the claim answered ${claim.status}`);
+    }
+    // A change by it is the member's, as a token's is: no origin to name, and none asked for.
+    const response = await h.request(`${AT}/x/ping`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${claim.secret}`, "content-type": "text/plain" },
+      body: "from the command",
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      method: "POST",
+      body: "from the command",
+      caller: expect.objectContaining({ kind: "person", roles: ["clerk"] }),
+    });
+    // A browser's session from elsewhere than the console's own pages is still nobody's change.
+    const elsewhere = await h.request(`${AT}/x/ping`, {
+      method: "POST",
+      headers: { cookie: member, "content-type": "text/plain" },
+      body: "from another site",
+    });
+    expect(elsewhere.status).toBe(403);
   });
 
   it("takes a webhook as nobody, which the plugin verifies with a secret it never sees, within the bound", async () => {

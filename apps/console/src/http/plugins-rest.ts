@@ -1035,13 +1035,15 @@ export function registerPluginsRest(
     if (key === undefined || name === undefined) {
       return notFound(c);
     }
-    // Who: the person a token or a session names; a session's request from elsewhere than the
-    // console's own pages counts for nobody, as every change does, except for a read.
+    // Who: the person a token or a session names; a browser's session asking from elsewhere
+    // than the console's own pages counts for nobody, as every change does, except for a read.
+    // What is presented in the authorization header, a token or the session of a command signed
+    // in as the account itself (ADR-0084), has no page behind it and is the member's as it is.
     const method = c.req.method.toUpperCase();
     const caller = await access.caller(c);
     const nobody =
       caller === undefined ||
-      (caller.token === undefined &&
+      (!access.presentsToken(c) &&
         method !== "GET" &&
         method !== "HEAD" &&
         !access.fromOwnPages(c));

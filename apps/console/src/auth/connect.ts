@@ -51,9 +51,23 @@ function newCode(): string {
   return `${letters.slice(0, GROUP)}-${letters.slice(GROUP)}`;
 }
 
-/** PostgreSQL's word for a row that would repeat a unique key. */
-const isUniqueViolation = (error: unknown): boolean =>
-  typeof error === "object" && error !== null && "code" in error && error.code === "23505";
+/**
+ * PostgreSQL's word for a row that would repeat a unique key. The ORM throws an error of its own
+ * for a statement that failed, with the driver's as its cause: the code is looked for down the
+ * causes, a few deep.
+ */
+const isUniqueViolation = (error: unknown): boolean => {
+  for (let at: unknown = error, depth = 0; depth < 4; depth += 1) {
+    if (typeof at !== "object" || at === null) {
+      return false;
+    }
+    if ("code" in at && at.code === "23505") {
+      return true;
+    }
+    at = "cause" in at ? at.cause : undefined;
+  }
+  return false;
+};
 
 /** What the command is answered when it begins. */
 export interface Connection {
@@ -81,6 +95,8 @@ export interface ConnectionsOptions {
   readonly workspaceId: () => Promise<string>;
   /** The console's own page for a code: what the command shows and a person opens. */
   readonly pageFor: (code: string) => string;
+  /** Where a code comes from: the system's randomness unless said, which a test says. */
+  readonly newCode?: (() => string) | undefined;
 }
 
 export class Connections {
@@ -106,8 +122,9 @@ export class Connections {
     const secret = newToken(CONNECT_SECRET_PREFIX);
     const workspaceId = await this.#options.workspaceId();
     // A code a live request holds already fails the insert; the space is large, so another try is enough.
+    const draw = this.#options.newCode ?? newCode;
     for (let attempt = 0; ; attempt += 1) {
-      const code = newCode();
+      const code = draw();
       try {
         const made = await createConnectRequest(database, {
           workspaceId,

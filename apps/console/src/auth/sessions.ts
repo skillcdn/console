@@ -189,40 +189,57 @@ export class Sessions {
   /**
    * Who the request's authorization header says is signed in with a command's session, or
    * nobody: the account, and the session, by which the command gives it up when it signs out.
+   * `stillIn` says whether the member is let in now: asked by one who is out, the session is
+   * answered as it is, for the refusal to name its reason, and is not noted as used.
    */
   async resolveCommand(
     authorizationHeader: string | null | undefined,
     client: SessionClient,
+    stillIn?: (person: PersonRecord) => boolean,
   ): Promise<{ readonly person: PersonRecord; readonly command: CommandSession } | undefined> {
     const secret = readBearer(authorizationHeader);
     if (secret === undefined || !secret.startsWith(COMMAND_SESSION_PREFIX)) {
       return undefined;
     }
-    const session = await this.#find(hashToken(secret), "command", client);
+    const session = await this.#find(hashToken(secret), "command", client, stillIn);
     return session === undefined
       ? undefined
       : { person: session.person, command: { id: session.id, name: session.name ?? "" } };
   }
 
-  /** Who the request's cookie says is signed in, or nobody. */
+  /** Who the request's cookie says is signed in, or nobody; `stillIn` as for a command's session. */
   async resolve(
     cookieHeader: string | null | undefined,
     client: SessionClient,
+    stillIn?: (person: PersonRecord) => boolean,
   ): Promise<PersonRecord | undefined> {
     const token = readCookie(cookieHeader, this.#cookie);
     if (token === undefined) {
       return undefined;
     }
-    return (await this.#find(hashToken(token), "browser", client))?.person;
+    return (await this.#find(hashToken(token), "browser", client, stillIn))?.person;
   }
 
-  /** The live session of one kind a token's hash names, noted as used when it has not been for a while. */
-  async #find(tokenHash: string, kind: SessionKind, client: SessionClient) {
+  /**
+   * The live session of one kind a token's hash names, noted as used when it has not been for a
+   * while. A request that is refused is no use of it: a session lives as long as its member is
+   * answered, so that a runner which goes on asking while its account is out does not carry the
+   * session past the day it would have ended, to be the account again the moment it is back.
+   */
+  async #find(
+    tokenHash: string,
+    kind: SessionKind,
+    client: SessionClient,
+    stillIn?: (person: PersonRecord) => boolean,
+  ) {
     const { database, clock, ttlMs, logger } = this.#options;
     const now = clock.now();
     const session = await findSession(database, tokenHash, now, kind);
     if (session === undefined) {
       return undefined;
+    }
+    if (stillIn !== undefined && !stillIn(session.person)) {
+      return session;
     }
     if (now.getTime() - session.lastSeenAt.getTime() >= TOUCH_INTERVAL_MS) {
       // A session lives as long as it is used, and is noted as used from where. The answer

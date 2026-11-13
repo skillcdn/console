@@ -92,6 +92,16 @@ describe("the services a workspace's agents work with (ADR-0089)", () => {
     expect(await changes()).toEqual([
       ["handle", "domain", "services.git", "services.identity", "services.messenger"],
     ]);
+    // Nobody signed in is told none of the three: what the organization's accounts are named
+    // from and where they are kept is its members' to read. The sign-in page has what it needs.
+    const nobody = restMeSchema.parse(await (await get({}, REST_ROUTES.me)).json());
+    expect(nobody.person).toBeNull();
+    expect(nobody.workspace).not.toHaveProperty("handle");
+    expect(nobody.workspace).not.toHaveProperty("domain");
+    expect(nobody.workspace).not.toHaveProperty("services");
+    expect(nobody.workspace.name).toBeTypeOf("string");
+    expect(nobody.signIn.map((provider) => provider.key)).toEqual(["gh", "google"]);
+    expect(JSON.stringify(nobody)).not.toContain("acme.slack.com");
     // What is already so writes nothing, whatever order its parameters come in.
     await patch(alice, {
       handle: "acme",

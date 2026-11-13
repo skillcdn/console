@@ -29,3 +29,14 @@ export function restWorkspace(
     language: settings.language,
   };
 }
+
+/**
+ * The workspace as nobody signed in is told of it: without its short name, its domain and the
+ * services its agents work with (ADR-0089), which say what its accounts are named and where they
+ * are kept, and are its members' to read. The sign-in page needs the name, the language and the
+ * ways in; each of the three is read as optional.
+ */
+export function restWorkspaceForNobody(workspace: RestWorkspace): RestWorkspace {
+  const { handle, domain, services, ...open } = workspace;
+  return open;
+}

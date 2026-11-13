@@ -332,6 +332,40 @@ describe("the command signed in as the account itself (ADR-0084)", () => {
     expect((await get(bearer(kept.secret), REST_ROUTES.people)).status).toBe(200);
   });
 
+  it("is not kept by being refused: out for longer than a session lasts, the account signs in again", async () => {
+    const kept = await signInCommand(mira, "console on mac-mini");
+    expect((await get(bearer(kept.secret), REST_ROUTES.people)).status).toBe(200);
+    const out = await send(fromPages(alice), "PATCH", `${REST_ROUTES.people}/${miraId}`, {
+      status: "deactivated",
+    });
+    expect(out.status).toBe(200);
+    // Its runner goes on asking, as a runner does, and is refused each time. A refusal is no
+    // use of the session: its end stays where the last answer it was given left it.
+    for (let asked = 0; asked < 3; asked += 1) {
+      now += 9 * DAY;
+      const refused = await get(bearer(kept.secret), REST_ROUTES.people);
+      expect(refused.status).toBe(403);
+      expect(await errorOf(refused)).toBe("auth.deactivated");
+    }
+    // Let whatever a refusal might have noted be written before the clock moves on.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Thirty-one days out, and taken back in: the session lapsed while the account was out, and
+    // what it reached, the account's secrets among it, waits for a sign-in as the account.
+    now += 4 * DAY;
+    const back = await send(
+      fromPages(await h.signIn("alice")),
+      "PATCH",
+      `${REST_ROUTES.people}/${miraId}`,
+      { status: "active" },
+    );
+    expect(back.status).toBe(200);
+    expect((await get(bearer(kept.secret), REST_ROUTES.people)).status).toBe(401);
+    // The browsers nobody used meanwhile lapsed with it.
+    alice = await h.signIn("alice");
+    bob = await h.signIn("bob");
+    mira = await h.signIn("carol");
+  });
+
   it("is a person's too, who says the same of a command of their own", async () => {
     const held = await signInCommand(bob, "console on bob's laptop");
     const me = await meOf(bearer(held.secret));

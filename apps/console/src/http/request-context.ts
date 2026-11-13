@@ -27,15 +27,19 @@ export interface RequestContextOptions {
 /** Probes answer every few seconds for as long as the process lives; they would drown the log. */
 const UNLOGGED_PATHS = new Set(["/healthz", "/readyz"]);
 const MAX_LOGGED_USER_AGENT = 200;
-/** The connect code in a path: the page a person approves an agent on, and the API under it. */
-const CONNECT_CODE_IN_PATH = /^((?:\/api\/v1)?\/connect\/)[^/]+/;
+/**
+ * A code in a path: the connect code, on the page a person approves an agent on and the API
+ * under it, and the code of an invitation, on the guide's page and the API that opens it.
+ */
+const CODE_IN_PATH = /^((?:\/api\/v1)?\/(?:connect|setup)\/)[^/]+/;
 
 /**
  * The path as the access log carries it: a connect code is the credential a person approves
- * for its half hour (ADR-0011), and a path that names one is logged with the code masked.
+ * for its half hour (ADR-0011), and an invitation's code says for its week which account a setup
+ * is for (ADR-0088); a path that names either is logged with the code masked.
  */
 export function loggedPath(path: string): string {
-  return path.replace(CONNECT_CODE_IN_PATH, "$1<code>");
+  return path.replace(CODE_IN_PATH, "$1<code>");
 }
 
 /** The address of the peer on the socket. Absent when the app is called without a socket (tests). */

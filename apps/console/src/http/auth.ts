@@ -47,7 +47,7 @@ import type { OrganizationDirectory } from "../ports/organization.js";
 import { errorBody } from "./app.js";
 import type { AppEnv } from "./request-context.js";
 import { restPersonWithEmail } from "./rest-shapes.js";
-import { restWorkspace } from "./workspace.js";
+import { restWorkspace, restWorkspaceForNobody } from "./workspace.js";
 
 /** What signing in is made of, on a deployment where people can. */
 export interface AppAuth {
@@ -135,6 +135,8 @@ export function createAccess(auth: AppAuth | undefined): Access {
       if (auth === undefined) {
         return undefined;
       }
+      // A session is noted as used for a member who is still in, and for nobody else.
+      const stillIn = (person: PersonRecord) => auth.membership.allows(person);
       const authorization = c.req.header("authorization");
       if (authorization !== undefined) {
         // The command names its version; the token keeps it, so that the Agents page says
@@ -147,7 +149,7 @@ export function createAccess(auth: AppAuth | undefined): Access {
           )) ??
           // The command signed in as the account itself (ADR-0084): a session, presented as a
           // token is, and held to what a token may ask by being presented so.
-          (await auth.sessions.resolveCommand(authorization, clientOf(c)));
+          (await auth.sessions.resolveCommand(authorization, clientOf(c), stillIn));
         if (found === undefined) {
           return undefined;
         }
@@ -161,7 +163,7 @@ export function createAccess(auth: AppAuth | undefined): Access {
           ? { person: found.person, token: found.token }
           : { person: found.person, token: undefined, command: found.command };
       }
-      const person = await auth.sessions.resolve(c.req.header("cookie"), clientOf(c));
+      const person = await auth.sessions.resolve(c.req.header("cookie"), clientOf(c), stillIn);
       if (person === undefined) {
         return undefined;
       }
@@ -264,8 +266,9 @@ export function registerAuth(app: Hono<AppEnv>, dependencies: AuthDependencies):
   const meOf = async (caller: AccessCaller | undefined): Promise<RestMe> => {
     const found = await workspace();
     const person = caller?.person;
+    const whole = workspaceOf(found, await readWorkspaceSettings(database, found.id));
     return {
-      workspace: workspaceOf(found, await readWorkspaceSettings(database, found.id)),
+      workspace: person === undefined ? restWorkspaceForNobody(whole) : whole,
       person: person === undefined ? null : restPersonWithEmail(person),
       agent: caller?.token?.name ?? null,
       // The session asking, where one asks: the command's, signed in as the account itself, which
