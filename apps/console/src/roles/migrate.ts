@@ -40,12 +40,15 @@ async function upgradePlugins(
   });
   try {
     const blobs = await blobStoreOf(config, database, logger, `${APP_NAME}/${APP_VERSION}`);
+    // The role is given no name for the board (deploy/README.md): it finds the workspace and
+    // leaves its name alone.
     const { plugins, host, discovery } = await buildPlugins(
       config,
       database,
       blobs,
       logger,
       hostEntry,
+      false,
     );
     await host.start();
     try {

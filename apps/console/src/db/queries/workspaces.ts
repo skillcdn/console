@@ -162,10 +162,16 @@ export async function setWorkspacePackToken(
  * The workspace the deployment runs, made at boot by whichever role comes first and renamed by
  * configuration since. Several replicas starting together all upsert the same row. A workspace
  * made here starts with its categories (ADR-0019); the ones the migration found were seeded then.
+ * A role that is configured with no name, as `migrate` is, says `rename: false`: the workspace
+ * that is there keeps the name it has, and only one made here takes the name given.
  */
 export async function ensureWorkspace(
   database: Database,
-  workspace: { readonly name: string; readonly now: Date },
+  workspace: {
+    readonly name: string;
+    readonly now: Date;
+    readonly rename?: boolean | undefined;
+  },
 ): Promise<WorkspaceRecord> {
   const handle = drizzleOf(database);
   const [row] = await handle
@@ -173,7 +179,11 @@ export async function ensureWorkspace(
     .values({ key: DEFAULT_WORKSPACE_KEY, name: workspace.name, updatedAt: workspace.now })
     .onConflictDoUpdate({
       target: [workspaces.key],
-      set: { name: workspace.name, updatedAt: workspace.now },
+      // An update that changes nothing still answers the row, which doing nothing would not.
+      set:
+        workspace.rename === false
+          ? { key: DEFAULT_WORKSPACE_KEY }
+          : { name: workspace.name, updatedAt: workspace.now },
     })
     .returning({
       id: workspaces.id,

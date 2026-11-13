@@ -129,20 +129,24 @@ export type ApiConfig = Pick<Config, "workspace"> & {
 
 /**
  * The workspace of this deployment, found once and kept. A failure is not kept: the next
- * request asks again.
+ * request asks again. `rename` false finds it without calling it by `name`, for a role the
+ * contract gives no name to.
  */
 export function workspaceResolver(
   database: Database,
   clock: Clock,
   name: string,
+  rename = true,
 ): () => Promise<WorkspaceRecord> {
   let found: Promise<WorkspaceRecord> | undefined;
   return () => {
     if (found === undefined) {
-      found = ensureWorkspace(database, { name, now: clock.now() }).catch((error: unknown) => {
-        found = undefined;
-        throw error;
-      });
+      found = ensureWorkspace(database, { name, now: clock.now(), rename }).catch(
+        (error: unknown) => {
+          found = undefined;
+          throw error;
+        },
+      );
     }
     return found;
   };
@@ -661,6 +665,12 @@ export async function buildPlugins(
   logger: Logger,
   /** The compiled host; another where the console runs from its sources, as its tests do. */
   hostEntry: string = HOST_ENTRY,
+  /**
+   * Whether the role calls the workspace by its configured name. The `api` and the `worker` are
+   * given the name (deploy/README.md); `migrate` is not, and a board renamed to the image's
+   * default until the api has started is what it must not leave.
+   */
+  renames = true,
 ): Promise<{
   plugins: Plugins;
   host: PluginHost;
@@ -699,7 +709,7 @@ export async function buildPlugins(
   });
   const plugins = new Plugins({
     database,
-    workspace: workspaceResolver(database, systemClock, config.workspace.name),
+    workspace: workspaceResolver(database, systemClock, config.workspace.name, renames),
     host,
     discovery,
     memoryMb: config.plugins.memoryMb,

@@ -11,7 +11,7 @@ import { loadConfig } from "../config/config.js";
 import { drizzleOf } from "../db/client.js";
 import { findPerson, type PersonRecord } from "../db/queries/people.js";
 import { ensureWorkspace } from "../db/queries/workspaces.js";
-import { events, pluginInstalls } from "../db/schema.js";
+import { events, pluginInstalls, workspaces } from "../db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "../db/testing.js";
 import { discoverPlugins } from "../plugins/discovery.js";
 import { PluginHost } from "../plugins/host.js";
@@ -83,7 +83,10 @@ const kinds = async (): Promise<string[]> =>
     .map((event) => event.kind)
     .filter((kind) => kind === "plugin.upgraded" || kind === "plugin.failed");
 /** The role, as a deployment runs it: configured by the environment, with what it logs kept. */
-const migrate = async (): Promise<Record<string, unknown>[]> => {
+const migrate = async (
+  /** What the environment says beside the database and the plugins: the board's name, where the task is given one. */
+  environment: Record<string, string> = { WORKSPACE_NAME: "Acme" },
+): Promise<Record<string, unknown>[]> => {
   const lines: Record<string, unknown>[] = [];
   const logger = pino(
     { level: "info" },
@@ -94,8 +97,8 @@ const migrate = async (): Promise<Record<string, unknown>[]> => {
       {
         ...hostEnvironment(process.env),
         DATABASE_URL: testDatabase.connectionString,
-        WORKSPACE_NAME: "Acme",
         PLUGINS_DIR: root,
+        ...environment,
       },
       () => {
         throw new Error("no file is read");
@@ -230,5 +233,15 @@ describe("the migrate role, with a plugin in the image", () => {
     expect(plugin?.state).toBe("enabled");
     expect(plugin?.problems[0]).toContain("its records are at data version 2 and its code at 3");
     expect((await plugins.invoke("ledger", "command", "all", {}, invoker())).text).toBe("3");
+  }, 120_000);
+
+  it("leaves the board's name as it is, the role being configured with none", async () => {
+    // The contract gives the name to the api and the worker alone: a migrate task that is not
+    // told it must not call the board by the image's default until the api has started.
+    await migrate({});
+    const [row] = await drizzleOf(testDatabase.database)
+      .select({ name: workspaces.name })
+      .from(workspaces);
+    expect(row?.name).toBe("Acme");
   }, 120_000);
 });
