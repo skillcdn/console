@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDomain, restWorkspacePatchSchema, serviceProblem } from "./schemas.js";
+import { isDomain, restWorkspacePatchSchema, serviceProblem, serviceProblemOf } from "./schemas.js";
 import {
   agentLoginOf,
   describeService,
@@ -275,6 +275,32 @@ describe("a service as an administrator names one", () => {
     ] as const) {
       expect(serviceProblem(role, service), JSON.stringify(service)).toBeDefined();
     }
+  });
+
+  it("says what is wrong as a fact a page puts into words, and in words for a program", () => {
+    expect(serviceProblemOf("git", { kind: "github", organization: "acme" })).toBeUndefined();
+    expect(serviceProblemOf("git", {})).toEqual({ what: "kind" });
+    expect(serviceProblemOf("git", { kind: "forgejo", "a parameter": "x" })).toEqual({
+      what: "parameters",
+    });
+    expect(serviceProblemOf("messenger", { kind: "gitlab" })).toEqual({ what: "role" });
+    expect(serviceProblemOf("git", { kind: "github", organisation: "acme" })).toEqual({
+      what: "unknown",
+      parameter: "organisation",
+    });
+    expect(serviceProblemOf("git", { kind: "github", organization: "not a name" })).toEqual({
+      what: "spelling",
+      parameter: "organization",
+    });
+    // The words a program is answered are what they were.
+    expect(serviceProblem("git", {})).toBe("names no kind");
+    expect(serviceProblem("messenger", { kind: "gitlab" })).toBe("is no messenger service");
+    expect(serviceProblem("git", { kind: "github", organisation: "acme" })).toBe(
+      "takes no organisation",
+    );
+    expect(serviceProblem("git", { kind: "github", organization: "not a name" })).toBe(
+      "organization is not spelled as one is",
+    );
   });
 
   it("is read by the patch as data: short lines, a domain that is one, a short name that is one", () => {

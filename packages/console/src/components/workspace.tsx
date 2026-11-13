@@ -8,8 +8,9 @@ import {
   type RestWorkspace,
   type RestWorkspacePatch,
   SERVICE_ROLES,
+  type ServiceProblem,
   type ServiceRole,
-  serviceProblem,
+  serviceProblemOf,
   WEEK_STARTS,
   type WeekStart,
 } from "../api.js";
@@ -388,6 +389,10 @@ const PARAMETERS: Readonly<
 /** The forms of account a git host has, for the kinds that have more than a person's. */
 const FORMS = ["user", "service"] as const;
 
+/** The pack's word for a value's name where it has one, and the name as it came where it has none. */
+const shownWord = (words: Readonly<Record<string, string>>, name: string): string =>
+  Object.hasOwn(words, name) ? (words[name] ?? name) : name;
+
 /** The services a workspace's agents work with (ADR-0089), as they stand: a row each. */
 export function WorkspaceServicesView(props: { readonly workspace: RestWorkspace }) {
   const words = useWords().settings.services;
@@ -420,7 +425,10 @@ export function WorkspaceServicesView(props: { readonly workspace: RestWorkspace
                     .map(([name, value]) => (
                       <span key={name} className="sc-muted">
                         {" "}
-                        · {name}: {value}
+                        {/* A value of a kind the console knows is called by the pack's word, and a
+                            form of account by what it is; another kind's stands as it came. */}
+                        · {shownWord(words.shown, name)}:{" "}
+                        {name === "form" ? shownWord(words.shownForms, value) : value}
                       </span>
                     ))}
                   {account !== undefined && (
@@ -507,13 +515,28 @@ export function WorkspaceServicesForm(props: WorkspaceServicesFormProps) {
     patch.services = services;
   }
   const unchanged = Object.keys(patch).length === 0;
+  // What keeps the form from saving is said under the field it is about, in the page's words.
+  const handleWrong = short.length > 0 && !isHandle(short);
+  const domainWrong = web.length > 0 && !isDomain(web);
+  const problemOf = (role: ServiceRole): ServiceProblem | undefined => {
+    const service = serviceOf(drafts[role]);
+    return service === null ? undefined : serviceProblemOf(role, service);
+  };
+  const problemWords = (role: ServiceRole, problem: ServiceProblem): string => {
+    if (problem.what === "role") {
+      return words.problems.role(words.roles[role]);
+    }
+    if (problem.what === "unknown" || problem.what === "spelling") {
+      const labels: Readonly<Record<string, string>> = words.parameters;
+      const label = Object.hasOwn(labels, problem.parameter)
+        ? (labels[problem.parameter] ?? problem.parameter)
+        : problem.parameter;
+      return words.problems[problem.what](label);
+    }
+    return words.problems[problem.what];
+  };
   const invalid =
-    (short.length > 0 && !isHandle(short)) ||
-    (web.length > 0 && !isDomain(web)) ||
-    SERVICE_ROLES.some((role) => {
-      const service = serviceOf(drafts[role]);
-      return service !== null && serviceProblem(role, service) !== undefined;
-    });
+    handleWrong || domainWrong || SERVICE_ROLES.some((role) => problemOf(role) !== undefined);
   const names = {
     workspace: short.length === 0 ? null : short,
     agent: "mira",
@@ -534,9 +557,15 @@ export function WorkspaceServicesForm(props: WorkspaceServicesFormProps) {
           className="sc-input"
           value={handle}
           autoComplete="off"
+          aria-invalid={handleWrong}
           onChange={(event) => setHandle(event.target.value)}
         />
         <span className="sc-field-hint">{words.handleHint}</span>
+        {handleWrong && (
+          <span className="sc-form-error" role="alert">
+            {words.problems.handle}
+          </span>
+        )}
       </label>
       <label className="sc-field">
         <span className="sc-field-label">{words.domain}</span>
@@ -544,9 +573,15 @@ export function WorkspaceServicesForm(props: WorkspaceServicesFormProps) {
           className="sc-input"
           value={domain}
           autoComplete="off"
+          aria-invalid={domainWrong}
           onChange={(event) => setDomain(event.target.value)}
         />
         <span className="sc-field-hint">{words.domainHint}</span>
+        {domainWrong && (
+          <span className="sc-form-error" role="alert">
+            {words.problems.domain}
+          </span>
+        )}
       </label>
       {SERVICE_ROLES.map((role) => {
         const draft = drafts[role];
@@ -555,6 +590,7 @@ export function WorkspaceServicesForm(props: WorkspaceServicesFormProps) {
         const other = kind.length > 0 && !known.some((provider) => provider.kind === kind);
         const service = serviceOf(draft);
         const account = service === null ? undefined : serviceAccountOf(service, names);
+        const problem = problemOf(role);
         return (
           <fieldset key={role} className="sc-fieldset sc-service-fields">
             <legend className="sc-field-label">{words.roles[role]}</legend>
@@ -634,8 +670,14 @@ export function WorkspaceServicesForm(props: WorkspaceServicesFormProps) {
                 <span className="sc-field-hint">{words.accountHint}</span>
               </label>
             )}
-            {account !== undefined && (
+            {/* What an agent would be called there is said only of names that will be kept. */}
+            {account !== undefined && problem === undefined && !handleWrong && !domainWrong && (
               <span className="sc-field-hint">{words.example(account)}</span>
+            )}
+            {problem !== undefined && (
+              <span className="sc-form-error" role="alert">
+                {problemWords(role, problem)}
+              </span>
             )}
           </fieldset>
         );

@@ -1015,6 +1015,27 @@ export const en = {
       accountHint:
         "How an agent's account is called there, from {workspace}, {agent} and {domain}. Left empty, the service's own way.",
       example: (name: string) => `An agent called mira is ${name} there.`,
+      /** What a service's values are called where they are shown as they stand. */
+      shown: {
+        organization: "organization",
+        account: "account name",
+        workspace: "workspace",
+        group: "group",
+        host: "host",
+        form: "form of account",
+      },
+      shownForms: { user: "a person's account", service: "a service account" },
+      /** Why the form will not save, said under what is wrong. */
+      problems: {
+        handle:
+          "A short name is small letters, digits and hyphens, with a letter or a digit first and last.",
+        domain: "Not a domain: write it as acme.example.",
+        kind: "A service's name is small letters, digits and hyphens, with a letter first.",
+        parameters: "More values than a service takes, or one whose name is no word.",
+        role: (role: string) => `This service cannot be named for ${role}.`,
+        unknown: (name: string) => `This service takes no ${name}.`,
+        spelling: (name: string) => `${name}: not written as this service takes it.`,
+      },
     },
     workspace: {
       title: "Workspace",
@@ -1935,11 +1956,14 @@ export const en = {
       savePicture: "Download its profile picture (PNG)",
       savePictureHint:
         "A PNG of 1024 pixels a side, for its profile at the messenger or the identity provider.",
+      savePictureFailed: "The picture could not be saved here.",
       loadingProposals: "Rolling a few personas",
       form: {
         aria: "Add an agent account",
         proposals: "Choose a persona",
         proposalsHint: "A suggestion: change the name, the handle and the title as you like.",
+        proposalsFailed:
+          "The personas could not be read. Write the name and the handle yourself, or roll again; the console draws the picture.",
         roll: "Roll again",
         name: "Name",
         handle: "Handle",

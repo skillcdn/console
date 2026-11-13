@@ -2885,6 +2885,8 @@ function NewAgentPage(props: {
   const { data, components, navigation, language, names, avatarSets } = props;
   const { busy, error, act } = useAction();
   const [proposals, setProposals] = useState<readonly RestAgentProposal[]>([]);
+  /** Whether the proposals asked for last could not be read: the form says so, and is filled in by hand. */
+  const [proposalsFailed, setProposalsFailed] = useState(false);
   const [round, setRound] = useState(0);
   const { agentProposals } = data.actions;
   const taken = data.agents.map((agent) => agent.person.handle ?? "").join(" ");
@@ -2908,13 +2910,18 @@ function NewAgentPage(props: {
       return;
     }
     const controller = new AbortController();
+    setProposalsFailed(false);
     agentProposals(PROPOSALS_SHOWN, language, controller.signal)
       .then((answer) => {
         if (!controller.signal.aborted) {
           setProposals(answer.items);
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setProposalsFailed(true);
+        }
+      });
     return () => controller.abort();
   }, [round, administrator, names, avatarSets, language, taken, agentProposals]);
   return (
@@ -2928,6 +2935,7 @@ function NewAgentPage(props: {
         <section className="sc-panel sc-panel-form" aria-label={accounts.add}>
           <components.AgentAccountForm
             proposals={proposals}
+            proposalsFailed={proposalsFailed}
             onRoll={() => setRound((current) => current + 1)}
             providers={data.me?.signIn ?? []}
             workspace={data.me?.workspace}

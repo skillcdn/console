@@ -558,7 +558,9 @@ export {
   restWorkspaceSchema,
   restWorkspaceServiceSchema,
   restWorkspaceServicesSchema,
+  type ServiceProblem,
   serviceProblem,
+  serviceProblemOf,
 } from "./schemas.js";
 export {
   agentLoginOf,

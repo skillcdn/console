@@ -1,0 +1,5 @@
+---
+"@skillcdn/console": patch
+---
+
+Two forms say why they will not go on. "Add an agent account" says that the personas are on their way while they are asked for and, where they could not be read, that the name and the handle are written by hand: an account is added without a persona, the console drawing its picture, where the form could not be sent at all before and said nothing. `AgentAccountForm` takes `proposalsFailed` for it. The form of the workspace's services says under the field what keeps it from saving: a short name or a domain that is none, a service that may not be named for its role, a value the service does not take or one that is not written as it takes it; `serviceProblemOf(role, service)` answers that as a fact (`ServiceProblem`) for a page to put into words, beside `serviceProblem`, whose English words for a program are what they were. The services as they stand name a value by the page's word for it, in the page's language. Saving an agent account's picture lets go of the file's address a while after the press, where a browser that begins a download a moment later found nothing, and says so where the picture could not be written out.

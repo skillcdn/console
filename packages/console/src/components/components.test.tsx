@@ -1892,7 +1892,7 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(form).not.toContain("Make this member the agent account");
     expect(form).toContain(">Add the agent account<");
     expect(form).toContain("Next, on its page: an invitation that leads a machine to it.");
-    // Nothing is sent until there is a persona, a login and a project.
+    // Nothing is sent until there is a name, a login and a project.
     expect(form).toMatch(
       /<button[^>]*type="submit"[^>]*disabled=""|<button[^>]*disabled=""[^>]*type="submit"/,
     );
@@ -1985,6 +1985,45 @@ describe("the agent accounts (ADR-0084)", () => {
     expect(github).not.toContain("need not be there yet");
     // With no identity service named, the first way people sign in here.
     expect(render({})).toContain(">GitHub login<");
+  });
+
+  it("says that the personas are on their way, and that they could not be read, where there is none to choose", () => {
+    const form = (props: { readonly failed?: boolean; readonly lang?: "ko" }) => {
+      const drawn = (
+        <AgentAccountForm
+          proposals={[]}
+          proposalsFailed={props.failed}
+          onRoll={() => undefined}
+          providers={[{ key: "gh", label: "GitHub" }]}
+          people={[alice]}
+          me={alice}
+          projects={[]}
+          onSubmit={() => undefined}
+        />
+      );
+      return renderToStaticMarkup(
+        props.lang === "ko" ? (
+          <LanguageContext.Provider value={KOREAN}>{drawn}</LanguageContext.Provider>
+        ) : (
+          drawn
+        ),
+      );
+    };
+    // While they are asked for, the form says so, where it stood empty without a word.
+    const asking = form({});
+    expect(asking).toContain('<p class="sc-field-hint" role="status">Rolling a few personas</p>');
+    expect(asking).not.toContain("could not be read");
+    // Where they could not be read it says that, and what to do: the name and the handle are
+    // written by hand, the console draws the picture, and the way to roll again is still there.
+    const failed = form({ failed: true });
+    expect(failed).toContain(
+      '<p class="sc-form-error" role="alert">The personas could not be read. Write the name and the handle yourself, or roll again; the console draws the picture.</p>',
+    );
+    expect(failed).not.toContain("Rolling a few personas");
+    expect(failed).toContain(">Roll again<");
+    expect(form({ failed: true, lang: "ko" })).toContain(
+      "페르소나 후보를 불러오지 못했습니다. 이름과 핸들을 직접 적거나 다시 뽑아 주세요.",
+    );
   });
 });
 
@@ -5886,6 +5925,63 @@ describe("the workspace's settings", () => {
     );
     expect(korean).not.toContain("Short name");
     expect(korean).toContain("mira@acme.example");
+    // What a value of a kind the console knows is called is the page's word, and a form of
+    // account is said as what it is; another kind's values stand under the names they came with.
+    expect(korean).toContain("조직: acme");
+    expect(korean).not.toContain("organization: acme");
+    expect(korean).toContain("server: &lt;b&gt;chat&lt;/b&gt;.acme.example");
+    expect(renderToStaticMarkup(<WorkspaceServicesView workspace={atGitLab} />)).toContain(
+      "form of account: a service account",
+    );
+    expect(
+      renderToStaticMarkup(
+        <LanguageContext.Provider value={KOREAN}>
+          <WorkspaceServicesView workspace={atGitLab} />
+        </LanguageContext.Provider>,
+      ),
+    ).toContain("계정 형태: 서비스 계정");
+  });
+
+  it("says why the services form will not save, under what is wrong", () => {
+    const wrong = {
+      ...workspace,
+      handle: "Acme Corp",
+      domain: "acme",
+      services: {
+        git: { kind: "github", organization: "not a name" },
+        messenger: { kind: "github" },
+      },
+    };
+    const form = renderToStaticMarkup(
+      <WorkspaceServicesForm workspace={wrong} onSubmit={() => undefined} />,
+    );
+    expect(form).toContain(
+      '<span class="sc-form-error" role="alert">A short name is small letters, digits and hyphens, with a letter or a digit first and last.</span>',
+    );
+    expect(form).toContain("Not a domain: write it as acme.example.");
+    // A value is named by its label on the form, and a kind that may not have a role by the role.
+    expect(form).toContain("Organization: not written as this service takes it.");
+    expect(form).toContain("This service cannot be named for Messenger.");
+    expect(form.match(/aria-invalid="true"/g)).toHaveLength(2);
+    // What an agent would be called there is not said of a service that will not be kept.
+    expect(form).not.toContain("An agent called mira is");
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <WorkspaceServicesForm workspace={wrong} onSubmit={() => undefined} />
+      </LanguageContext.Provider>,
+    );
+    expect(korean).toContain("도메인 형식이 아닙니다. acme.example처럼 적어 주세요.");
+    expect(korean).toContain("조직: 이 서비스가 받는 형식이 아닙니다.");
+    expect(korean).toContain("이 서비스는 메신저 용도로 쓸 수 없습니다.");
+    // A form with nothing wrong says none of it.
+    const fine = renderToStaticMarkup(
+      <WorkspaceServicesForm
+        workspace={{ ...workspace, handle: "acme", domain: "acme.example" }}
+        onSubmit={() => undefined}
+      />,
+    );
+    expect(fine).not.toContain("sc-form-error");
+    expect(fine).not.toContain('aria-invalid="true"');
   });
 
   it("shows the settings as rows, the zone with its offset and the device's beside it", () => {

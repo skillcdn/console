@@ -64,7 +64,14 @@ export async function avatarPngBlob(
   return new Blob([pngFile(size, deflated) as BlobPart], { type: "image/png" });
 }
 
-/** Hands a file to the person's browser to save, under a name. */
+/** How long a file handed to the browser stays at its address, in milliseconds: long enough for the download to begin. */
+const SAVE_GRACE_MS = 60_000;
+
+/**
+ * Hands a file to the person's browser to save, under a name. Its address is let go a while
+ * after, and not in the same breath: a browser that begins the download a moment after the
+ * press finds nothing at an address already let go.
+ */
 function saveBlob(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -73,7 +80,7 @@ function saveBlob(blob: Blob, name: string): void {
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), SAVE_GRACE_MS);
 }
 
 /**
@@ -232,6 +239,8 @@ export function AgentPictureSave(props: {
   const accounts = useWords().agents.accounts;
   const sets = useContext(AvatarSetsContext);
   const [saving, setSaving] = useState(false);
+  /** Whether the picture could not be written out here, as in a browser that compresses nothing. */
+  const [failed, setFailed] = useState(false);
   const { person } = props;
   const parts = person.avatarParts;
   if (parts === null || parts === undefined) {
@@ -239,9 +248,10 @@ export function AgentPictureSave(props: {
   }
   const save = () => {
     setSaving(true);
+    setFailed(false);
     void avatarPngBlob(parts, MAX_AVATAR_PIXELS, sets)
       .then((blob) => saveBlob(blob, `${person.handle ?? "avatar"}.png`))
-      .catch(() => undefined)
+      .catch(() => setFailed(true))
       .finally(() => setSaving(false));
   };
   return (
@@ -257,6 +267,11 @@ export function AgentPictureSave(props: {
           {accounts.savePicture}
         </Button>
         <p className="sc-field-hint">{accounts.savePictureHint}</p>
+        {failed && (
+          <p className="sc-form-error" role="alert">
+            {accounts.savePictureFailed}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -307,6 +322,11 @@ export function memberSignedInAs(
 export interface AgentAccountFormProps {
   /** A few personas to choose from, rolled again with `onRoll`; none while they are asked for. */
   readonly proposals: readonly RestAgentProposal[];
+  /**
+   * The proposals could not be read: the form says so, and is filled in by hand, the console
+   * drawing the picture of an account that names none.
+   */
+  readonly proposalsFailed?: boolean | undefined;
   /** Called to roll the proposals again. Left out, there is no such button. */
   readonly onRoll?: (() => void) | undefined;
   /** The providers people sign in through here: what the account's login is at. */
@@ -391,8 +411,9 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
   const spelled = login.trim().toLowerCase();
   const member = loginOk ? memberSignedInAs(props.people, host, login) : undefined;
   const convert = member !== undefined && converting === spelled;
+  // A persona is a suggestion: an account is made without one, where the proposals could not
+  // be read say, and the console then draws its picture.
   const valid =
-    chosen !== undefined &&
     name.trim() !== "" &&
     handleOk &&
     loginOk &&
@@ -401,7 +422,7 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
     project !== "";
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!valid || host === undefined || chosen === undefined || manager === undefined) {
+    if (!valid || host === undefined || manager === undefined) {
       return;
     }
     props.onSubmit({
@@ -410,8 +431,7 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
       handle,
       name: name.trim(),
       ...(title.trim() === "" ? {} : { title: title.trim() }),
-      avatarSeed: chosen.seed,
-      avatarParts: chosen.avatarParts,
+      ...(chosen === undefined ? {} : { avatarSeed: chosen.seed, avatarParts: chosen.avatarParts }),
       managerId: manager.id,
       project,
       ...(convert ? { convert: true } : {}),
@@ -454,7 +474,17 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
               </button>
             ))}
           </div>
-          <p className="sc-field-hint">{form.proposalsHint}</p>
+          {props.proposalsFailed === true ? (
+            <p className="sc-form-error" role="alert">
+              {form.proposalsFailed}
+            </p>
+          ) : props.proposals.length > 0 ? (
+            <p className="sc-field-hint">{form.proposalsHint}</p>
+          ) : (
+            <p className="sc-field-hint" role="status">
+              {words.agents.accounts.loadingProposals}
+            </p>
+          )}
         </fieldset>
         <div className="sc-field-row">
           <label className="sc-field">

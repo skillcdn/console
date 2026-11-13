@@ -475,41 +475,73 @@ const SERVICE_SHAPES: Readonly<
 };
 
 /**
- * What is wrong with a service named for a role, in a few words, or nothing: a kind the package
- * knows takes its own parameters, spelled as they are, and is named for a role it may have.
+ * What is wrong with a service named for a role, as a fact a page puts into its own words: its
+ * kind is no kind, it has more parameters than one may or one that is no word, it is named for
+ * a role it may not have, or a parameter is one the kind does not take or is not spelled as one.
  */
-export function serviceProblem(
+export type ServiceProblem =
+  | { readonly what: "kind" | "parameters" | "role" }
+  | { readonly what: "unknown" | "spelling"; readonly parameter: string };
+
+/**
+ * What is wrong with a service named for a role, or nothing: a kind the package knows takes its
+ * own parameters, spelled as they are, and is named for a role it may have.
+ */
+export function serviceProblemOf(
   role: ServiceRole,
   service: Readonly<Record<string, string>>,
-): string | undefined {
+): ServiceProblem | undefined {
   const kind = service.kind;
   if (kind === undefined || !SERVICE_KIND.test(kind)) {
-    return "names no kind";
+    return { what: "kind" };
   }
   const names = Object.keys(service).filter((name) => name !== "kind");
   if (
     names.length > MAX_SERVICE_PARAMETERS ||
     names.some((name) => !SERVICE_PARAMETER.test(name))
   ) {
-    return "has more parameters than one may, or one that is no word";
+    return { what: "parameters" };
   }
   const shape = SERVICE_SHAPES[kind];
   if (shape === undefined) {
     return undefined;
   }
   if (!shape.roles.includes(role)) {
-    return `is no ${role} service`;
+    return { what: "role" };
   }
   for (const name of names) {
     const spelled = shape.parameters[name];
     if (spelled === undefined) {
-      return `takes no ${name}`;
+      return { what: "unknown", parameter: name };
     }
     if (!spelled.test(service[name] ?? "")) {
-      return `${name} is not spelled as one is`;
+      return { what: "spelling", parameter: name };
     }
   }
   return undefined;
+}
+
+/** What is wrong with a service named for a role, in a few English words for a program, or nothing. */
+export function serviceProblem(
+  role: ServiceRole,
+  service: Readonly<Record<string, string>>,
+): string | undefined {
+  const problem = serviceProblemOf(role, service);
+  if (problem === undefined) {
+    return undefined;
+  }
+  switch (problem.what) {
+    case "kind":
+      return "names no kind";
+    case "parameters":
+      return "has more parameters than one may, or one that is no word";
+    case "role":
+      return `is no ${role} service`;
+    case "unknown":
+      return `takes no ${problem.parameter}`;
+    case "spelling":
+      return `${problem.parameter} is not spelled as one is`;
+  }
 }
 
 /**

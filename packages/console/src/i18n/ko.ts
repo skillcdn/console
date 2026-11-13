@@ -944,6 +944,25 @@ export const ko: Messages = {
       accountHint:
         "그곳에서 에이전트 계정을 부르는 방식입니다. {workspace}, {agent}, {domain}으로 씁니다. 비워 두면 서비스의 기본 방식을 따릅니다.",
       example: (name: string) => `mira라는 에이전트는 그곳에서 ${name}입니다.`,
+      shown: {
+        organization: "조직",
+        account: "계정 이름",
+        workspace: "워크스페이스",
+        group: "그룹",
+        host: "호스트",
+        form: "계정 형태",
+      },
+      shownForms: { user: "일반 계정", service: "서비스 계정" },
+      problems: {
+        handle:
+          "짧은 이름은 영문 소문자, 숫자, 하이픈으로 쓰고, 글자나 숫자로 시작하고 끝나야 합니다.",
+        domain: "도메인 형식이 아닙니다. acme.example처럼 적어 주세요.",
+        kind: "서비스 이름은 영문 소문자, 숫자, 하이픈으로 쓰고, 글자로 시작해야 합니다.",
+        parameters: "값이 너무 많거나, 이름이 맞지 않는 값이 있습니다.",
+        role: (role) => `이 서비스는 ${role} 용도로 쓸 수 없습니다.`,
+        unknown: (name) => `이 서비스에는 ${name} 값을 쓸 수 없습니다.`,
+        spelling: (name) => `${name}: 이 서비스가 받는 형식이 아닙니다.`,
+      },
     },
     workspace: {
       title: "워크스페이스",
@@ -1841,11 +1860,14 @@ export const ko: Messages = {
       managerUnseen: "나에게는 보이지 않음",
       savePicture: "프로필 사진 받기 (PNG)",
       savePictureHint: "메신저나 로그인 제공자의 프로필에 올릴, 한 변이 1024픽셀인 PNG입니다.",
+      savePictureFailed: "여기서는 사진을 저장하지 못했습니다.",
       loadingProposals: "페르소나 후보를 뽑는 중",
       form: {
         aria: "에이전트 계정 추가",
         proposals: "페르소나 고르기",
         proposalsHint: "후보일 뿐입니다. 이름, 핸들, 직함은 원하는 대로 바꾸세요.",
+        proposalsFailed:
+          "페르소나 후보를 불러오지 못했습니다. 이름과 핸들을 직접 적거나 다시 뽑아 주세요. 사진은 콘솔이 그립니다.",
         roll: "다시 뽑기",
         name: "이름",
         handle: "핸들",
