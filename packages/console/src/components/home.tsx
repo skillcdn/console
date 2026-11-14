@@ -14,6 +14,7 @@ import { daysBetween, today } from "../dates.js";
 import {
   added,
   arranged,
+  COMPOSED_HOME,
   type ComposedTile,
   columnsFor,
   composed,
@@ -37,6 +38,7 @@ import {
   resized,
   rowsOf,
   sizesAt,
+  standsComposed,
   waitToGiveWay,
 } from "../home-tiles.js";
 import { useWords } from "../i18n/index.js";
@@ -747,6 +749,8 @@ export function HomeGrid(props: HomeGridProps) {
     setDraft(null);
     props.onDone();
   };
+  /** The page as composed again, every tile back on it: kept by Done like any change, let go by Cancel. */
+  const reset = () => setDraft(COMPOSED_HOME);
 
   const nameOfTile = (tile: HomeTile): string =>
     tile.kind === "project" ? tile.project.name : nameOf(tile.widget.name);
@@ -800,6 +804,14 @@ export function HomeGrid(props: HomeGridProps) {
         <div className="sc-home-bar">
           <p className="sc-home-hint">{words.hint}</p>
           <div className="sc-home-bar-actions">
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy || standsComposed(working)}
+              onClick={reset}
+            >
+              {words.reset}
+            </Button>
             <Button size="sm" variant="ghost" disabled={busy} onClick={cancel}>
               {allWords.common.cancel}
             </Button>

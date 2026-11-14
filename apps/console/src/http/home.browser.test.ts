@@ -370,4 +370,57 @@ describe("the front page in a browser (ADR-0061)", () => {
     expect(asked).toEqual(["/api/v1/projects/glanced/glance", "/api/v1/projects/glanced/glance"]);
     await page.context().close();
   });
+
+  // Last, since it leaves the page as composed, on which the tiles the tests above make stand below the window.
+  it("puts the page back as composed when the person asks, and keeps that only on Done (ADR-0109)", async () => {
+    const page = await signedIn(BROWSER_ADMIN);
+    const tile = await made(page, "back");
+    const aside = await made(page, "aside");
+    const keep = (home: unknown) =>
+      page.evaluate(async (body) => {
+        await fetch("/api/v1/me", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ home: body }),
+        });
+      }, home);
+    // Where the tile stands on the page as composed, nothing arranged.
+    await keep(null);
+    await page.goto(`${console_.origin}/`);
+    await page.waitForSelector(`[data-tile="${tile}"]`);
+    const composed = await placeOf(page, tile);
+    // The page arranged, the tile in a corner of its own, and a project taken off.
+    await keep({ hidden: [aside], layouts: { 8: [{ tile, x: 7, y: 6, size: "icon" }] } });
+    await page.goto(`${console_.origin}/`);
+    await page.waitForSelector(`[data-tile="${tile}"]`);
+    expect(await placeOf(page, tile)).toEqual(["7", "6"]);
+    expect(await page.$(`[data-tile="${aside}"]`)).toBeNull();
+
+    // Put back, and let go: nothing changed.
+    await page.click("text=Edit layout");
+    await page.waitForSelector(".sc-home-bar");
+    await page.click("text=Reset to default");
+    expect(await placeOf(page, tile)).not.toEqual(["7", "6"]);
+    expect(await page.$(`[data-tile="${aside}"]`)).not.toBeNull();
+    expect(await page.isDisabled("text=Reset to default")).toBe(true);
+    await page.click("text=Cancel");
+    await page.waitForSelector("text=Edit layout");
+    expect(await placeOf(page, tile)).toEqual(["7", "6"]);
+
+    // Put back, and kept.
+    await page.click("text=Edit layout");
+    await page.waitForSelector(".sc-home-bar");
+    await page.click("text=Reset to default");
+    await page.click("text=Done");
+    await page.waitForSelector("text=Edit layout");
+    const me = (await page.evaluate(async () => (await fetch("/api/v1/me")).json())) as {
+      readonly home: { readonly hidden: readonly string[]; readonly layouts: object } | null;
+    };
+    expect(me.home?.hidden ?? []).toEqual([]);
+    expect(Object.keys(me.home?.layouts ?? {})).toEqual([]);
+    await page.reload();
+    await page.waitForSelector(`[data-tile="${aside}"]`);
+    expect(await placeOf(page, tile)).toEqual(composed);
+    await page.context().close();
+  });
 });

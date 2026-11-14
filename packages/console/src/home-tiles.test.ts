@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   added,
   arranged,
+  COMPOSED_HOME,
   type ComposedTile,
   columnsFor,
   composed,
@@ -22,6 +23,7 @@ import {
   resized,
   rowsOf,
   sizesAt,
+  standsComposed,
   startingSizeAt,
   waitToGiveWay,
 } from "./home-tiles.js";
@@ -265,6 +267,31 @@ describe("the front page's grid (ADR-0061)", () => {
       expect(places(arranged(tiles, null, columns))).toEqual(places(shown));
       expect(coversWhole(shown, columns)).toBe(true);
     }
+  });
+
+  it("puts the page back as composed: no width arranged, nothing taken off (ADR-0109)", () => {
+    const tiles = homeTiles([hr, hello], [project(1), project(2), project(3)]);
+    expect(standsComposed(null)).toBe(true);
+    expect(standsComposed(undefined)).toBe(true);
+    expect(standsComposed(COMPOSED_HOME)).toBe(true);
+    // Something taken off, or a width arranged, is something to put back.
+    expect(standsComposed({ hidden: [TODAY], layouts: {} })).toBe(false);
+    expect(standsComposed(layout(8, []))).toBe(false);
+    expect(nobodyArranged(COMPOSED_HOME)).toBe(true);
+    // Put back, the page is the one someone who arranged nothing has, every tile on it.
+    const kept: RestHome = {
+      hidden: [TODAY],
+      layouts: { 8: [{ tile: P1, x: 7, y: 5, size: "small" }] },
+    };
+    for (const columns of [12, 8, 6, 4] as const) {
+      expect(places(arranged(tiles, COMPOSED_HOME, columns))).toEqual(
+        places(arranged(tiles, null, columns)),
+      );
+      expect(composed(tiles, COMPOSED_HOME, columns)).toEqual(composed(tiles, null, columns));
+    }
+    expect(places(arranged(tiles, kept, 8))).not.toEqual(places(arranged(tiles, COMPOSED_HOME, 8)));
+    expect(arranged(tiles, kept, 8).some(({ tile }) => tile.id === TODAY)).toBe(false);
+    expect(arranged(tiles, COMPOSED_HOME, 8).some(({ tile }) => tile.id === TODAY)).toBe(true);
   });
 
   it("starts arranging from the page as composed, each tile on the cells nearest it", () => {

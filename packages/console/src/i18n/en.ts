@@ -1403,6 +1403,8 @@ export const en = {
   home: {
     edit: "Edit layout",
     hint: "Drag to move. Pick a size at the top right; × takes a tile off this page.",
+    /** Puts the page back as it is composed for someone who has arranged nothing, kept by Done (ADR-0109). */
+    reset: "Reset to default",
     done: "Done",
     add: "Add",
     remove: "Remove from this page",

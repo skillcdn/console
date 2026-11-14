@@ -529,6 +529,14 @@ export function nobodyArranged(home: RestHome | null | undefined): boolean {
   return home === null || home === undefined || Object.keys(home.layouts).length === 0;
 }
 
+/** The page put back as composed: no width arranged, nothing taken off (ADR-0109). */
+export const COMPOSED_HOME: RestHome = { hidden: [], layouts: {} };
+
+/** Whether the page stands as composed, nothing taken off: nothing for putting it back to undo. */
+export function standsComposed(home: RestHome | null | undefined): boolean {
+  return nobodyArranged(home) && (home?.hidden.length ?? 0) === 0;
+}
+
 /**
  * A tile of the composed page: where it stands and how far it reaches, in cells, which need not
  * be whole, and the size its frame is told, the one of its own nearest that shape.

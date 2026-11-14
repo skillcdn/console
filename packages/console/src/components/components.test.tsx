@@ -3833,6 +3833,26 @@ describe("projects", () => {
     expect(home([], { empty: <p>none</p> })).toContain("<p>none</p>");
   });
 
+  it("offers, while the page is arranged, to put it back as composed, where there is something to put back (ADR-0109)", () => {
+    const reset = (html: string) => /<button[^>]*>Reset to default<\/button>/.exec(html)?.[0];
+    // Not arranging, there is no such button.
+    expect(reset(home([project()]))).toBeUndefined();
+    // Arranging a page that stands as composed, there is nothing to put back.
+    expect(reset(home([project()], { editing: true }))).toContain('disabled=""');
+    const kept = {
+      hidden: [],
+      layouts: { 8: [{ tile: `project:${project().id}`, x: 3, y: 1, size: "icon" as const }] },
+    };
+    const button = reset(home([project()], { editing: true, home: kept }));
+    expect(button).toBeDefined();
+    expect(button).not.toContain("disabled");
+    // A tile taken off is something to put back too.
+    const off = reset(
+      home([project()], { editing: true, home: { hidden: ["widget:a:b"], layouts: {} } }),
+    );
+    expect(off).not.toContain("disabled");
+  });
+
   it("shows a project at a glance from one answer: its figures, its tasks in progress, its goals and what waits for review (ADR-0105, ADR-0107)", () => {
     const web = project({ openDecisions: 1 });
     const tile = `project:${web.id}`;
