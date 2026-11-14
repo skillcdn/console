@@ -7,6 +7,12 @@
   box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
 }
 
+/* A card whose picker is open stands over the cards after it: each card is a layer of its
+   own, and a list hung out of one would be painted under the next. */
+.sc-person-card:has(.sc-picker-list) {
+  z-index: 1;
+}
+
 .sc-person-row {
   border: var(--sc-border);
   background: var(--sc-color-sheet);

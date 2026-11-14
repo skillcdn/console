@@ -51,10 +51,6 @@
   box-shadow: none;
 }
 
-.sc-facts-plain::before {
-  content: none;
-}
-
 .sc-facts-plain > * {
   display: grid;
   grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);

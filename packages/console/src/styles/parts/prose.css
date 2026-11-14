@@ -58,6 +58,7 @@
 }
 
 .sc-prose blockquote {
+  margin-inline: 0;
   padding-left: var(--sc-space-4);
   border-left: 2px solid var(--sc-color-accent);
   color: var(--sc-color-text-muted);
@@ -119,4 +120,9 @@
 
 .sc-prose input[type="checkbox"] {
   margin-right: var(--sc-space-2);
+}
+
+/* An item of a task list has its box where a bullet would stand, not both. */
+.sc-prose li:has(> input[type="checkbox"]) {
+  list-style: none;
 }
