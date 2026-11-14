@@ -411,11 +411,11 @@ async function readDocument(
   }
   // A page of the workspace's own links to nothing and nothing links to it: links are a project's.
   const project = scope.projectId === null ? undefined : { ...scope, projectId: scope.projectId };
-  const [links, backlinks, files] = await Promise.all([
-    project === undefined ? [] : linksOf(handle, project, row.id),
-    project === undefined ? [] : backlinksOf(handle, project, path),
-    filesOf(handle, row.id),
-  ]);
+  // One after the other, not side by side: the handle may be a transaction, which is one
+  // connection, and a connection takes one query at a time.
+  const links = project === undefined ? [] : await linksOf(handle, project, row.id);
+  const backlinks = project === undefined ? [] : await backlinksOf(handle, project, path);
+  const files = await filesOf(handle, row.id);
   return {
     ...toSummary(row),
     body: row.body,

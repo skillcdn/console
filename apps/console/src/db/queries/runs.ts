@@ -183,24 +183,27 @@ function selectRuns(handle: Handle) {
 /** The rows as records, with what each run reported and handed in, oldest first. */
 async function attach(handle: Handle, rows: readonly RunRow[]): Promise<RunRecord[]> {
   const ids = rows.map((row) => row.id);
-  const [reported, handedIn] =
+  // One after the other, not side by side: the handle may be a transaction, which is one
+  // connection, and a connection takes one query at a time.
+  const reported =
     ids.length === 0
-      ? [[], []]
-      : await Promise.all([
-          handle
-            .select({
-              id: reports.id,
-              runId: reports.runId,
-              body: reports.body,
-              createdAt: reports.createdAt,
-            })
-            .from(reports)
-            .where(inArray(reports.runId, ids))
-            .orderBy(asc(reports.createdAt), asc(reports.id)),
-          selectArtifacts(handle)
-            .where(inArray(artifacts.runId, ids))
-            .orderBy(asc(artifacts.createdAt), asc(artifacts.id)),
-        ]);
+      ? []
+      : await handle
+          .select({
+            id: reports.id,
+            runId: reports.runId,
+            body: reports.body,
+            createdAt: reports.createdAt,
+          })
+          .from(reports)
+          .where(inArray(reports.runId, ids))
+          .orderBy(asc(reports.createdAt), asc(reports.id));
+  const handedIn =
+    ids.length === 0
+      ? []
+      : await selectArtifacts(handle)
+          .where(inArray(artifacts.runId, ids))
+          .orderBy(asc(artifacts.createdAt), asc(artifacts.id));
   return rows.map((row) => ({
     id: row.id,
     workspaceId: row.workspaceId,
