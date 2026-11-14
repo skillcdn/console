@@ -576,8 +576,10 @@ function nearestSize(tile: HomeTile, w: number, h: number, columns: number): Hom
  * The page of someone who has arranged nothing, composed (ADR-0082): the first widget leads,
  * half the page wide, and beside it stand the next two widgets and the projects, the column as
  * high as the lead; on a grid of six columns or fewer they stand one under the other. The projects
- * are icons in rows of as many as are alike, each row as wide as its column, so that no row ends
- * short; the other widgets stand below, two to a row. Every edge meets another or the page's.
+ * are icons, one to a cell, in rows as long as their column has cells, so that a project is never
+ * drawn in a shape it does not come in and the page is the one arranging starts from (ADR-0108);
+ * the last row may end short. The other widgets stand below, two to a row. Every other edge meets
+ * another or the page's.
  */
 export function composed(
   tiles: readonly HomeTile[],
@@ -597,21 +599,13 @@ export function composed(
   /** The rows the projects take in a column so wide: as many to a row as a cell each allows. */
   const projectRows = (width: number) =>
     projects.length === 0 ? 0 : Math.ceil(projects.length / Math.max(1, Math.floor(width)));
-  /** The projects in rows from a place, as many in each as alike, each row filling the width. */
+  /** The projects in rows from a place, one to a cell, each row as long as the width has cells. */
   const putProjects = (x: number, y: number, width: number): number => {
-    const rows = projectRows(width);
-    let next = 0;
-    for (let row = 0; row < rows; row += 1) {
-      const count = Math.floor(projects.length / rows) + (row < projects.length % rows ? 1 : 0);
-      for (let at = 0; at < count; at += 1) {
-        const tile = projects[next];
-        if (tile !== undefined) {
-          put(tile, x + (at * width) / count, y + row, width / count, 1);
-        }
-        next += 1;
-      }
-    }
-    return rows;
+    const across = Math.max(1, Math.floor(width));
+    projects.forEach((tile, nth) => {
+      put(tile, x + (nth % across), y + Math.floor(nth / across), 1, 1);
+    });
+    return projectRows(width);
   };
   /** Widgets two to a row across the page, one alone as wide as the page. */
   const putInPairs = (list: readonly HomeTile[], from: number): number => {

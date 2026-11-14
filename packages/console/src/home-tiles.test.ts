@@ -123,10 +123,20 @@ const boxesOf = (boxes: readonly ComposedTile[]) =>
     ]),
   );
 
-/** Whether composed boxes cover the page whole, edge to edge, none over another. */
+/**
+ * Whether composed boxes cover the page whole, edge to edge, none over another, but for the cells
+ * the projects' last row leaves at its end, each project on one whole cell (ADR-0108).
+ */
 function coversWhole(boxes: readonly ComposedTile[], columns: number): boolean {
   const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
-  const area = boxes.reduce((sum, { w, h }) => sum + w * h, 0);
+  const projects = boxes.filter(({ tile }) => tile.kind === "project");
+  const oneCell = projects.every(
+    ({ x, y, w, h }) => Number.isInteger(x) && Number.isInteger(y) && w === 1 && h === 1,
+  );
+  // The projects' column ends at the page's right edge, beside the lead or across the page.
+  const [last] = [...projects].sort((a, b) => b.y - a.y || b.x - a.x);
+  const short = last === undefined ? 0 : columns - (last.x + last.w);
+  const area = boxes.reduce((sum, { w, h }) => sum + w * h, 0) + short;
   const apart = boxes.every((a, at) =>
     boxes
       .slice(at + 1)
@@ -139,7 +149,7 @@ function coversWhole(boxes: readonly ComposedTile[], columns: number): boolean {
       ),
   );
   const within = boxes.every(({ x, y, w }) => x >= -1e-9 && y >= -1e-9 && x + w <= columns + 1e-9);
-  return apart && within && near(area, columns * composedRows(boxes));
+  return oneCell && apart && within && near(area, columns * composedRows(boxes));
 }
 
 /** The cells left empty within the rows the page takes. */
@@ -195,13 +205,13 @@ describe("the front page's grid (ADR-0061)", () => {
     const tiles = homeTiles([hr, hello], [project(1), project(2), project(3)]);
     const page = composed(tiles, null, 8);
     // The lead half the page wide; beside it the next widget, given the rows the column has
-    // over, and the projects in a row as wide as the column; the widget of the bottom across.
+    // over, and the projects in a row, one to a cell; the widget of the bottom across.
     expect(boxesOf(page)).toEqual({
       [BALANCE]: [0, 0, 4, 4, "medium"],
       [TODAY]: [4, 0, 4, 3, "medium"],
-      [P1]: [4, 3, 1.33, 1, "icon"],
-      [P2]: [5.33, 3, 1.33, 1, "icon"],
-      [P3]: [6.67, 3, 1.33, 1, "icon"],
+      [P1]: [4, 3, 1, 1, "icon"],
+      [P2]: [5, 3, 1, 1, "icon"],
+      [P3]: [6, 3, 1, 1, "icon"],
       "widget:hello:latest": [0, 4, 8, 2, "wide"],
     });
     expect(composedRows(page)).toBe(6);
@@ -210,13 +220,13 @@ describe("the front page's grid (ADR-0061)", () => {
     expect(boxesOf(composed(tiles, null, 4))).toEqual({
       [BALANCE]: [0, 0, 4, 4, "medium"],
       [TODAY]: [0, 4, 4, 2, "medium"],
-      [P1]: [0, 6, 1.33, 1, "icon"],
-      [P2]: [1.33, 6, 1.33, 1, "icon"],
-      [P3]: [2.67, 6, 1.33, 1, "icon"],
+      [P1]: [0, 6, 1, 1, "icon"],
+      [P2]: [1, 6, 1, 1, "icon"],
+      [P3]: [2, 6, 1, 1, "icon"],
       "widget:hello:latest": [0, 7, 4, 2, "medium"],
     });
-    // At every width the boxes cover the page whole, none over another, each frame told a size
-    // its widget comes in there.
+    // At every width the boxes cover the page whole, none over another, but for the end of the
+    // projects' row, each frame told a size its widget comes in there.
     for (const columns of [12, 8, 6, 4] as const) {
       const boxes = composed(tiles, null, columns);
       expect(coversWhole(boxes, columns)).toBe(true);
@@ -230,6 +240,31 @@ describe("the front page's grid (ADR-0061)", () => {
     expect(coversWhole(without, 8)).toBe(true);
     expect(nobodyArranged({ hidden: [TODAY], layouts: {} })).toBe(true);
     expect(nobodyArranged(layout(8, []))).toBe(false);
+  });
+
+  it("draws a project of the composed page on one cell, whatever room its row has, as when a plugin's widgets are gone (ADR-0108)", () => {
+    const seven = [1, 2, 3, 4, 5, 6, 7].map(project);
+    // A plugin that failed, on a console it was not built for, has no widget to show.
+    const tiles = homeTiles([{ ...hr, state: "failed" } as RestPlugin], seven);
+    expect(tiles.every((tile) => tile.kind === "project")).toBe(true);
+    const cells = (boxes: readonly ComposedTile[]) =>
+      boxes.map(({ x, y, w, h, size }) => [x, y, w, h, size]);
+    // Twelve columns hold the seven in one row, each an icon's one cell, not twelve sevenths.
+    expect(cells(composed(tiles, null, 12))).toEqual(seven.map((_, at) => [at, 0, 1, 1, "icon"]));
+    // On a phone, rows of four, the last ending short.
+    expect(cells(composed(tiles, null, 4))).toEqual(
+      seven.map((_, at) => [at % 4, Math.floor(at / 4), 1, 1, "icon"]),
+    );
+    // One project alone is one cell, never a bar across the page.
+    expect(boxesOf(composed(homeTiles([], [project(1)]), null, 12))).toEqual({
+      [P1]: [0, 0, 1, 1, "icon"],
+    });
+    // Arranging starts from the very cells the page showed.
+    for (const columns of [12, 8, 6, 4] as const) {
+      const shown = composed(tiles, null, columns);
+      expect(places(arranged(tiles, null, columns))).toEqual(places(shown));
+      expect(coversWhole(shown, columns)).toBe(true);
+    }
   });
 
   it("starts arranging from the page as composed, each tile on the cells nearest it", () => {
