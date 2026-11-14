@@ -10,7 +10,8 @@ import { oneOriginRedirect } from "./preview-plugins.js";
 // answers itself, the API with the event stream and the plugins' frames, signing in, the probes
 // and the fixture's sign-in, on to the console listening behind it, which knows that address as
 // its own (`pagesAt`). The web app's own configuration stays what a custom console copies: what
-// is of this repository alone, the package's sources beside the app, is said here. Not compiled.
+// is of this repository alone, the package's sources beside the app and the page that shows
+// every part by itself (`/parts`), is said here. Not compiled.
 
 /** The web app's configuration: the page and its plugins. */
 const WEB_CONFIG = fileURLToPath(new URL("../../web/vite.config.ts", import.meta.url));
@@ -33,6 +34,23 @@ export const CONSOLE_PATHS: readonly string[] = [
   "/readyz",
   FIXTURE_PATH,
 ];
+
+/** Where every part of the pages is shown by itself (`web/parts.html`): a page of this server alone. */
+export const PARTS_PATH = "/parts";
+
+/**
+ * The page of this server's own a request asks for, as the file Vite reads and transforms, with
+ * what the address asks kept: the parts' page at `/parts` and `/parts/`. Nothing for every other
+ * path, which is the console's to route.
+ */
+export function ownPage(url: string): string | undefined {
+  const at = url.indexOf("?");
+  const path = at < 0 ? url : url.slice(0, at);
+  if (path !== PARTS_PATH && path !== `${PARTS_PATH}/`) {
+    return undefined;
+  }
+  return `${PARTS_PATH}.html${at < 0 ? "" : url.slice(at)}`;
+}
 
 export interface LivePagesOptions {
   /** The port a browser opens, on the loopback. */
@@ -65,6 +83,24 @@ const oneOrigin = (origin: string): Plugin => ({
 });
 
 /**
+ * The parts' page, a second page beside the console's: named here, before Vite looks for a file,
+ * so that Vite serves it as it serves the console's page, transformed, with its script and the
+ * reloading. The build never reads it: its input is the console's page alone.
+ */
+const ownPages: Plugin = {
+  name: "console:own-pages",
+  configureServer(server) {
+    server.middlewares.use((request, _response, next) => {
+      const page = ownPage(request.url ?? "/");
+      if (page !== undefined) {
+        request.url = page;
+      }
+      next();
+    });
+  },
+};
+
+/**
  * Starts the pages at `http://127.0.0.1:<port>`. Vite runs as the middleware of a listener made
  * here, not as a server of its own: one of its own ends the whole process when its input ends,
  * as the input of a process started in the background does at once, and the console's database
@@ -77,7 +113,7 @@ export async function startLivePages(options: LivePagesOptions): Promise<LivePag
     configFile: WEB_CONFIG,
     clearScreen: false,
     logLevel: "warn",
-    plugins: [oneOrigin(origin)],
+    plugins: [oneOrigin(origin), ownPages],
     // The package from its sources, so that a component or a rule of the stylesheet changed
     // there shows in the page at once; a build reads what the package built, as whoever
     // installs it does.

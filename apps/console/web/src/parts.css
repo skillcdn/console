@@ -1,0 +1,184 @@
+/*
+ * Where the parts' page (parts.tsx) puts what it shows, and nothing else: its list beside its
+ * sections, a section's specimens under each other, a row of small things with room between
+ * them, the grid of the swatches. The page is built from the parts it shows, so no rule here
+ * draws anything: no colour, no border, no radius, no shadow, no type. The classes are prefixed
+ * `dev-`: the page is the development server's alone, and `sc-` is the package's.
+ */
+
+/* The list of the parts over the sections, and beside them where the window is wide. */
+.dev-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 0 var(--sc-space-5);
+}
+
+.dev-sections {
+  min-width: 0;
+}
+
+/* Over the sections the names are a row that wraps, each as wide as its word. */
+.dev-index-list {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.dev-index-list > .sc-menu-link {
+  width: auto;
+}
+
+@media (min-width: 64rem) {
+  .dev-page {
+    grid-template-columns: 15rem minmax(0, 1fr);
+  }
+
+  /* Beside the sections the list stays in the window while they pass, and scrolls within itself. */
+  .dev-index.sc-panel {
+    position: sticky;
+    top: var(--sc-space-4);
+    max-height: calc(100dvh - 2 * var(--sc-space-4));
+    overflow-y: auto;
+  }
+
+  /* In two columns, read down the first and then the second, so that the whole list is in the
+     window at once. */
+  .dev-index-list {
+    display: block;
+    columns: 2;
+    column-gap: var(--sc-space-1);
+  }
+
+  .dev-index-list > .sc-menu-link {
+    width: 100%;
+  }
+}
+
+/* A section: its head, then its specimens under each other. */
+.dev-specimens {
+  display: grid;
+  gap: var(--sc-space-5);
+  min-width: 0;
+  margin-top: var(--sc-space-4);
+}
+
+/* The specimens of a part that lies on the field itself stand under the section's pane, with the
+   room a pane leaves under itself before the next section. */
+.dev-specimens-field {
+  margin-top: 0;
+  margin-bottom: var(--sc-space-7);
+}
+
+/* One specimen: what it is, over the part. What is wider than the section scrolls or wraps
+   within its own box. */
+.dev-specimen {
+  display: grid;
+  gap: var(--sc-space-2);
+  min-width: 0;
+}
+
+.dev-specimen > * {
+  min-width: 0;
+}
+
+/* Small things side by side, each as wide as it is. */
+.dev-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+/* A small thing with its name, closer to each other than to the next pair. */
+.dev-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin-inline-end: var(--sc-space-3);
+}
+
+/* Fields side by side, each wide enough to read. */
+.dev-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  align-items: start;
+  gap: var(--sc-space-3);
+}
+
+/* A thing that would take the section's whole width, kept as wide as it is on a page. */
+.dev-narrow {
+  max-width: 22rem;
+}
+
+/* What opens over the page, a menu's panel or a picker's list, shown in the page's own flow:
+   open over a specimen it would hide the next one. A header's bar is held still the same way. */
+.dev-static.dev-static {
+  position: static;
+}
+
+/* A part that reaches out to the window's edges by the page's own gutter (the tabs of a plugin's
+   pages) is shown within its specimen: the gutter it reads is none here. */
+.dev-flush {
+  --sc-main-top: 0px;
+  --sc-main-side: 0px;
+}
+
+/* A plugin's frame is as tall as its page says; the stand-in says this much. */
+.dev-frame {
+  height: 12rem;
+}
+
+/* The box a page waits in fills half a window; here it is as tall as a specimen. */
+.dev-loading.sc-loading {
+  min-height: 6rem;
+}
+
+/* The tokens: swatches in a grid, each over its name. */
+.dev-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: var(--sc-space-3);
+}
+
+.dev-swatch {
+  display: grid;
+  align-content: start;
+  gap: var(--sc-space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dev-swatch-colour {
+  height: 3rem;
+}
+
+.dev-swatch-shape {
+  width: 4rem;
+  height: 4rem;
+}
+
+/* A scale: a row per step, its name beside what it measures. */
+.dev-scale {
+  display: grid;
+  gap: var(--sc-space-2);
+}
+
+.dev-scale-row {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-3);
+  min-width: 0;
+}
+
+.dev-measure {
+  display: block;
+  height: 1rem;
+}
+
+@media (max-width: 40rem) {
+  .dev-scale-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -7,7 +7,9 @@
 //      names one of them, and a rule there places: it lays its own element out, moves a part
 //      about, and gives nothing a look, but for the classes drawn-by-pages.json still lists;
 //   5. a class a source names is in the stylesheet, and a class of the stylesheet is named;
-//   6. a component sets a style on an element only where it computes a measure.
+//   6. a component sets a style on an element only where it computes a measure;
+//   7. every part of the catalogue is shown by itself on the parts' page of the development
+//      server, once, and that page shows nothing the catalogue lacks.
 //
 // What it refuses is said with what to do instead, since whoever reads the refusal is about to
 // write the next line. Part of `pnpm check`; `pnpm check:styles` runs it alone. With `--hook` it
@@ -25,6 +27,10 @@ import process from "node:process";
 import { STYLES_DIR, styleFiles } from "./styles.mjs";
 
 const root = resolve(import.meta.dirname, "..");
+
+/** Where every part is shown by itself: the page at /parts of the development server. */
+const PARTS_PAGE = "apps/console/web/src/parts.tsx";
+
 const hook = process.argv.includes("--hook");
 if (hook) {
   // What the editor wrote, as it says it: a file elsewhere is none of this check's.
@@ -36,7 +42,8 @@ if (hook) {
   }
   const ofThePages =
     typeof written === "string" &&
-    /packages[\\/]console[\\/]src[\\/].*\.(css|tsx?|json|md)$/.test(written) &&
+    (/packages[\\/]console[\\/]src[\\/].*\.(css|tsx?|json|md)$/.test(written) ||
+      written.split("\\").join("/").endsWith(PARTS_PAGE)) &&
     !/\.test\.tsx?$/.test(written);
   if (written !== undefined && !ofThePages) {
     process.exit(0);
@@ -590,6 +597,46 @@ for (const source of sources) {
       `packages/console/src/${source.name}`,
       "adds rules to the page from a script",
       "Every rule is in the stylesheet, where the check reads it.",
+    );
+  }
+}
+
+// --- 7. the parts' page ------------------------------------------------------------------------
+
+/** The page of the development server that shows every part by itself: a section for each row. */
+let shown = [];
+try {
+  shown = [...readFileSync(join(root, PARTS_PAGE), "utf8").matchAll(/<Part\s+name="([^"]*)"/g)].map(
+    (found) => found[1],
+  );
+} catch {
+  fail(
+    PARTS_PAGE,
+    "is missing",
+    `It is the page at /parts of \`pnpm dev\`, where every part of ${catalogueFile} is looked at by itself.`,
+  );
+}
+for (const name of catalogue.keys()) {
+  if (!shown.includes(name)) {
+    fail(
+      PARTS_PAGE,
+      `does not show the part ${name}`,
+      `Give it a section there, written \`<Part name="${name}" ...>\` with the name first, where its row stands among the others of ${catalogueFile}: the part in every variant, size and state it has, to be looked at by itself at /parts of \`pnpm dev\`.`,
+    );
+  }
+}
+for (const [index, name] of shown.entries()) {
+  if (!catalogue.has(name)) {
+    fail(
+      PARTS_PAGE,
+      `shows ${name}, which is no part of the catalogue`,
+      `A section there is a row of ${catalogueFile}, under the row's name. Name the part as its row does; a part that left the catalogue takes its section with it.`,
+    );
+  } else if (shown.indexOf(name) !== index) {
+    fail(
+      PARTS_PAGE,
+      `shows the part ${name} twice`,
+      "A part has one section: put what the second shows into the first.",
     );
   }
 }
