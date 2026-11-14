@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-An agent account is a member of the directory (ADR-0084): `GET /api/v1/agents` lists the workspace's agent accounts with whom each reports to, `POST /api/v1/agents` makes one for an administrator, from the login it will sign in with, its handle, its name, its title, the parts of its avatar, its manager and the project it starts in, and `GET /api/v1/agents/<handle>` reads one. The member's row is written at once, so that work is assigned to it before anyone signed in with it, and its first sign-in binds the provider's account to the row; a login a member already carries is made an agent account the same way, once. A person carries `kind`, `handle`, `title` and `avatarParts` in every answer, and `invited` while nobody has signed in with an agent account. An agent account is never an administrator (`person.agent_admin`) and always has a manager (`person.manager_required`). For whoever builds a console: `restAgentSchema`, `restAgentsSchema`, `restAgentInputSchema`, `agentPath`, `REST_ROUTES.agents`, `isHandle`, `RESERVED_HANDLES`, and the words of the new refusals in English and Korean.

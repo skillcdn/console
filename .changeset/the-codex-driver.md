@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-`console runner` drives Codex too (ADR-0085): the `codex` driver, named by `"driver": "codex"` in the desk's `runner.json`. It runs the Codex binary without a terminal, `codex exec --json`, a process a turn, and goes on with the conversation by its id. The product takes no message while a turn runs, so a `tell` or a `wake` that arrives then is read when the turn ends, and an `interrupt` ends the turn's process first. With nobody at its terminal the product runs in its read-only sandbox, so the driver names `approve-for-me` where `runner.json` names no `permissions`: the desk may be written, and the product's own reviewer answers what would otherwise be asked of a person; `read-only`, `workspace-write` and `danger-full-access` are the other words. The models and the levels of effort a supervisor chooses from are the product's own list. Run against the binary, 0.164.0. For whoever builds on the runner: `createCodexDriver` in `@skillcdn/console/runner`.

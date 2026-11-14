@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-A pack's tables and code blocks are had as data through the console (ADR-0100). `console skills --rows [<folder|file>]` prints the tables of a document, or of every document under a folder, as one CSV, every page joined; `--code` prints the fenced code blocks as written, each under a line that says where it stands; `--heading <words>` keeps what stands under a heading, `--out <path>` writes a file and says how much it holds, and `--json` gives what the console answered. A read as data that the pack refuses fails on standard error, so that a redirected file is never the refusal. The console answers them at `GET .../skills/rows` and `GET .../skills/code`, for a project's pack and for a plugin's, with the token the pack is read with; the client has `skillRows` and `skillCode`, the schemas `restSkillRowsSchema` and `restSkillCodeSchema`. A document's outline names these reads, where it named nothing of them: `console skills <file>` says the command for each.
