@@ -7,7 +7,8 @@ import {
 } from "../ports/identity-provider.js";
 
 // Test support: an identity provider's side of signing in, for a handful of people. The git
-// host knows three; the Workspace knows two, one of a domain and one of none. Not compiled.
+// host knows three, and a few more that sign in only on the console a person looks at the pages
+// on; the Workspace knows two, one of a domain and one of none. Not compiled.
 
 export interface FixtureProvider extends IdentityProvider {
   readonly people: Readonly<Record<string, ProviderAccount>>;
@@ -36,6 +37,31 @@ export interface FixtureProviderOptions {
   readonly changed?: Readonly<Record<string, Partial<ProviderAccount>>> | undefined;
 }
 
+/** An account of the git host that says no more of itself than its login. */
+const plain = (accountId: string, login: string, name?: string): ProviderAccount => ({
+  accountId,
+  login,
+  name,
+  avatarUrl: undefined,
+  domain: undefined,
+});
+
+/**
+ * The git host's accounts beyond the three, which sign in only where something lets them in: the
+ * console a person looks at the pages on lets them in for its invented work (`preview-board.ts`),
+ * three more people and the accounts its agent accounts sign in with.
+ */
+const PREVIEW_PEOPLE: Readonly<Record<string, ProviderAccount>> = {
+  dana: plain("1004", "dana", "Dana Okafor"),
+  eli: plain("1005", "eli", "Eli Brandt"),
+  gus: plain("1006", "gus", "Gus Hale"),
+  "acme-mira": plain("1101", "acme-mira"),
+  "acme-juno": plain("1102", "acme-juno"),
+  "acme-otis": plain("1103", "acme-otis"),
+  "acme-wren": plain("1104", "acme-wren"),
+  "acme-pax": plain("1105", "acme-pax"),
+};
+
 const PEOPLE: Readonly<Record<ProviderKey, Readonly<Record<string, ProviderAccount>>>> = {
   gh: {
     alice: {
@@ -59,6 +85,7 @@ const PEOPLE: Readonly<Record<ProviderKey, Readonly<Record<string, ProviderAccou
       avatarUrl: undefined,
       domain: undefined,
     },
+    ...PREVIEW_PEOPLE,
   },
   google: {
     dave: {

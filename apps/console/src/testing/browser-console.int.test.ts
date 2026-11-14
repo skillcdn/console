@@ -1,9 +1,11 @@
 import process from "node:process";
 import {
   AUTH_ROUTES,
+  agentPath,
   pluginPath,
   projectPath,
   REST_ROUTES,
+  restAgentsSchema,
   restMeSchema,
   restProjectSchema,
 } from "@skillcdn/console/api";
@@ -226,7 +228,7 @@ describe("the preview console", () => {
     expect(record.data.state).toBe("approved");
   }, 60_000);
 
-  it("makes a board for the front page's glance once, and shows it at one on a member's page (ADR-0105)", async () => {
+  it("makes an invented organization's work once: a board shown at a glance on a member's page (ADR-0105), and something on every page", async () => {
     const admin = await started.harness.signIn(BROWSER_ADMIN);
     const member = await started.harness.signIn("bob");
     const seed = () =>
@@ -263,9 +265,72 @@ describe("the preview console", () => {
     expect(me.home?.layouts[8]?.[0]?.size).toBe("wide");
     // Made once: a database kept from an earlier run keeps what was there, a page arranged since too.
     expect(await seed()).toBe(false);
+
+    // The rest of the work, by what the pages read: how many of each there are.
+    const read = async (path: string, cookie = admin) =>
+      (await (await started.harness.request(path, { headers: { cookie } })).json()) as {
+        readonly items: readonly Record<string, unknown>[];
+      };
+    const count = async (path: string, cookie = admin) => (await read(path, cookie)).items.length;
+    const website = (collection: "tasks" | "goals" | "runs" | "decisions") =>
+      projectPath("website", collection);
+    // The administrator sees every project; a member, not the private one.
+    const keys = async (cookie: string) =>
+      (await read(REST_ROUTES.projects, cookie)).items.map((project) => project.key);
+    expect(await keys(admin)).toEqual(
+      expect.arrayContaining(["handbook", "lab", "ledger", "ops", "website"]),
+    );
+    const seen = await keys(await started.harness.signIn("carol"));
+    expect(seen).toContain("website");
+    expect(seen).not.toContain("ops");
+    expect(await count(REST_ROUTES.teams)).toBe(4);
+    expect(await count(REST_ROUTES.categories)).toBe(8);
+    expect(await count(`${website("tasks")}?limit=100`)).toBeGreaterThan(30);
+    expect(await count(website("goals"))).toBe(8);
+    expect(await count(website("runs"))).toBe(6);
+    expect(await count(projectPath("lab", "tasks"))).toBe(0);
+    expect(await count(projectPath("handbook", "docs"))).toBeGreaterThan(0);
+    // Decisions that wait for the administrator, in a project open to all and in a private one,
+    // and a record of more than a page.
+    expect(await count(`${REST_ROUTES.decisions}?open=true`)).toBeGreaterThan(3);
+    expect(await count(`${website("decisions")}?open=false&limit=100`)).toBeGreaterThan(20);
+    // The people: six who signed in, one of them taken out again, and a login nobody used.
+    const people = await read(REST_ROUTES.people);
+    expect(people.items.filter((person) => person.kind !== "agent").length).toBeGreaterThan(5);
+    expect(people.items.some((person) => person.status === "deactivated")).toBe(true);
+    // The agent accounts, one in every state an account stands in, and one that never signed in.
+    const agents = restAgentsSchema.parse(
+      await (
+        await started.harness.request(REST_ROUTES.agents, { headers: { cookie: admin } })
+      ).json(),
+    );
+    expect(
+      Object.fromEntries(
+        agents.items.map((agent) => [agent.person.handle, agent.state?.state ?? null]),
+      ),
+    ).toEqual({
+      mira: "running",
+      juno: "stopped",
+      otis: "refused",
+      wren: "failed",
+      pax: "unheard",
+      remy: null,
+    });
+    const sessions = await read(agentPath("mira", "sessions"));
+    expect(sessions.items).toHaveLength(2);
+    expect(Number(sessions.items[0]?.events)).toBeGreaterThan(20);
+    // The administrator's front page: a project at every size it comes in, and the widget.
     const adminMe = restMeSchema.parse(
       await (await started.harness.request(REST_ROUTES.me, { headers: { cookie: admin } })).json(),
     );
-    expect(Object.keys(adminMe.home?.layouts ?? {})).toEqual([]);
-  }, 60_000);
+    expect(Object.keys(adminMe.home?.layouts ?? {})).toEqual(["4", "6", "8", "12"]);
+    expect(adminMe.home?.layouts[12]?.map((tile) => tile.size)).toEqual([
+      "large",
+      "wide",
+      "medium",
+      "small",
+      "icon",
+      "medium",
+    ]);
+  }, 120_000);
 });

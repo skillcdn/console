@@ -14,13 +14,22 @@ const SOURCE = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** Dotted names in the source that are no failure: the plugin host's members, and a file's name. */
 const NOT_A_FAILURE = /^(console\.[a-z]+|files\.[a-z]+|package\.json|acme\.test)$/;
 
+/**
+ * The invented work the preview console starts with (`testing/preview-*.ts`) is what a person
+ * reads on its pages, with names of its own in it, a secret's and a domain's: nothing the server
+ * answers.
+ */
+const INVENTED_WORK = /^preview-[a-z-]+\.ts$/;
+
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
       return sourceFiles(path);
     }
-    return entry.name.endsWith(".ts") && !/\.(int|browser)?\.?test\.ts$/.test(entry.name)
+    return entry.name.endsWith(".ts") &&
+      !/\.(int|browser)?\.?test\.ts$/.test(entry.name) &&
+      !INVENTED_WORK.test(entry.name)
       ? [path]
       : [];
   });

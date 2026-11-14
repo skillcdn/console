@@ -51,6 +51,8 @@ export interface Harness {
   readonly logs: Record<string, unknown>[];
   /** The subscribers of the feed, for a test to close or count. */
   readonly feed: LiveFeed;
+  /** The database the console runs on, for the little a test can make nowhere else. */
+  readonly database: TestDatabase["database"];
   /** A request to the API; `peer` is the address it comes from, as a socket would carry it, none when left out. */
   request(path: string, init?: RequestInit, options?: RequestOptions): Promise<Response>;
   /**
@@ -261,6 +263,7 @@ export function createHarness(testDatabase: TestDatabase, options: HarnessOption
     origin,
     logs,
     feed,
+    database: testDatabase.database,
     request,
     async signIn(person) {
       const provider = providers.find((candidate) => candidate.people[person] !== undefined);

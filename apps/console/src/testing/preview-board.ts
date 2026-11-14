@@ -1,12 +1,16 @@
 import { projectPath, REST_ROUTES, type RestHome } from "@skillcdn/console/api";
 import type { Harness } from "./harness.js";
+import { dayFrom, seedPreviewWork } from "./preview-work.js";
 
-// A board for the front page's glance (ADR-0105) on the console a person looks at the pages
-// with (`pnpm dev:plugins`): one invented project, with tasks in progress, in review, ready and
-// done, goals ahead and a decision waiting, made once; and the front page of a member arranged
-// with it at a glance, the administrator's left composed, as a page nobody arranged is, for the
-// plugins' widgets. Its days are counted from the day it is made, so that some are near and one
-// is past. Not compiled.
+// What the console a person looks at the pages with (`pnpm dev:plugins`) starts with, made
+// once, so that every page has something to show. First a board for the front page's glance
+// (ADR-0105): one invented project, with tasks in progress, in review, ready and done, goals
+// ahead and a decision waiting, and the front page of a member arranged with it at a glance.
+// Then the rest of an invented organization's work (`preview-work.ts`, from `preview-data.ts`):
+// more people and their teams, agent accounts as they stand, three more projects with their
+// tasks, goals, decisions, runs, comments and documents, and the administrator's front page
+// with a project at every size beside the example plugin's widget. Its days are counted from
+// the day it is made, so that some are near and some are past. Not compiled.
 
 /** The project the board is made in, by key. */
 export const PREVIEW_BOARD_KEY = "ledger";
@@ -100,16 +104,10 @@ const TASKS: readonly Task[] = [
   { title: "Check the November payroll", state: "ready", due: 8, workers: [], goal: CLOSE },
 ];
 
-/** A day so many days from `now`, as the API takes one. */
-function dayFrom(now: Date, days: number): string {
-  const day = new Date(now);
-  day.setUTCDate(day.getUTCDate() + days);
-  return day.toISOString().slice(0, 10);
-}
-
 /**
- * Makes the board, unless the project is there already, as on a database kept from an earlier
- * run, and arranges the member's front page with it, at every width: answers whether it made it.
+ * Makes the board and the rest of the work, unless the board's project is there already, as on
+ * a database kept from an earlier run, and arranges the member's front page with the board, at
+ * every width, and the administrator's with every project: answers whether it made them.
  * `admin` and `member` are the Cookie headers of the two sessions.
  */
 export async function seedPreviewBoard(options: {
@@ -195,5 +193,6 @@ export async function seedPreviewBoard(options: {
     },
   };
   await call(REST_ROUTES.me, "PATCH", { home }, member);
+  await seedPreviewWork({ harness, origin, admin, now, board: { id: String(project.id) } });
   return true;
 }
