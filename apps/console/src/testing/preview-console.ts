@@ -11,9 +11,11 @@ import { builtPluginAt, type PreviewArguments, parsePreviewArguments } from "./p
 // plugin is looked at here without a provider; the plugins' hooks and jobs running in this
 // process, so that a decision answered reaches the plugin and a job runs at its time; the
 // fixture's people signing in from the browser at the addresses printed, and a database of its
-// own that goes when this ends, unless --keep says to keep it for the next run. A project with a
-// board of invented work is made once, for the front page's glance (ADR-0105), and the member
-// bob's front page shows it at one.
+// own that goes when this ends, unless --keep says to keep it for the next run. The work of one
+// invented organization is made once (preview-board.ts): its people, agent accounts in every
+// state one stands in, projects with their tasks, goals, decisions, runs and documents, so that
+// every page has something to show; the member bob's front page shows one board at a glance
+// (ADR-0105).
 // `pnpm dev:plugins`, which builds first; `--port <n>` for another port; `--public-url <origin>`
 // for the address a tunnel reaches it at, so that a plugin receiving requests from outside is
 // tried here. `pnpm dev` is the same console with `--live`: the pages served from their sources
@@ -89,7 +91,7 @@ const lines = [
       ]),
   `  sign in as ${BROWSER_ADMIN}, an administrator: ${started.signInUrl(BROWSER_ADMIN)}`,
   `  as a member: ${started.signInUrl("bob")} or ${started.signInUrl("carol")}`,
-  `  The project ${PREVIEW_BOARD_KEY} holds a board of invented work: bob's front page shows it at a glance, and Edit layout gives a project its size on anyone's.`,
+  `  The work is invented and made once: sign in as alice to see every page with something on it, the agent accounts under Agents, and the task that shows everything on the board of the project website. bob's front page shows the project ${PREVIEW_BOARD_KEY} at a glance.`,
   ...plugins.map(
     (plugin) =>
       `  installed and not enabled, for ${BROWSER_ADMIN} to enable on the settings page: ${plugin.name} from ${plugin.dir}`,
