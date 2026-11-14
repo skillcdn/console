@@ -218,14 +218,14 @@ describe("the front page's grid (ADR-0061)", () => {
     });
     expect(composedRows(page)).toBe(6);
     expect(composedRows([])).toBe(0);
-    // On six columns or fewer, one under the other.
+    // On six columns or fewer, one under the other, the lead at a size it comes in (ADR-0110).
     expect(boxesOf(composed(tiles, null, 4))).toEqual({
-      [BALANCE]: [0, 0, 4, 4, "medium"],
-      [TODAY]: [0, 4, 4, 2, "medium"],
-      [P1]: [0, 6, 1, 1, "icon"],
-      [P2]: [1, 6, 1, 1, "icon"],
-      [P3]: [2, 6, 1, 1, "icon"],
-      "widget:hello:latest": [0, 7, 4, 2, "medium"],
+      [BALANCE]: [0, 0, 4, 2, "medium"],
+      [TODAY]: [0, 2, 4, 2, "medium"],
+      [P1]: [0, 4, 1, 1, "icon"],
+      [P2]: [1, 4, 1, 1, "icon"],
+      [P3]: [2, 4, 1, 1, "icon"],
+      "widget:hello:latest": [0, 5, 4, 2, "medium"],
     });
     // At every width the boxes cover the page whole, none over another, but for the end of the
     // projects' row, each frame told a size its widget comes in there.
@@ -236,10 +236,15 @@ describe("the front page's grid (ADR-0061)", () => {
         expect(tile.kind === "project" ? ["icon"] : sizesAt(tile, columns)).toContain(size);
       }
     }
-    // What the person took off stays off.
+    // What the person took off stays off: the lead left alone, the projects beside it.
     const without = composed(tiles, { hidden: [TODAY], layouts: {} }, 8);
-    expect(without.some(({ tile }) => tile.id === TODAY)).toBe(false);
-    expect(coversWhole(without, 8)).toBe(true);
+    expect(boxesOf(without)).toEqual({
+      [BALANCE]: [0, 0, 4, 2, "medium"],
+      [P1]: [4, 0, 1, 1, "icon"],
+      [P2]: [5, 0, 1, 1, "icon"],
+      [P3]: [6, 0, 1, 1, "icon"],
+      "widget:hello:latest": [0, 2, 8, 2, "wide"],
+    });
     expect(nobodyArranged({ hidden: [TODAY], layouts: {} })).toBe(true);
     expect(nobodyArranged(layout(8, []))).toBe(false);
   });
@@ -266,6 +271,72 @@ describe("the front page's grid (ADR-0061)", () => {
       const shown = composed(tiles, null, columns);
       expect(places(arranged(tiles, null, columns))).toEqual(places(shown));
       expect(coversWhole(shown, columns)).toBe(true);
+    }
+  });
+
+  it("draws a widget that leads with nothing beside it at a size it comes in, the projects in the cells it leaves (ADR-0110)", () => {
+    const seven = [1, 2, 3, 4, 5, 6, 7].map(project);
+    const solo = plugin("solo", [
+      {
+        key: "latest",
+        name: { en: "Latest" },
+        place: "home:top",
+        size: "third",
+        sizes: ["small", "medium"],
+        defaultSize: "small",
+      },
+    ]);
+    const tiles = homeTiles([solo], seven);
+    const cells = (columns: HomeColumns) =>
+      composed(tiles, null, columns).map(({ x, y, w, h, size }) => [x, y, w, h, size]);
+    const icons = (...at: (readonly [number, number])[]) =>
+      at.map(([x, y]) => [x, y, 1, 1, "icon"]);
+    // Its own medium, four cells by two, not the page's width and four rows; the projects beside
+    // it, in rows as long as the columns it leaves, then across the page below it.
+    expect(cells(12)).toEqual([
+      [0, 0, 4, 2, "medium"],
+      ...icons([4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0], [10, 0]),
+    ]);
+    expect(cells(8)).toEqual([
+      [0, 0, 4, 2, "medium"],
+      ...icons([4, 0], [5, 0], [6, 0], [7, 0], [4, 1], [5, 1], [6, 1]),
+    ]);
+    expect(cells(6)).toEqual([
+      [0, 0, 4, 2, "medium"],
+      ...icons([4, 0], [5, 0], [4, 1], [5, 1], [0, 2], [1, 2], [2, 2]),
+    ]);
+    // As wide as a phone, nothing beside it: the projects below.
+    expect(cells(4)).toEqual([
+      [0, 0, 4, 2, "medium"],
+      ...icons([0, 2], [1, 2], [2, 2], [3, 2], [0, 3], [1, 3], [2, 3]),
+    ]);
+    // A lead that comes wider takes the size nearest the page's width.
+    const announcements = plugin("news", [
+      {
+        key: "board",
+        name: { en: "Announcements" },
+        place: "home:top",
+        size: "half",
+        sizes: ["small", "medium", "large", "wide"],
+        defaultSize: "large",
+      },
+    ]);
+    expect(composed(homeTiles([announcements], seven), null, 12)[0]).toMatchObject({
+      x: 0,
+      y: 0,
+      w: 8,
+      h: 2,
+      size: "wide",
+    });
+    // Arranging starts from the very same cells, and the page and its arranging do not differ.
+    for (const columns of [12, 8, 6, 4] as const) {
+      expect(places(arranged(tiles, null, columns))).toEqual(
+        places(composed(tiles, null, columns)),
+      );
+      for (const { tile, w, h, size } of composed(tiles, null, columns)) {
+        expect(footprintOf(size, columns)).toEqual({ w, h });
+        expect(tile.kind === "project" ? ["icon"] : sizesAt(tile, columns)).toContain(size);
+      }
     }
   });
 

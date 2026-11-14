@@ -442,24 +442,12 @@ export function arranged(
   const hidden = new Set(home?.hidden ?? []);
   const { entries, placed: keepsPlaces } = keptAt(home, columns);
   if (nobodyArranged(home)) {
-    // Arranging starts from the page as it was composed, each widget on the cells nearest it, the
-    // projects one to a cell from the corner of theirs, in their order.
-    const boxes = composed(tiles, home, columns);
-    const projects = boxes.filter(({ tile }) => tile.kind === "project");
-    const left = Math.round(Math.min(...projects.map((box) => box.x)));
-    const top = Math.round(Math.min(...projects.map((box) => box.y)));
-    const across = Math.max(
-      1,
-      Math.round(Math.max(...projects.map((box) => box.x + box.w))) - left,
-    );
+    // Arranging starts from the page as it was composed, each tile on the cells nearest it: a
+    // project on the very cell it stood on (ADR-0108), a lead alone on its own (ADR-0110).
     const taken = new Set<number>();
-    return boxes.map(({ tile, size, x, y }) => {
+    return composed(tiles, home, columns).map(({ tile, size, x, y }) => {
       const shape = footprintOf(size, columns);
-      const nth = projects.findIndex((box) => box.tile.id === tile.id);
-      const near =
-        nth < 0
-          ? { x: Math.round(x), y: Math.round(y) }
-          : { x: left + (nth % across), y: top + Math.floor(nth / across) };
+      const near = { x: Math.round(x), y: Math.round(y) };
       const place = fits(taken, near, shape, columns)
         ? near
         : nearestRoom(taken, shape, near, columns);
@@ -583,11 +571,12 @@ function nearestSize(tile: HomeTile, w: number, h: number, columns: number): Hom
 /**
  * The page of someone who has arranged nothing, composed (ADR-0082): the first widget leads,
  * half the page wide, and beside it stand the next two widgets and the projects, the column as
- * high as the lead; on a grid of six columns or fewer they stand one under the other. The projects
- * are icons, one to a cell, in rows as long as their column has cells, so that a project is never
- * drawn in a shape it does not come in and the page is the one arranging starts from (ADR-0108);
- * the last row may end short. The other widgets stand below, two to a row. Every other edge meets
- * another or the page's.
+ * high as the lead; on a grid of six columns or fewer they stand one under the other. With nothing
+ * beside it, the lead stands at a size it comes in, and the projects follow it in the columns it
+ * leaves (ADR-0110). The projects are icons, one to a cell, in rows as long as their column has
+ * cells, so that a project is never drawn in a shape it does not come in and the page is the one
+ * arranging starts from (ADR-0108); the last row may end short. The other widgets stand below, two
+ * to a row.
  */
 export function composed(
   tiles: readonly HomeTile[],
@@ -614,6 +603,24 @@ export function composed(
       put(tile, x + (nth % across), y + Math.floor(nth / across), 1, 1);
     });
     return projectRows(width);
+  };
+  /**
+   * The projects beside a tile in the page's corner, so wide and so high: one to a cell in the
+   * columns it leaves, no lower than it reaches, then across the page below it. The row after them.
+   */
+  const putProjectsBeside = (w: number, h: number): number => {
+    const across = columns - w;
+    const beside = Math.min(projects.length, across * h);
+    projects.forEach((tile, nth) => {
+      const below = nth - beside;
+      if (below < 0) {
+        put(tile, w + (nth % across), Math.floor(nth / across), 1, 1);
+      } else {
+        put(tile, below % columns, h + Math.floor(below / columns), 1, 1);
+      }
+    });
+    const left = projects.length - beside;
+    return h + Math.ceil(left / columns);
   };
   /** Widgets two to a row across the page, one alone as wide as the page. */
   const putInPairs = (list: readonly HomeTile[], from: number): number => {
@@ -657,12 +664,23 @@ export function composed(
     }
     y = putInPairs([...others.slice(MOST_BESIDE), ...bottom], y);
   } else {
+    let projectsPut = false;
     if (lead !== undefined) {
-      put(lead, 0, 0, columns, LEAD_ROWS);
-      y = LEAD_ROWS;
+      // Nothing beside it, the lead is drawn at the size it is told, on that size's cells, and
+      // never stretched to the page's width and four rows (ADR-0110).
+      const size = nearestSize(lead, columns, LEAD_ROWS, columns);
+      const shape = footprintOf(size, columns);
+      boxes.push({ tile: lead, size, x: 0, y: 0, ...shape });
+      y = shape.h;
+      if (shape.w < columns && projects.length > 0) {
+        y = putProjectsBeside(shape.w, shape.h);
+        projectsPut = true;
+      }
     }
     y = putInPairs(others, y);
-    y += putProjects(0, y, columns);
+    if (!projectsPut) {
+      y += putProjects(0, y, columns);
+    }
     putInPairs(bottom, y);
   }
   return boxes;

@@ -1,6 +1,6 @@
 # ADR-0082: The page of someone who has arranged nothing is composed edge to edge
 
-- Status: Accepted; the projects' rows (point 1) and a project's box (point 2) amended by [ADR-0108](0108-a-project-on-the-composed-page-stands-on-one-cell.md): an icon on one whole cell, the last row ending short
+- Status: Accepted; the projects' rows (point 1) and a project's box (point 2) amended by [ADR-0108](0108-a-project-on-the-composed-page-stands-on-one-cell.md): an icon on one whole cell, the last row ending short; the lead with nothing beside it (points 1 and 2) amended by [ADR-0110](0110-a-lead-with-nothing-beside-it-stands-at-a-size-it-comes-in.md): drawn at the size it is told, the projects in the columns it leaves
 - Date: 2026-11-09
 - Amends point 3 and the last sentence of point 5 of [ADR-0061](0061-the-front-page-is-one-grid-of-tiles-a-person-arranges-by-hand.md), where a page nobody arranged stood every tile at the first room "at the size it starts at" and a width nobody arranged read the same order "packed from the top". The contract is in [specs/plugins.md](../specs/plugins.md).
 
