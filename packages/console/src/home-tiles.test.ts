@@ -7,10 +7,14 @@ import {
   composed,
   composedRows,
   footprintOf,
+  GLANCE_REM,
+  glanceFit,
   type HomeColumns,
   type HomeTile,
+  type HomeTileSize,
   homeTiles,
   homeWith,
+  isGlanceSize,
   moved,
   nobodyArranged,
   type PlacedTile,
@@ -176,7 +180,8 @@ describe("the front page's grid (ADR-0061)", () => {
   it("holds what the person may see: the widgets of the plugins that are on, and the projects", () => {
     const tiles = homeTiles([hr, hello], [project(1)]);
     expect(tiles.map((tile) => tile.id)).toEqual([BALANCE, TODAY, P1, "widget:hello:latest"]);
-    expect(tiles[2]?.sizes).toEqual(["icon", "small"]);
+    // A project at a glance as well, never at the size a glance has more room than words for (ADR-0105).
+    expect(tiles[2]?.sizes).toEqual(["icon", "small", "medium", "large", "wide"]);
     expect(tiles[2]?.defaultSize).toBe("icon");
     // The one size of before reads as one of the family.
     expect(tiles[3]?.sizes).toEqual(["medium", "wide"]);
@@ -573,5 +578,55 @@ describe("the other changes to the page (ADR-0061)", () => {
       8,
     );
     expect(places(back)["widget:crm:deals"]).toEqual([4, 4, "small"]);
+  });
+});
+
+describe("a project at a glance (ADR-0105)", () => {
+  const list = (rows: number, total: number, row: number = GLANCE_REM.task) => ({
+    rows,
+    total,
+    row,
+  });
+  const STACKED: readonly (readonly [number, number])[] = [
+    [0, 2],
+    [1, 1],
+    [0, Number.POSITIVE_INFINITY],
+    [1, Number.POSITIVE_INFINITY],
+    [2, Number.POSITIVE_INFINITY],
+  ];
+
+  it("is a size of three, and not the largest", () => {
+    expect(["medium", "large", "wide"].every((size) => isGlanceSize(size as HomeTileSize))).toBe(
+      true,
+    );
+    expect(["icon", "small", "full"].some((size) => isGlanceSize(size as HomeTileSize))).toBe(
+      false,
+    );
+  });
+
+  it("gives its rows out in order, each whole, and says how many more there are", () => {
+    const tasks = list(6, 9);
+    const goals = list(3, 3, GLANCE_REM.goal);
+    const review = list(2, 2);
+    // No room: nothing, not a heading alone.
+    expect(glanceFit(1, [tasks, goals, review], STACKED)).toEqual([0, 0, 0]);
+    // Room for a heading, two tasks and the line of how many more: the tasks first.
+    const two = GLANCE_REM.heading + 2 * GLANCE_REM.task + GLANCE_REM.more;
+    expect(glanceFit(two, [tasks, goals, review], STACKED)).toEqual([2, 0, 0]);
+    // Then a goal, under a hairline, before more tasks.
+    const andGoal =
+      two + GLANCE_REM.between + GLANCE_REM.heading + GLANCE_REM.goal + GLANCE_REM.more;
+    expect(glanceFit(andGoal, [tasks, goals, review], STACKED)).toEqual([2, 1, 0]);
+    // A tall room shows every goal and what waits for review once the tasks are all there.
+    expect(glanceFit(60, [tasks, goals, review], STACKED)).toEqual([6, 3, 2]);
+    // A list with no rows takes no room.
+    expect(glanceFit(60, [tasks, goals, list(0, 0)], STACKED)).toEqual([6, 3, 0]);
+  });
+
+  it("drops the line of how many more where the last row fits in its place", () => {
+    // Three tasks of three take a heading and three rows, no line of more.
+    const room = GLANCE_REM.heading + 3 * GLANCE_REM.task;
+    expect(glanceFit(room, [list(3, 3)], [[0, Number.POSITIVE_INFINITY]])).toEqual([3]);
+    expect(glanceFit(room, [list(3, 4)], [[0, Number.POSITIVE_INFINITY]])).toEqual([2]);
   });
 });

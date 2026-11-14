@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -66,7 +67,7 @@ import {
 } from "./components/decision-list.js";
 import { EventFeed, type EventFeedProps } from "./components/event-feed.js";
 import { GoalForm, GoalList, type GoalListProps, GoalView, goalMonth } from "./components/goals.js";
-import { HomeGrid, type HomeGridProps } from "./components/home.js";
+import { HomeGrid, type HomeGridProps, type ProjectGlance } from "./components/home.js";
 import { MyDecisions, ReachedDecision } from "./components/my-decisions.js";
 import { PackTokenWays } from "./components/pack-token.js";
 import { PAGE_SIZE } from "./components/paged.js";
@@ -481,6 +482,73 @@ function NotWithToken() {
   return <EmptyState title={words.title} body={words.body} />;
 }
 
+/** The tasks in progress and in review a glance reads of a project's board, and the goals ahead: more than a tile holds. */
+const GLANCE_TASKS = 20;
+const GLANCE_GOALS = 20;
+
+/**
+ * The boards of the projects the front page shows at a glance (ADR-0105): each read when its tile
+ * is first shown at such a size, and again when the projects are, so that the figures and the rows
+ * agree. A board that cannot be read leaves its tile with the figures alone.
+ */
+function useGlances(
+  client: ConsoleClient,
+  projects: readonly RestProject[],
+): {
+  readonly read: Readonly<Record<string, ProjectGlance>>;
+  readonly want: (projects: readonly RestProject[]) => void;
+} {
+  const [read, setRead] = useState<Readonly<Record<string, ProjectGlance>>>({});
+  const wanted = useRef<readonly RestProject[]>([]);
+  // Each board is read once for each reading of the projects: by the project's id, the list it
+  // was read with.
+  const asked = useRef(new Map<string, readonly RestProject[]>());
+  const current = useRef(projects);
+  current.current = projects;
+  const ask = useCallback(
+    (list: readonly RestProject[]) => {
+      const now = current.current;
+      for (const project of list) {
+        if (asked.current.get(project.id) === now) {
+          continue;
+        }
+        asked.current.set(project.id, now);
+        const board = client.project(project.key);
+        Promise.all([
+          board.tasks({ state: "in_progress", limit: GLANCE_TASKS }),
+          board.goals({ open: true, limit: GLANCE_GOALS }),
+          board.tasks({ state: "in_review", limit: GLANCE_TASKS }),
+        ]).then(
+          ([tasks, goals, review]) =>
+            setRead((before) => ({
+              ...before,
+              [project.id]: { tasks: tasks.items, goals: goals.items, review: review.items },
+            })),
+          () => asked.current.delete(project.id),
+        );
+      }
+    },
+    [client],
+  );
+  const want = useCallback(
+    (list: readonly RestProject[]) => {
+      wanted.current = list;
+      ask(list);
+    },
+    [ask],
+  );
+  useEffect(() => {
+    // The projects were read again: so are the boards shown at a glance, by the keys they have now.
+    ask(
+      wanted.current.flatMap((before) => {
+        const found = projects.find((project) => project.id === before.id);
+        return found === undefined ? [] : [found];
+      }),
+    );
+  }, [projects, ask]);
+  return { read, want };
+}
+
 function ProjectsPage(props: {
   readonly data: ConsoleData;
   readonly components: ConsoleComponents;
@@ -498,6 +566,7 @@ function ProjectsPage(props: {
   const [arranging, setArranging] = useState(false);
   const { busy, error, act } = useAction();
   const href = (project: RestProject) => projectHref(project.key);
+  const glances = useGlances(client, data.projects);
   // A project is made by an administrator (ADR-0045): a member sees the list alone, the form's
   // address included.
   const administrator = data.me?.person?.role === "admin";
@@ -550,6 +619,8 @@ function ProjectsPage(props: {
         onDone={() => setArranging(false)}
         projectHref={href}
         onOpen={(project) => navigation.go(href(project))}
+        glances={glances.read}
+        onGlance={glances.want}
         nameOf={(name) => pluginWordOf(name, language)}
         renderWidget={(tile, size) =>
           me === undefined ? null : (

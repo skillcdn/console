@@ -177,6 +177,7 @@ export function restProject(project: ProjectView): RestProject {
     role: project.role,
     openDecisions: project.openDecisions,
     openRuns: project.openRuns,
+    taskCounts: project.taskCounts,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
   };

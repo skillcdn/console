@@ -1,6 +1,6 @@
 # ADR-0061: The front page is one grid of tiles a person arranges by hand
 
-- Status: Accepted; point 2 amended by [ADR-0062](0062-a-widget-comes-in-a-size-a-phone-can-hold.md); point 3 and the last sentence of point 5, the page nobody arranged, amended by [ADR-0082](0082-the-page-of-someone-who-has-arranged-nothing-is-composed-edge-to-edge.md)
+- Status: Accepted; point 2 amended by [ADR-0062](0062-a-widget-comes-in-a-size-a-phone-can-hold.md), and for a project by [ADR-0105](0105-a-project-at-a-larger-size-is-a-glance-at-its-board.md); point 3 and the last sentence of point 5, the page nobody arranged, amended by [ADR-0082](0082-the-page-of-someone-who-has-arranged-nothing-is-composed-edge-to-edge.md)
 - Date: 2026-11-07
 - Supersedes the cells of point 1 and all of point 3 of [ADR-0059](0059-a-person-arranges-the-front-pages-widgets-from-the-sizes-each-comes-in.md); the sizes keep their names, and the frame is told its size as before. The contract is in [specs/plugins.md](../specs/plugins.md) and [specs/rest.md](../specs/rest.md).
 

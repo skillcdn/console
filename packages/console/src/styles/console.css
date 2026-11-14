@@ -7148,7 +7148,9 @@ select.sc-input-quiet {
 }
 
 a.sc-tile-project:hover,
-a.sc-tile-project:focus-visible {
+a.sc-tile-project:focus-visible,
+a.sc-tile-glance:hover,
+a.sc-tile-glance:focus-visible {
   border-color: var(--sc-color-accent);
   background: var(--sc-glass-surface-hover);
   color: var(--sc-color-text);
@@ -7246,6 +7248,247 @@ a.sc-tile-project:focus-visible {
   .sc-tile-about {
     -webkit-line-clamp: 1;
   }
+}
+
+/* A project at a glance (ADR-0105): its name and three figures at the head; under them, or beside
+   them on a wide tile, its tasks in progress and its goals ahead, each list under its label. A
+   hairline across the tile parts the head from the lists and the lists from each other, and one
+   inside a list parts its rows. The page keeps as many rows as the room holds, each whole, by the
+   heights the tile's style gives (--sc-glance-*, home.tsx), so that nothing is cut and no room is
+   left over. */
+.sc-tile-glance {
+  --sc-glance-pad-x: clamp(1rem, 4cqw, 1.5rem);
+  --sc-glance-pad-y: clamp(0.875rem, 5cqh, 1.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-space-3);
+  padding: var(--sc-glance-pad-y) var(--sc-glance-pad-x);
+  overflow: hidden;
+  color: var(--sc-color-text);
+  text-decoration: none;
+}
+
+.sc-glance-lead {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-3) var(--sc-space-5);
+  min-width: 0;
+}
+
+.sc-glance-who {
+  display: flex;
+  flex: 1 1 11rem;
+  align-items: center;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+.sc-glance-name {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.sc-tile-glance .sc-tile-name {
+  display: block;
+  overflow: hidden;
+  font-size: var(--sc-text-lg);
+  font-weight: var(--sc-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-glance-key {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Three figures side by side, each over its name, the decisions waiting in the colour of a count. */
+.sc-glance-facts {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(3, auto);
+  gap: var(--sc-space-5);
+  margin: 0;
+}
+
+.sc-glance-fact {
+  display: grid;
+  gap: 0.125rem;
+  justify-items: start;
+}
+
+.sc-glance-fact dt {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  white-space: nowrap;
+}
+
+.sc-glance-fact dd {
+  order: -1;
+  margin: 0;
+  font-size: var(--sc-text-xl);
+  font-weight: var(--sc-weight-bold);
+  font-feature-settings: var(--sc-numeric);
+  line-height: var(--sc-leading-tight);
+}
+
+.sc-glance-fact-waiting dd {
+  color: var(--sc-color-point);
+}
+
+/* The lists, one under the other, under a hairline across the tile; the line is there while a list is. */
+.sc-glance-body {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  margin-inline: calc(-1 * var(--sc-glance-pad-x));
+  padding: var(--sc-space-3) var(--sc-glance-pad-x) 0;
+  overflow: hidden;
+  border-top: var(--sc-hairline);
+}
+
+.sc-glance-body:empty {
+  border-top-color: transparent;
+}
+
+.sc-glance-section {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sc-glance-body > .sc-glance-section + .sc-glance-section,
+.sc-glance-column > .sc-glance-section + .sc-glance-section {
+  margin: calc(var(--sc-glance-between) / 2) calc(-1 * var(--sc-glance-pad-x)) 0;
+  padding: calc(var(--sc-glance-between) / 2 - 1px) var(--sc-glance-pad-x) 0;
+  border-top: var(--sc-hairline);
+}
+
+.sc-glance-heading {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--sc-glance-heading);
+  margin: 0;
+}
+
+.sc-glance-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-glance-row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sc-space-2);
+  height: var(--sc-glance-task);
+  min-width: 0;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-glance-row + .sc-glance-row {
+  border-top: var(--sc-hairline);
+}
+
+.sc-glance-row-main {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-glance-none {
+  color: var(--sc-color-text-faint);
+}
+
+/* A goal in two lines: its title, its day and how many of its tasks are done, then its bar across. */
+.sc-glance-goal {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--sc-space-1);
+  height: var(--sc-glance-goal);
+}
+
+.sc-glance-goal-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+.sc-glance-figure,
+.sc-glance-day {
+  flex: none;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  font-feature-settings: var(--sc-numeric);
+}
+
+.sc-glance-day {
+  color: var(--sc-color-text-faint);
+}
+
+.sc-glance-more {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--sc-glance-more);
+  margin: 0;
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+}
+
+/* Wide: the head a column of its own, the name at the top and the figures at the foot, and each
+   list a column beside it, a hairline down between them. */
+.sc-tile-glance-wide {
+  display: grid;
+  grid-template-columns: minmax(0, clamp(12rem, 24cqw, 16rem)) minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 0;
+}
+
+.sc-tile-glance-wide .sc-glance-lead {
+  flex-flow: column nowrap;
+  align-items: stretch;
+  justify-content: space-between;
+  padding-inline-end: var(--sc-glance-pad-x);
+}
+
+.sc-tile-glance-wide .sc-glance-who {
+  flex: none;
+}
+
+/* On a wide tile the head's column has room under the name: what the project is, as much as fits. */
+.sc-glance-about {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin-block: var(--sc-space-3) auto;
+}
+
+.sc-glance-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding-inline: var(--sc-glance-pad-x);
+  overflow: hidden;
+  border-inline-start: var(--sc-hairline);
+}
+
+.sc-glance-column:last-child {
+  padding-inline-end: 0;
 }
 
 /* A widget: its name, and its frame filling the cells its size gives it. */
@@ -7433,13 +7676,20 @@ a.sc-tile-project:focus-visible {
   border-color: var(--sc-color-accent);
 }
 
+/* The sizes stay within their tile, folding onto a second row where a cell is narrower than they
+   are, as a project's five are on an icon: what stands beside the tile, and its own way off the
+   page, stay in reach. */
 .sc-tile-sizes {
   position: absolute;
   top: var(--sc-space-1);
   right: var(--sc-space-1);
   z-index: 1;
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 1px;
+  min-inline-size: 0;
+  max-width: calc(100% - var(--sc-space-1) * 2);
   margin: 0;
   padding: 1px;
   border: var(--sc-border);
@@ -7485,6 +7735,11 @@ a.sc-tile-project:focus-visible {
 .sc-home-editing .sc-home-grid[data-columns="4"] .sc-tile-project:not(.sc-tile-project-card),
 .sc-home-editing .sc-home-grid[data-columns="6"] .sc-tile-project:not(.sc-tile-project-card) {
   justify-content: flex-end;
+}
+
+/* A glance's figures stand where the sizes do: while the page is arranged, it starts under them. */
+.sc-home-editing .sc-tile-glance {
+  padding-top: calc(var(--sc-glance-pad-y) + var(--sc-space-6));
 }
 
 /* The size's shape in small: the cells it takes, a few pixels each. */

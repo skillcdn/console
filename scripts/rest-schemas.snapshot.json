@@ -16483,6 +16483,50 @@
                   "minimum": 0,
                   "maximum": 9007199254740991
                 },
+                "taskCounts": {
+                  "type": "object",
+                  "properties": {
+                    "idea": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "ready": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "in_progress": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "in_review": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "done": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "dropped": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "idea",
+                    "ready",
+                    "in_progress",
+                    "in_review",
+                    "done",
+                    "dropped"
+                  ],
+                  "additionalProperties": false
+                },
                 "createdAt": {
                   "type": "string",
                   "format": "date-time",
@@ -24324,6 +24368,50 @@
           "minimum": 0,
           "maximum": 9007199254740991
         },
+        "taskCounts": {
+          "type": "object",
+          "properties": {
+            "idea": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "ready": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in_progress": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in_review": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "done": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "dropped": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "idea",
+            "ready",
+            "in_progress",
+            "in_review",
+            "done",
+            "dropped"
+          ],
+          "additionalProperties": false
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -24485,6 +24573,50 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
+              },
+              "taskCounts": {
+                "type": "object",
+                "properties": {
+                  "idea": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "ready": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "in_progress": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "in_review": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "done": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "dropped": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "idea",
+                  "ready",
+                  "in_progress",
+                  "in_review",
+                  "done",
+                  "dropped"
+                ],
+                "additionalProperties": false
               },
               "createdAt": {
                 "type": "string",
@@ -29655,6 +29787,9 @@
                           "type": "boolean"
                         },
                         "identifiers": {
+                          "type": "boolean"
+                        },
+                        "words": {
                           "type": "boolean"
                         },
                         "embedding": {

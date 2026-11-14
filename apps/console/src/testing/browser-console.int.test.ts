@@ -1,7 +1,15 @@
 import process from "node:process";
-import { AUTH_ROUTES, pluginPath, projectPath, REST_ROUTES } from "@skillcdn/console/api";
+import {
+  AUTH_ROUTES,
+  pluginPath,
+  projectPath,
+  REST_ROUTES,
+  restMeSchema,
+  restProjectSchema,
+} from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BROWSER_ADMIN, type BrowserConsole, startBrowserConsole } from "./browser-console.js";
+import { PREVIEW_BOARD_KEY, seedPreviewBoard } from "./preview-board.js";
 
 // The console a person looks at the plugins on (`pnpm dev:plugins`) runs the plugins' hooks and
 // jobs itself, as a deployment's worker does: a decision a plugin raised, answered on the board,
@@ -216,5 +224,48 @@ describe("the preview console", () => {
       20_000,
     );
     expect(record.data.state).toBe("approved");
+  }, 60_000);
+
+  it("makes a board for the front page's glance once, and shows it at one on a member's page (ADR-0105)", async () => {
+    const admin = await started.harness.signIn(BROWSER_ADMIN);
+    const member = await started.harness.signIn("bob");
+    const seed = () =>
+      seedPreviewBoard({
+        harness: started.harness,
+        origin: started.origin,
+        admin,
+        member,
+        now: new Date("2026-11-14T09:00:00Z"),
+      });
+    expect(await seed()).toBe(true);
+    const project = restProjectSchema.parse(
+      await (
+        await started.harness.request(projectPath(PREVIEW_BOARD_KEY), {
+          headers: { cookie: member },
+        })
+      ).json(),
+    );
+    expect(project.taskCounts).toEqual({
+      idea: 0,
+      ready: 3,
+      in_progress: 6,
+      in_review: 3,
+      done: 3,
+      dropped: 0,
+    });
+    expect(project.openDecisions).toBe(1);
+    const me = restMeSchema.parse(
+      await (await started.harness.request(REST_ROUTES.me, { headers: { cookie: member } })).json(),
+    );
+    expect(me.home?.layouts[12]).toEqual([
+      { tile: `project:${project.id}`, x: 0, y: 0, size: "large" },
+    ]);
+    expect(me.home?.layouts[8]?.[0]?.size).toBe("wide");
+    // Made once: a database kept from an earlier run keeps what was there, a page arranged since too.
+    expect(await seed()).toBe(false);
+    const adminMe = restMeSchema.parse(
+      await (await started.harness.request(REST_ROUTES.me, { headers: { cookie: admin } })).json(),
+    );
+    expect(Object.keys(adminMe.home?.layouts ?? {})).toEqual([]);
   }, 60_000);
 });

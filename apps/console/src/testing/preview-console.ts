@@ -1,5 +1,6 @@
 import process from "node:process";
 import { BROWSER_ADMIN, startBrowserConsole } from "./browser-console.js";
+import { PREVIEW_BOARD_KEY, seedPreviewBoard } from "./preview-board.js";
 import { builtPluginAt, type PreviewArguments, parsePreviewArguments } from "./preview-plugins.js";
 
 // The console on this machine for a person to look at the plugins' pages: the default UI, the
@@ -9,7 +10,9 @@ import { builtPluginAt, type PreviewArguments, parsePreviewArguments } from "./p
 // plugin is looked at here without a provider; the plugins' hooks and jobs running in this
 // process, so that a decision answered reaches the plugin and a job runs at its time; the
 // fixture's people signing in from the browser at the addresses printed, and a database of its
-// own that goes when this ends, unless --keep says to keep it for the next run.
+// own that goes when this ends, unless --keep says to keep it for the next run. A project with a
+// board of invented work is made once, for the front page's glance (ADR-0105), and the member
+// bob's front page shows it at one.
 // `pnpm dev:plugins`, which builds first; `--port <n>` for another port; `--public-url <origin>`
 // for the address a tunnel reaches it at, so that a plugin receiving requests from outside is
 // tried here. Not compiled.
@@ -51,6 +54,18 @@ try {
 } catch (error) {
   started = stop(reasonOf(error));
 }
+try {
+  await seedPreviewBoard({
+    harness: started.harness,
+    origin: started.publicUrl,
+    admin: await started.harness.signIn(BROWSER_ADMIN),
+    member: await started.harness.signIn("bob"),
+    now: new Date(),
+  });
+} catch (error) {
+  await started.close().catch(() => undefined);
+  stop(reasonOf(error));
+}
 const lines = [
   `The console, with the example plugin enabled and the fixtures leave and gate installed: ${started.publicUrl}`,
   ...(wanted.publicUrl === undefined
@@ -60,6 +75,7 @@ const lines = [
       ]),
   `  sign in as ${BROWSER_ADMIN}, an administrator: ${started.signInUrl(BROWSER_ADMIN)}`,
   `  as a member: ${started.signInUrl("bob")} or ${started.signInUrl("carol")}`,
+  `  The project ${PREVIEW_BOARD_KEY} holds a board of invented work: bob's front page shows it at a glance, and Edit layout gives a project its size on anyone's.`,
   ...plugins.map(
     (plugin) =>
       `  installed and not enabled, for ${BROWSER_ADMIN} to enable on the settings page: ${plugin.name} from ${plugin.dir}`,

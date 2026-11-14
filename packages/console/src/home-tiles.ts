@@ -70,7 +70,83 @@ export interface PlacedTile {
   readonly size: HomeTileSize;
 }
 
-const PROJECT_SIZES: readonly HomeTileSize[] = ["icon", "small"];
+/**
+ * A project comes as an icon, a card, and at a glance of its board in three shapes (ADR-0105):
+ * `medium` 4×2, `large` 4×4 and `wide` 8×2. Not `full`: at 8×4 a glance had more room than it
+ * has things to say.
+ */
+const PROJECT_SIZES: readonly HomeTileSize[] = ["icon", "small", "medium", "large", "wide"];
+/** The sizes the projects take together where a width is closed up: the small ones a person kept them at before a glance existed. */
+const PROJECT_ALIKE_SIZES: readonly HomeTileSize[] = ["icon", "small"];
+
+/** Whether a project at a size shows a glance of its board: what is at work in it, and its roadmap (ADR-0105). */
+export function isGlanceSize(size: HomeTileSize): boolean {
+  return size === "medium" || size === "large" || size === "wide";
+}
+
+/**
+ * The heights a glance is laid out with, in rem, which its stylesheet gives the same parts: a
+ * list's heading, a task's row, a goal's row of two lines, the line that says how many more, and
+ * the room between two lists, a hairline in it.
+ */
+export const GLANCE_REM = { heading: 1.5, task: 2.25, goal: 3, more: 1.5, between: 1.5 } as const;
+
+/** The room a glance's lists are taken to have before it is laid out, in rem, by the size of the tile. */
+export const GLANCE_ROOM_GUESS: Partial<Record<HomeTileSize, number>> = {
+  medium: 6,
+  large: 20,
+  wide: 12,
+};
+
+/** A list of a glance: the rows it could show, how many there are in all, and the height of a row, in rem. */
+export interface GlanceList {
+  readonly rows: number;
+  readonly total: number;
+  readonly row: number;
+}
+
+/** The height a list takes with so many rows shown: nothing with none, the line of how many more while some are left out. */
+function listHeight(shown: number, list: GlanceList): number {
+  return shown === 0
+    ? 0
+    : GLANCE_REM.heading + shown * list.row + (shown < list.total ? GLANCE_REM.more : 0);
+}
+
+/**
+ * The rows of a glance's lists, one under the other, that a room holds, each row whole (ADR-0105):
+ * the steps give rows in turn, each step a list and the rows it may have by then, so that the
+ * lists that matter most are seen first and the others as the room allows. A list with no rows to
+ * show takes no room.
+ */
+export function glanceFit(
+  room: number,
+  lists: readonly GlanceList[],
+  steps: readonly (readonly [number, number])[],
+): number[] {
+  const shown = lists.map(() => 0);
+  const height = (counts: readonly number[]): number => {
+    const used = lists.map((list, at) => listHeight(counts[at] ?? 0, list));
+    const showing = used.filter((value) => value > 0).length;
+    return (
+      used.reduce((sum, value) => sum + value, 0) + Math.max(0, showing - 1) * GLANCE_REM.between
+    );
+  };
+  for (const [at, upTo] of steps) {
+    const list = lists[at];
+    if (list === undefined) {
+      continue;
+    }
+    const limit = Math.min(upTo, list.rows);
+    while ((shown[at] ?? 0) < limit) {
+      const next = shown.map((count, index) => (index === at ? count + 1 : count));
+      if (height(next) > room) {
+        break;
+      }
+      shown[at] = (shown[at] ?? 0) + 1;
+    }
+  }
+  return shown;
+}
 
 /**
  * Every tile the person may see: the widgets of the plugins that are on, which they hold a role
@@ -284,9 +360,9 @@ function closedUp(wanted: readonly Wanted[], columns: number): PlacedTile[] {
   const choices: { readonly at: readonly number[]; readonly options: HomeTileSize[][] }[] = [];
   if (projects.length > 0) {
     const own = projects.map((at) => wanted[at]?.size ?? "icon");
-    const alike = PROJECT_SIZES.filter((size) => HOME_TILE_CELLS[size].columns <= columns).map(
-      (size) => projects.map(() => size),
-    );
+    const alike = PROJECT_ALIKE_SIZES.filter(
+      (size) => HOME_TILE_CELLS[size].columns <= columns,
+    ).map((size) => projects.map(() => size));
     const options = [own, ...alike].filter(
       (option, index, all) => all.findIndex((other) => other.join() === option.join()) === index,
     );

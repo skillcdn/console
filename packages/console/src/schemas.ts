@@ -1437,6 +1437,17 @@ export const restProjectIconSchema = z.object({
 });
 export type RestProjectIcon = z.infer<typeof restProjectIconSchema>;
 
+/** How many tasks a goal, or a project's board, has in each state: what its progress is read from, live. */
+export const restTaskCountsSchema = z.object({
+  idea: count,
+  ready: count,
+  in_progress: count,
+  in_review: count,
+  done: count,
+  dropped: count,
+});
+export type RestTaskCounts = z.infer<typeof restTaskCountsSchema>;
+
 export const restProjectSchema = z.object({
   id: uuid,
   key: projectKey,
@@ -1460,6 +1471,8 @@ export const restProjectSchema = z.object({
   openDecisions: count,
   /** How many agents are at work in it, or waiting. */
   openRuns: count,
+  /** The tasks on its board, those put away left out, counted by state (ADR-0105); left out by a console older than 0.5. */
+  taskCounts: z.optional(restTaskCountsSchema),
   createdAt: instant,
   updatedAt: instant,
 });
@@ -1671,17 +1684,6 @@ export const restTaskPatchSchema = z.object({
   links: z.optional(z.array(taskLinkInput).check(z.maxLength(MAX_LINKS))),
 });
 export type RestTaskPatch = z.infer<typeof restTaskPatchSchema>;
-
-/** How many tasks a goal has in each state: what its progress is read from, live. */
-export const restTaskCountsSchema = z.object({
-  idea: count,
-  ready: count,
-  in_progress: count,
-  in_review: count,
-  done: count,
-  dropped: count,
-});
-export type RestTaskCounts = z.infer<typeof restTaskCountsSchema>;
 
 /**
  * A goal of a project's roadmap (ADR-0019): what the project works towards, with the day it is

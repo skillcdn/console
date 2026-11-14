@@ -484,7 +484,11 @@ export function DueBadge(props: {
 }
 
 /** How far a goal is, read from its tasks: the done ones, the ones at work, and the rest. */
-export function ProgressBar(props: { readonly counts: RestTaskCounts }) {
+export function ProgressBar(props: {
+  readonly counts: RestTaskCounts;
+  /** False for the bar alone, where a row beside it says the figures: a glance's (ADR-0105). */
+  readonly words?: boolean;
+}) {
   const words = useWords();
   const { counts } = props;
   const total = counts.idea + counts.ready + counts.in_progress + counts.in_review + counts.done;
@@ -503,10 +507,12 @@ export function ProgressBar(props: { readonly counts: RestTaskCounts }) {
         <span className="sc-progress-done" style={{ width: `${share(counts.done)}%` }} />
         <span className="sc-progress-working" style={{ width: `${share(working)}%` }} />
       </div>
-      <span className="sc-progress-words">
-        {words.roadmap.progress(counts.done, total)}
-        {working > 0 && ` · ${words.roadmap.inProgress(working)}`}
-      </span>
+      {props.words !== false && (
+        <span className="sc-progress-words">
+          {words.roadmap.progress(counts.done, total)}
+          {working > 0 && ` · ${words.roadmap.inProgress(working)}`}
+        </span>
+      )}
     </div>
   );
 }

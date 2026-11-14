@@ -3833,6 +3833,72 @@ describe("projects", () => {
     expect(home([], { empty: <p>none</p> })).toContain("<p>none</p>");
   });
 
+  it("shows a project at a glance: its figures, its tasks in progress, its goals and what waits for review (ADR-0105)", () => {
+    const web = project({
+      taskCounts: { idea: 0, ready: 1, in_progress: 5, in_review: 1, done: 2, dropped: 0 },
+    });
+    const tile = `project:${web.id}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const glance = {
+      tasks: [
+        task({
+          id: "0199c4d8-0000-7000-8000-0000000000a1",
+          title: "Undated work",
+          state: "in_progress",
+          dueOn: null,
+        }),
+        task({
+          id: "0199c4d8-0000-7000-8000-0000000000a2",
+          title: "Work due <today>",
+          state: "in_progress",
+          dueOn: today,
+        }),
+      ],
+      goals: [
+        goal({
+          title: "Launch",
+          taskCounts: { idea: 0, ready: 1, in_progress: 1, in_review: 1, done: 2, dropped: 0 },
+        }),
+      ],
+      review: [
+        task({
+          id: "0199c4d8-0000-7000-8000-0000000000a3",
+          title: "Read the copy",
+          state: "in_review",
+        }),
+      ],
+    };
+    const at = (size: "medium" | "large" | "wide") =>
+      home([web], {
+        home: { hidden: [], layouts: { 8: [{ tile, x: 0, y: 0, size }] } },
+        glances: { [web.id]: glance },
+      });
+    const large = at("large");
+    expect(large).toContain("sc-tile-glance");
+    expect(large).toContain("<dd>5</dd>");
+    expect(large).toContain("Tasks in progress");
+    // The soonest due first, its day said; the task due on no day after it, with none.
+    expect(large.indexOf("Work due &lt;today&gt;")).toBeLessThan(large.indexOf("Undated work"));
+    expect(large).not.toContain("<today>");
+    expect(large).toContain("Due today");
+    // Three in progress are not read: the line says so.
+    expect(large).toContain("3 more");
+    expect(large).toContain("Launch");
+    expect(large).toContain(">2/5<");
+    expect(large).toContain("Waiting for review");
+    expect(large).toContain("Read the copy");
+    // On a wide tile, the head is a column of its own with what the project is.
+    const wide = at("wide");
+    expect(wide).toContain("sc-tile-glance-wide");
+    expect(wide).toContain("sc-glance-about");
+    // Before its board is read, the head alone.
+    const unread = home([web], {
+      home: { hidden: [], layouts: { 8: [{ tile, x: 0, y: 0, size: "medium" }] } },
+    });
+    expect(unread).toContain("sc-tile-glance");
+    expect(unread).not.toContain("Tasks in progress");
+  });
+
   it("opens nothing while the page is arranged, and gives each tile the way off it and its sizes", () => {
     const html = home([project()], { editing: true });
     expect(html).not.toContain("<a ");

@@ -1335,6 +1335,18 @@ export const ko: Messages = {
       wide: "와이드",
       full: "전체",
     },
+    glance: {
+      working: "진행 중",
+      review: "검토 대기",
+      decisions: "결정 대기",
+      tasks: "진행 중인 태스크",
+      reviewTasks: "검토를 기다리는 태스크",
+      roadmap: "로드맵",
+      more: (count: number) => `외 ${count}건`,
+      noTasks: "진행 중인 태스크가 없습니다",
+      noGoals: "남은 목표가 없습니다",
+      done: (done: number, total: number) => `${total}개 중 ${done}개 완료`,
+    },
   },
 
   persona: {

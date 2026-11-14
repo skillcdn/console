@@ -155,3 +155,41 @@ describe("making a project (ADR-0045)", () => {
     expect(await errorOf(askedByMember)).toBe("auth.forbidden");
   });
 });
+
+describe("a project's tasks counted (ADR-0105)", () => {
+  it("are those of its board by state, the archived left out, in the list and in the project alike", async () => {
+    const made = await post(fromPages(admin), { key: "counted", name: "Counted" });
+    expect(made.status).toBe(201);
+    const at = (path = "") => `${projectPath("counted")}${path}`;
+    const task = async (state: string) => {
+      const answer = await h.request(at("/tasks"), {
+        method: "POST",
+        headers: { ...fromPages(admin), ...JSON_HEADERS },
+        body: JSON.stringify({ title: `A task ${state}`, state }),
+      });
+      expect(answer.status).toBe(201);
+      return ((await answer.json()) as { readonly id: string }).id;
+    };
+    await task("in_progress");
+    await task("in_progress");
+    await task("in_review");
+    await task("idea");
+    const putAway = await task("done");
+    await task("done");
+    const archived = await h.request(at(`/tasks/${putAway}/archive`), {
+      method: "POST",
+      headers: fromPages(admin),
+    });
+    expect(archived.ok).toBe(true);
+
+    const expected = { idea: 1, ready: 0, in_progress: 2, in_review: 1, done: 1, dropped: 0 };
+    const one = restProjectSchema.parse(
+      await (await h.request(at(), { headers: { cookie: admin } })).json(),
+    );
+    expect(one.taskCounts).toEqual(expected);
+    const listed = restProjectsSchema.parse(
+      await (await h.request(REST_ROUTES.projects, { headers: { cookie: admin } })).json(),
+    );
+    expect(listed.items.find((project) => project.key === "counted")?.taskCounts).toEqual(expected);
+  });
+});

@@ -9,8 +9,16 @@ const css = readFileSync(new URL("./console.css", import.meta.url), "utf8").repl
   "",
 );
 
-// Set by the components on an element's style, not in the stylesheet.
-const SET_INLINE = new Set(["--sc-span"]);
+// Set by the components on an element's style, not in the stylesheet: a glance's heights are
+// the ones its rows are fitted by (`GLANCE_REM`, ADR-0105).
+const SET_INLINE = new Set([
+  "--sc-span",
+  "--sc-glance-heading",
+  "--sc-glance-task",
+  "--sc-glance-goal",
+  "--sc-glance-more",
+  "--sc-glance-between",
+]);
 
 describe("console.css", () => {
   it("draws a select's chevron itself, inset from the edge", () => {

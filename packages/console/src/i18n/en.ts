@@ -1415,6 +1415,19 @@ export const en = {
       wide: "Wide",
       full: "Full",
     },
+    /** A project's tile at a glance of its board (ADR-0105). */
+    glance: {
+      working: "In progress",
+      review: "In review",
+      decisions: "Decisions",
+      tasks: "Tasks in progress",
+      reviewTasks: "Waiting for review",
+      roadmap: "Roadmap",
+      more: (count: number) => `${count} more`,
+      noTasks: "Nothing in progress",
+      noGoals: "No goal ahead",
+      done: (done: number, total: number) => `${done} of ${total} done`,
+    },
   },
 
   /** The names an agent account is proposed (ADR-0084), by the handle each gives: spelled in every pack. */

@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { daysBetween, today } from "../dates.js";
 import {
   added,
   arranged,
@@ -18,6 +19,9 @@ import {
   composed,
   composedRows,
   footprintOf,
+  GLANCE_REM,
+  GLANCE_ROOM_GUESS,
+  glanceFit,
   HOME_TILE_CELLS,
   type HomeColumns,
   type HomeTile,
@@ -25,6 +29,7 @@ import {
   type HomeWidgetTile,
   homeTiles,
   homeWith,
+  isGlanceSize,
   moved,
   nobodyArranged,
   type PlacedTile,
@@ -35,11 +40,11 @@ import {
 } from "../home-tiles.js";
 import { useWords } from "../i18n/index.js";
 import type { PluginWidgetSizeName } from "../plugin/bridge.js";
-import type { RestHome, RestPlugin, RestProject } from "../schemas.js";
+import type { RestGoal, RestHome, RestPlugin, RestProject, RestTask } from "../schemas.js";
 import { useAction } from "../use-action.js";
 import { DRAG_SLACK, edgeScrollOf, HOLD_MS, HOLD_SLACK } from "./board.js";
 import { ProjectMark, ProjectRoleBadge } from "./projects.js";
-import { Badge, Button, Callout, cx } from "./ui.js";
+import { Badge, Button, Callout, cx, Day, DueBadge, ProgressBar, Workers } from "./ui.js";
 
 // The front page (ADR-0061): one grid of tiles, the projects and the plugins' widgets alike. While
 // the person arranges it nothing on it opens: a tile is taken in hand and put down anywhere, as a
@@ -52,20 +57,280 @@ const SPARE_ROWS = 2;
 
 const NONE: readonly string[] = [];
 
+/** What a project's tile at a glance reads of its board (ADR-0105). */
+export interface ProjectGlance {
+  /** Its tasks in progress, as many as a glance shows at most. */
+  readonly tasks: readonly RestTask[];
+  /** Its goals ahead, the planned and the active, as its roadmap orders them. */
+  readonly goals: readonly RestGoal[];
+  /** Its tasks waiting for review; left out, none are shown. */
+  readonly review?: readonly RestTask[] | undefined;
+}
+
 export interface ProjectTileProps {
   readonly project: RestProject;
   readonly size: HomeTileSize;
   /** The way into the project; left out while the page is arranged, when a tile opens nothing. */
   readonly href?: string | undefined;
   readonly onOpen?: ((project: RestProject) => void) | undefined;
+  /** What its board holds, at a size that shows it; nothing while it is read. */
+  readonly glance?: ProjectGlance | undefined;
 }
+
+/** The tasks in progress the soonest due first, those due on no day last, each kind as it came. */
+function soonestFirst(tasks: readonly RestTask[]): RestTask[] {
+  return [...tasks].sort((a, b) =>
+    a.dueOn === b.dueOn
+      ? 0
+      : a.dueOn === null
+        ? 1
+        : b.dueOn === null
+          ? -1
+          : a.dueOn < b.dueOn
+            ? -1
+            : 1,
+  );
+}
+
+/** How many days a task is due within for its day to be shown on a glance: a week, as the board's badge counts it. */
+const GLANCE_DUE_DAYS = 7;
+
+/**
+ * The height of the room a glance's lists have, in rem, followed as the tile changes; nothing
+ * before the element is laid out. Taken through a callback ref, since the element changes with
+ * the tile's shape: a column beside the head on a wide tile, the body under it otherwise.
+ */
+function useRoom(): readonly [(node: HTMLDivElement | null) => void, number | undefined] {
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
+  const [room, setRoom] = useState<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (node === null) {
+      setRoom(undefined);
+      return;
+    }
+    const measure = () => {
+      if (node.getClientRects().length === 0) {
+        setRoom(undefined);
+        return;
+      }
+      // The room inside its padding, which is what the lists have.
+      const style = window.getComputedStyle(node);
+      const height =
+        node.clientHeight -
+        (Number.parseFloat(style.paddingTop) || 0) -
+        (Number.parseFloat(style.paddingBottom) || 0);
+      const rem =
+        Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+      setRoom(Math.max(0, height) / rem);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [node]);
+  return [setNode, room];
+}
+
+/**
+ * The order a glance's lists are given rows in, one under the other (ADR-0105): two tasks in
+ * progress, a goal, the rest of the tasks, the rest of the goals, then what waits for review.
+ * Beside the head, on a wide tile, the tasks and what waits for review share a column and the
+ * goals have one of their own.
+ */
+const STACKED: readonly (readonly [number, number])[] = [
+  [0, 2],
+  [1, 1],
+  [0, Number.POSITIVE_INFINITY],
+  [1, Number.POSITIVE_INFINITY],
+  [2, Number.POSITIVE_INFINITY],
+];
+const SHARING: readonly (readonly [number, number])[] = [
+  [0, Number.POSITIVE_INFINITY],
+  [1, Number.POSITIVE_INFINITY],
+];
+const ALONE: readonly (readonly [number, number])[] = [[0, Number.POSITIVE_INFINITY]];
+
+/**
+ * A project at a glance (ADR-0105): its name and three figures, what is in progress, in review
+ * and waiting for a decision; under them, or beside them on a wide tile, its tasks in progress, its
+ * goals ahead and its tasks waiting for review, as many rows as the room holds, each whole, and
+ * how many more there are.
+ */
+function ProjectGlanceTile(props: {
+  readonly project: RestProject;
+  readonly size: HomeTileSize;
+  readonly glance: ProjectGlance | undefined;
+}) {
+  const glanceWords = useWords().home.glance;
+  const { project, glance } = props;
+  const columns = props.size === "wide";
+  const [body, measured] = useRoom();
+  const room = measured ?? GLANCE_ROOM_GUESS[props.size] ?? 0;
+  const counts = project.taskCounts;
+  const tasks = soonestFirst(glance?.tasks ?? []);
+  const goals = glance?.goals ?? [];
+  const review = soonestFirst(glance?.review ?? []);
+  const working = counts?.in_progress ?? tasks.length;
+  const reviewing = counts?.in_review ?? review.length;
+  // The tasks and the goals say so in a row of their own when there are none; what waits for
+  // review is shown only when something does.
+  const taskList = {
+    rows: Math.max(tasks.length, 1),
+    total: Math.max(working, tasks.length, 1),
+    row: GLANCE_REM.task,
+  };
+  const goalList = {
+    rows: Math.max(goals.length, 1),
+    total: Math.max(goals.length, 1),
+    row: GLANCE_REM.goal,
+  };
+  const reviewList = {
+    rows: review.length,
+    total: Math.max(reviewing, review.length),
+    row: GLANCE_REM.task,
+  };
+  const beside = glanceFit(room, [taskList, reviewList], SHARING);
+  const [taskRows = 0, goalRows = 0, reviewRows = 0] = columns
+    ? [beside[0], glanceFit(room, [goalList], ALONE)[0], beside[1]]
+    : glanceFit(room, [taskList, goalList, reviewList], STACKED);
+  const now = today();
+  const figure = (label: string, value: number, waiting = false) => (
+    <div className={cx("sc-glance-fact", waiting && value > 0 && "sc-glance-fact-waiting")}>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+  const more = (shown: number, total: number) =>
+    shown > 0 && shown < total ? (
+      <p className="sc-glance-more">{glanceWords.more(total - shown)}</p>
+    ) : null;
+  const taskRow = (task: RestTask) => {
+    const soon = task.dueOn !== null && daysBetween(now, task.dueOn) <= GLANCE_DUE_DAYS;
+    return (
+      <li key={task.id} className="sc-glance-row">
+        <span className="sc-glance-row-main">{task.title}</span>
+        {soon && task.dueOn !== null && (
+          <DueBadge dueOn={task.dueOn} state={task.state} today={now} />
+        )}
+        <Workers workers={task.workers} size="xs" shown={2} />
+      </li>
+    );
+  };
+  const taskSection =
+    glance === undefined || taskRows === 0 ? null : (
+      <section className="sc-glance-section">
+        <h3 className="sc-eyebrow sc-glance-heading">{glanceWords.tasks}</h3>
+        <ul className="sc-glance-rows">
+          {tasks.length === 0 ? (
+            <li className="sc-glance-row sc-glance-none">{glanceWords.noTasks}</li>
+          ) : (
+            tasks.slice(0, taskRows).map(taskRow)
+          )}
+        </ul>
+        {tasks.length > 0 && more(taskRows, taskList.total)}
+      </section>
+    );
+  const reviewSection =
+    glance === undefined || reviewRows === 0 ? null : (
+      <section className="sc-glance-section">
+        <h3 className="sc-eyebrow sc-glance-heading">{glanceWords.reviewTasks}</h3>
+        <ul className="sc-glance-rows">{review.slice(0, reviewRows).map(taskRow)}</ul>
+        {more(reviewRows, reviewList.total)}
+      </section>
+    );
+  const goalSection =
+    glance === undefined || goalRows === 0 ? null : (
+      <section className="sc-glance-section">
+        <h3 className="sc-eyebrow sc-glance-heading">{glanceWords.roadmap}</h3>
+        <ul className="sc-glance-rows">
+          {goals.length === 0 ? (
+            <li className="sc-glance-row sc-glance-none">{glanceWords.noGoals}</li>
+          ) : (
+            goals.slice(0, goalRows).map((goal) => {
+              const { taskCounts: of } = goal;
+              const total = of.idea + of.ready + of.in_progress + of.in_review + of.done;
+              return (
+                <li key={goal.id} className="sc-glance-row sc-glance-goal">
+                  <span className="sc-glance-goal-line">
+                    <span className="sc-glance-row-main">{goal.title}</span>
+                    {goal.dueOn !== null && (
+                      <span className="sc-glance-day">
+                        <Day day={goal.dueOn} />
+                      </span>
+                    )}
+                    {total > 0 && (
+                      <span className="sc-glance-figure" title={glanceWords.done(of.done, total)}>
+                        {of.done}/{total}
+                      </span>
+                    )}
+                  </span>
+                  <ProgressBar counts={of} words={false} />
+                </li>
+              );
+            })
+          )}
+        </ul>
+        {goals.length > 0 && more(goalRows, goalList.total)}
+      </section>
+    );
+  return (
+    <>
+      <div className="sc-glance-lead">
+        <span className="sc-glance-who">
+          <ProjectMark project={project} size="lg" />
+          <span className="sc-glance-name">
+            <span className="sc-tile-name">{project.name}</span>
+            <code className="sc-project-key sc-glance-key">{project.key}</code>
+          </span>
+        </span>
+        {columns && project.description.length > 0 && (
+          <span className="sc-tile-about sc-glance-about">{project.description}</span>
+        )}
+        <dl className="sc-glance-facts">
+          {figure(glanceWords.working, working)}
+          {figure(glanceWords.review, reviewing)}
+          {figure(glanceWords.decisions, project.openDecisions, true)}
+        </dl>
+      </div>
+      {columns ? (
+        <>
+          <div ref={body} className="sc-glance-column">
+            {taskSection}
+            {reviewSection}
+          </div>
+          <div className="sc-glance-column">{goalSection}</div>
+        </>
+      ) : (
+        <div ref={body} className="sc-glance-body">
+          {taskSection}
+          {goalSection}
+          {reviewSection}
+        </div>
+      )}
+    </>
+  );
+}
+
+const GLANCE_STYLE = {
+  "--sc-glance-heading": `${GLANCE_REM.heading}rem`,
+  "--sc-glance-task": `${GLANCE_REM.task}rem`,
+  "--sc-glance-goal": `${GLANCE_REM.goal}rem`,
+  "--sc-glance-more": `${GLANCE_REM.more}rem`,
+  "--sc-glance-between": `${GLANCE_REM.between}rem`,
+} as CSSProperties;
 
 /** A project on the front page: its mark and its name as an icon; at a larger size, what it is too. */
 export function ProjectTile(props: ProjectTileProps) {
   const words = useWords().projects;
   const { project, onOpen } = props;
   const card = props.size !== "icon";
-  const inside = (
+  const glancing = isGlanceSize(props.size);
+  const inside = glancing ? (
+    <ProjectGlanceTile project={project} size={props.size} glance={props.glance} />
+  ) : (
     <>
       <span className="sc-tile-mark">
         <ProjectMark project={project} size="lg" />
@@ -99,13 +364,22 @@ export function ProjectTile(props: ProjectTileProps) {
       )}
     </>
   );
-  const className = cx("sc-tile-pane", "sc-tile-project", card && "sc-tile-project-card");
+  const className = glancing
+    ? cx("sc-tile-pane", "sc-tile-glance", props.size === "wide" && "sc-tile-glance-wide")
+    : cx("sc-tile-pane", "sc-tile-project", card && "sc-tile-project-card");
+  // The heights the rows are laid out with are the ones the glance fits them by.
+  const style = glancing ? GLANCE_STYLE : undefined;
   if (props.href === undefined) {
-    return <div className={className}>{inside}</div>;
+    return (
+      <div className={className} style={style}>
+        {inside}
+      </div>
+    );
   }
   return (
     <a
       className={className}
+      style={style}
       href={props.href}
       onClick={(event) => {
         if (
@@ -223,6 +497,10 @@ export interface HomeGridProps {
   readonly renderWidget: (tile: HomeWidgetTile, size: PluginWidgetSizeName) => ReactNode;
   /** What stands on the page while it holds nothing. */
   readonly empty?: ReactNode;
+  /** What the boards of the projects shown at a glance hold, by the project's id (ADR-0105). */
+  readonly glances?: Readonly<Record<string, ProjectGlance>> | undefined;
+  /** Asked for the projects the page shows at a glance, each time those change: their boards are to be read. */
+  readonly onGlance?: ((projects: readonly RestProject[]) => void) | undefined;
 }
 
 export function HomeGrid(props: HomeGridProps) {
@@ -489,6 +767,20 @@ export function HomeGrid(props: HomeGridProps) {
   const rows = composing
     ? composedRows(boxes)
     : rowsOf(shown, columns) + (editing ? SPARE_ROWS : 0);
+  // The boards of the projects at a glance are read by whoever composes the page, once for each
+  // set of them: the ids in order say when it changed.
+  const glancing = boxes.flatMap(({ tile, size }) =>
+    tile.kind === "project" && isGlanceSize(size) ? [tile.project] : [],
+  );
+  const glancingIds = glancing.map((project) => project.id).join(" ");
+  const { onGlance } = props;
+  const glancingNow = useRef(glancing);
+  glancingNow.current = glancing;
+  useEffect(() => {
+    if (onGlance !== undefined && glancingIds.length > 0) {
+      onGlance(glancingNow.current);
+    }
+  }, [onGlance, glancingIds]);
   return (
     <div
       ref={page}
@@ -579,6 +871,7 @@ export function HomeGrid(props: HomeGridProps) {
                   size={tile.size}
                   href={editing ? undefined : props.projectHref(tile.tile.project)}
                   onOpen={props.onOpen}
+                  glance={props.glances?.[tile.tile.project.id]}
                 />
               ) : (
                 <article className="sc-tile-pane sc-tile-widget">
@@ -623,7 +916,11 @@ export function HomeGrid(props: HomeGridProps) {
             }
           >
             {slot.tile.kind === "project" ? (
-              <ProjectTile project={slot.tile.project} size={slot.size} />
+              <ProjectTile
+                project={slot.tile.project}
+                size={slot.size}
+                glance={props.glances?.[slot.tile.project.id]}
+              />
             ) : (
               <div className="sc-tile-pane sc-tile-widget">
                 <p className="sc-tile-title">{nameOfTile(slot.tile)}</p>
