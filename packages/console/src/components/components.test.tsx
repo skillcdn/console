@@ -19,7 +19,7 @@ import type {
   RestToken,
   RestWork,
 } from "../api.js";
-import { addDays, deviceLanguage, firstDayOfWeek, weekOf } from "../dates.js";
+import { addDays, deviceLanguage, firstDayOfWeek, today, weekOf } from "../dates.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
 import { setupGuideOf } from "../setup-guide.js";
 import {
@@ -81,7 +81,7 @@ import { DecisionAddressForm, DecisionCard, DecisionList, DecisionLog } from "./
 import { DocumentForm, DocumentList, DocumentView, FolderView } from "./documents.js";
 import { describeEvent, EventFeed } from "./event-feed.js";
 import { GoalForm, GoalList, GoalView, goalMonth } from "./goals.js";
-import { HomeGrid, type HomeGridProps } from "./home.js";
+import { HomeGrid, type HomeGridProps, type ProjectGlance } from "./home.js";
 import { Markdown } from "./markdown.js";
 import { MyDecisions, ReachedDecision } from "./my-decisions.js";
 import { PackConnect } from "./pack-connect.js";
@@ -3833,70 +3833,96 @@ describe("projects", () => {
     expect(home([], { empty: <p>none</p> })).toContain("<p>none</p>");
   });
 
-  it("shows a project at a glance: its figures, its tasks in progress, its goals and what waits for review (ADR-0105)", () => {
-    const web = project({
-      taskCounts: { idea: 0, ready: 1, in_progress: 5, in_review: 1, done: 2, dropped: 0 },
-    });
+  it("shows a project at a glance from one answer: its figures, its tasks in progress, its goals and what waits for review (ADR-0105, ADR-0107)", () => {
+    const web = project({ openDecisions: 1 });
     const tile = `project:${web.id}`;
-    const today = new Date().toISOString().slice(0, 10);
-    const glance = {
-      tasks: [
-        task({
-          id: "0199c4d8-0000-7000-8000-0000000000a1",
-          title: "Undated work",
-          state: "in_progress",
-          dueOn: null,
-        }),
-        task({
-          id: "0199c4d8-0000-7000-8000-0000000000a2",
-          title: "Work due <today>",
-          state: "in_progress",
-          dueOn: today,
-        }),
-      ],
-      goals: [
-        goal({
-          title: "Launch",
-          taskCounts: { idea: 0, ready: 1, in_progress: 1, in_review: 1, done: 2, dropped: 0 },
-        }),
-      ],
-      review: [
-        task({
-          id: "0199c4d8-0000-7000-8000-0000000000a3",
-          title: "Read the copy",
-          state: "in_review",
-        }),
-      ],
+    // The day the page itself calls today: the machine's, whatever its time zone.
+    const now = today();
+    const row = (
+      id: string,
+      title: string,
+      state: "in_progress" | "in_review",
+      dueOn: string | null,
+    ) => ({
+      id,
+      number: 7,
+      title,
+      state,
+      dueOn,
+      workers: [],
+    });
+    const glance: ProjectGlance = {
+      taskCounts: { idea: 0, ready: 1, in_progress: 5, in_review: 1, done: 2, dropped: 0 },
+      // The decisions of the answer, which is newer than the project's own figure.
+      openDecisions: 2,
+      // As the console orders them: the sooner due first, the one due on no day after.
+      inProgress: {
+        items: [
+          row("0199c4d8-0000-7000-8000-0000000000a2", "Work due <today>", "in_progress", now),
+          row("0199c4d8-0000-7000-8000-0000000000a1", "Undated work", "in_progress", null),
+        ],
+        total: 5,
+      },
+      inReview: {
+        items: [row("0199c4d8-0000-7000-8000-0000000000a3", "Read the copy", "in_review", null)],
+        total: 1,
+      },
+      goals: {
+        items: [
+          {
+            id: "0199c4d8-0000-7000-8000-0000000000b1",
+            title: "Launch",
+            state: "active",
+            dueOn: null,
+            taskCounts: { idea: 0, ready: 1, in_progress: 1, in_review: 1, done: 2, dropped: 0 },
+          },
+        ],
+        // More goals ahead than the answer carries rows of.
+        total: 4,
+      },
     };
-    const at = (size: "medium" | "large" | "wide") =>
+    const at = (size: "medium" | "large" | "wide", read: ProjectGlance = glance) =>
       home([web], {
         home: { hidden: [], layouts: { 8: [{ tile, x: 0, y: 0, size }] } },
-        glances: { [web.id]: glance },
+        glances: { [web.id]: read },
       });
     const large = at("large");
     expect(large).toContain("sc-tile-glance");
-    expect(large).toContain("<dd>5</dd>");
+    // The three figures are the answer's own, the decisions among them.
+    expect(large).toContain("<dt>In progress</dt><dd>5</dd>");
+    expect(large).toContain("<dt>In review</dt><dd>1</dd>");
+    expect(large).toContain("<dt>Decisions</dt><dd>2</dd>");
     expect(large).toContain("Tasks in progress");
-    // The soonest due first, its day said; the task due on no day after it, with none.
+    // In the order they came, the day of the one due today said and the other with none.
     expect(large.indexOf("Work due &lt;today&gt;")).toBeLessThan(large.indexOf("Undated work"));
     expect(large).not.toContain("<today>");
     expect(large).toContain("Due today");
-    // Three in progress are not read: the line says so.
+    // Three in progress are not among the rows: the line says so, from the answer's total.
     expect(large).toContain("3 more");
     expect(large).toContain("Launch");
     expect(large).toContain(">2/5<");
-    expect(large).toContain("Waiting for review");
-    expect(large).toContain("Read the copy");
+    // And three goals are ahead beyond the one read, not none: the line takes the room what
+    // waits for review would have had.
+    expect(large.match(/3 more/g)).toHaveLength(2);
+    expect(large).not.toContain("Waiting for review");
+    // With the one goal there is, what waits for review has its rows.
+    const reviewed = at("large", { ...glance, goals: { ...glance.goals, total: 1 } });
+    expect(reviewed.match(/3 more/g)).toHaveLength(1);
+    expect(reviewed).toContain("Waiting for review");
+    expect(reviewed).toContain("Read the copy");
     // On a wide tile, the head is a column of its own with what the project is.
     const wide = at("wide");
     expect(wide).toContain("sc-tile-glance-wide");
     expect(wide).toContain("sc-glance-about");
-    // Before its board is read, the head alone.
+    // Before its board is read, the head alone: the decisions the project knows of, and a dash
+    // where a figure is not read yet.
     const unread = home([web], {
       home: { hidden: [], layouts: { 8: [{ tile, x: 0, y: 0, size: "medium" }] } },
     });
     expect(unread).toContain("sc-tile-glance");
     expect(unread).not.toContain("Tasks in progress");
+    expect(unread).toContain("<dt>In progress</dt><dd>\u2013</dd>");
+    expect(unread).toContain("<dt>Decisions</dt><dd>1</dd>");
   });
 
   it("opens nothing while the page is arranged, and gives each tile the way off it and its sizes", () => {

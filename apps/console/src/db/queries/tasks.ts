@@ -2,6 +2,7 @@ import {
   type CategoryColor,
   MAX_TASKS_PER_PROJECT,
   OPEN_TASK_STATES,
+  type RestTaskCounts,
   type RestTaskLink,
   type TaskPriority,
   type TaskState,
@@ -717,6 +718,74 @@ export async function listTasks(
     .limit(filter.limit + 1)
     .offset(filter.offset ?? 0);
   return { items: rows.slice(0, filter.limit).map(toTask), more: rows.length > filter.limit };
+}
+
+/** A task as a project's glance shows it (ADR-0107): what a row of it draws and no more. */
+export interface GlanceTask {
+  readonly id: string;
+  readonly number: number;
+  readonly title: string;
+  readonly state: TaskState;
+  readonly dueOn: string | undefined;
+  readonly workers: readonly PersonRecord[];
+}
+
+/**
+ * The board's tasks in one state as a glance reads them (ADR-0107): the sooner due first, those
+ * due on no day after, the newer first within a day, as a person's plate orders its own; cut by
+ * the database, so that the first rows are the first of all of them and not of a page read in
+ * another order. Without the bodies, which a glance does not show. A task put away is not on
+ * the board (ADR-0029).
+ */
+export async function listGlanceTasks(
+  database: Database,
+  scope: Scope,
+  state: TaskState,
+  limit: number,
+): Promise<GlanceTask[]> {
+  const rows = await drizzleOf(database)
+    .select({
+      id: tasks.id,
+      number: tasks.number,
+      title: tasks.title,
+      state: tasks.state,
+      dueOn: tasks.dueOn,
+      workers: workersOf.mapWith(peopleFromJson),
+    })
+    .from(tasks)
+    // Joined as every read of a task is: a select from one table alone names its columns
+    // without the table, and the workers are read by the task's id from inside a subquery of
+    // their own, where a bare `id` would be another table's.
+    .innerJoin(owners, eq(owners.id, tasks.ownerId))
+    .where(
+      and(eq(tasks.projectId, scope.projectId), eq(tasks.state, state), isNull(tasks.archivedAt)),
+    )
+    .orderBy(sql`${tasks.dueOn} asc nulls last`, desc(tasks.number))
+    .limit(limit);
+  return rows.map((row) => ({ ...row, dueOn: row.dueOn ?? undefined }));
+}
+
+/** How many of the board's current tasks are in one state: the package's literal, never input. */
+const countIn = (state: TaskState) =>
+  sql<number>`count(*) filter (where ${tasks.state} = ${sql.raw(`'${state}'`)})`.mapWith(Number);
+
+/**
+ * The board's tasks counted by state in one pass, those put away left out (ADR-0029): the
+ * figures at the head of a project's glance (ADR-0107).
+ */
+export async function countTasksByState(database: Database, scope: Scope): Promise<RestTaskCounts> {
+  const [row] = await drizzleOf(database)
+    .select({
+      idea: countIn("idea"),
+      ready: countIn("ready"),
+      in_progress: countIn("in_progress"),
+      in_review: countIn("in_review"),
+      done: countIn("done"),
+      dropped: countIn("dropped"),
+    })
+    .from(tasks)
+    .where(and(eq(tasks.projectId, scope.projectId), isNull(tasks.archivedAt)));
+  return row ?? { idea: 0, ready: 0, in_progress: 0, in_review: 0, done: 0, dropped: 0 };
 }
 
 /**

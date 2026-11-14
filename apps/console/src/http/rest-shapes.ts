@@ -8,6 +8,8 @@ import type {
   RestDocumentFile,
   RestDocumentSummary,
   RestEvent,
+  RestGlanceGoal,
+  RestGlanceTask,
   RestGoal,
   RestListing,
   RestMember,
@@ -44,7 +46,7 @@ import { isInvited, type ListingRecord, type PersonRecord } from "../db/queries/
 import type { MemberRecord, ProjectView } from "../db/queries/projects.js";
 import type { RulesRecord } from "../db/queries/rules.js";
 import type { RunRecord } from "../db/queries/runs.js";
-import type { TaskRecord } from "../db/queries/tasks.js";
+import type { GlanceTask, TaskRecord } from "../db/queries/tasks.js";
 import type { TeamRecord } from "../db/queries/teams.js";
 import type { TokenRecord } from "../db/queries/tokens.js";
 
@@ -177,7 +179,6 @@ export function restProject(project: ProjectView): RestProject {
     role: project.role,
     openDecisions: project.openDecisions,
     openRuns: project.openRuns,
-    taskCounts: project.taskCounts,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
   };
@@ -244,6 +245,29 @@ export function restTask(task: TaskRecord): RestTask {
     openRuns: task.openRuns,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
+  };
+}
+
+/** A task as a project's glance shows it (ADR-0107). */
+export function restGlanceTask(task: GlanceTask): RestGlanceTask {
+  return {
+    id: task.id,
+    number: task.number,
+    title: task.title,
+    state: task.state,
+    dueOn: task.dueOn ?? null,
+    workers: task.workers.map(restPerson),
+  };
+}
+
+/** A goal as a project's glance shows it (ADR-0107): without its body, with its tasks counted. */
+export function restGlanceGoal(goal: GoalRecord): RestGlanceGoal {
+  return {
+    id: goal.id,
+    title: goal.title,
+    state: goal.state,
+    dueOn: goal.dueOn ?? null,
+    taskCounts: goal.taskCounts,
   };
 }
 

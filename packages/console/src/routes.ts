@@ -116,6 +116,7 @@ export const PROJECT_COLLECTIONS = [
   "docs",
   "goals",
   "rules",
+  "glance",
 ] as const;
 
 export type ProjectCollection = (typeof PROJECT_COLLECTIONS)[number];

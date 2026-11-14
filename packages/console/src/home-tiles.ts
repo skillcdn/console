@@ -84,6 +84,15 @@ export function isGlanceSize(size: HomeTileSize): boolean {
   return size === "medium" || size === "large" || size === "wide";
 }
 
+/** The projects a page shows at a glance, in its order: the ones whose boards are read for it. */
+export function glanceProjects(
+  shown: readonly { readonly tile: HomeTile; readonly size: HomeTileSize }[],
+): RestProject[] {
+  return shown.flatMap(({ tile, size }) =>
+    tile.kind === "project" && isGlanceSize(size) ? [tile.project] : [],
+  );
+}
+
 /**
  * The heights a glance is laid out with, in rem, which its stylesheet gives the same parts: a
  * list's heading, a task's row, a goal's row of two lines, the line that says how many more, and
@@ -124,6 +133,9 @@ export function glanceFit(
   steps: readonly (readonly [number, number])[],
 ): number[] {
   const shown = lists.map(() => 0);
+  if (!Number.isFinite(room)) {
+    return shown;
+  }
   const height = (counts: readonly number[]): number => {
     const used = lists.map((list, at) => listHeight(counts[at] ?? 0, list));
     const showing = used.filter((value) => value > 0).length;

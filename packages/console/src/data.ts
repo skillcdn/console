@@ -89,6 +89,11 @@ const FEED_MAX_PAGES = 20;
 const RELOAD_DELAY_MS = 150;
 
 export interface ConsoleActions {
+  /**
+   * Reads the projects again and nothing else of the workspace: what the front page asks each
+   * time it is shown, so that what waits in each project is what waits now (ADR-0107).
+   */
+  refreshProjects(): Promise<void>;
   /** Makes a project, whose owner the person becomes, with an image for its mark when one is given. */
   createProject(input: RestProjectInput, icon?: FileUpload): Promise<RestProject>;
   /** Changes the settings of the project the page is on; for an owner. */
@@ -697,6 +702,10 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       return client.project(projectKey);
     };
     return {
+      async refreshProjects() {
+        const answer = await client.projects();
+        setProjects(answer.items);
+      },
       async createProject(input, icon) {
         const made = await client.createProject(input);
         const marked = icon === undefined ? made : await client.project(made.key).setIcon(icon);

@@ -5,22 +5,12 @@ import {
   type ProjectIconType,
   type ProjectRole,
   type ProjectVisibility,
-  type RestTaskCounts,
 } from "@skillcdn/console/api";
 import { and, asc, count, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { memberOfProject, projectVisibleTo } from "../../auth/policy.js";
 import { DomainError } from "../../errors.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
-import {
-  decisions,
-  people,
-  projectMembers,
-  projects,
-  runs,
-  tasks,
-  teams,
-  workspaces,
-} from "../schema.js";
+import { decisions, people, projectMembers, projects, runs, teams, workspaces } from "../schema.js";
 import { type Actor, recordEvent } from "./events.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
 
@@ -62,8 +52,6 @@ export interface ProjectView extends ProjectRecord {
   readonly role: ProjectRole;
   readonly openDecisions: number;
   readonly openRuns: number;
-  /** The tasks on its board, put away ones left out (ADR-0029), counted by state: what its tile at a glance says (ADR-0105). */
-  readonly taskCounts: RestTaskCounts;
 }
 
 /**
@@ -126,11 +114,6 @@ type Handle = Transaction | ReturnType<typeof drizzleOf>;
 
 const openDecisionsOf = sql<number>`(select count(*) from ${decisions} where ${decisions.projectId} = ${projects.id} and ${decisions.answeredAt} is null)`;
 const openRunsOf = sql<number>`(select count(*) from ${runs} where ${runs.projectId} = ${projects.id} and ${runs.status} in ('running', 'waiting'))`;
-/** How many of the board's current tasks are in one state: the package's literal, never input. */
-const tasksIn = (state: string) =>
-  sql<number>`(select count(*) from ${tasks} where ${tasks.projectId} = ${projects.id} and ${tasks.archivedAt} is null and ${tasks.state} = ${sql.raw(`'${state}'`)})`.mapWith(
-    Number,
-  );
 
 const projectColumns = {
   id: projects.id,
@@ -236,12 +219,6 @@ function selectViews(handle: Handle, person: PersonRecord) {
       listed: projectMembers.role,
       openDecisions: openDecisionsOf.mapWith(Number),
       openRuns: openRunsOf.mapWith(Number),
-      idea: tasksIn("idea"),
-      ready: tasksIn("ready"),
-      inProgress: tasksIn("in_progress"),
-      inReview: tasksIn("in_review"),
-      done: tasksIn("done"),
-      dropped: tasksIn("dropped"),
     })
     .from(projects)
     .leftJoin(
@@ -256,20 +233,7 @@ function toView(row: ViewRow, person: PersonRecord): ProjectView | undefined {
   const role = roleOf(person, row, row.listed);
   return role === undefined
     ? undefined
-    : {
-        ...toProject(row),
-        role,
-        openDecisions: row.openDecisions,
-        openRuns: row.openRuns,
-        taskCounts: {
-          idea: row.idea,
-          ready: row.ready,
-          in_progress: row.inProgress,
-          in_review: row.inReview,
-          done: row.done,
-          dropped: row.dropped,
-        },
-      };
+    : { ...toProject(row), role, openDecisions: row.openDecisions, openRuns: row.openRuns };
 }
 
 /**

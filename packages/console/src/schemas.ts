@@ -1471,8 +1471,6 @@ export const restProjectSchema = z.object({
   openDecisions: count,
   /** How many agents are at work in it, or waiting. */
   openRuns: count,
-  /** The tasks on its board, those put away left out, counted by state (ADR-0105); left out by a console older than 0.5. */
-  taskCounts: z.optional(restTaskCountsSchema),
   createdAt: instant,
   updatedAt: instant,
 });
@@ -1716,6 +1714,46 @@ export type RestGoal = z.infer<typeof restGoalSchema>;
 /** `GET /api/v1/projects/<key>/goals`: a page of the roadmap, the active goals first, and whether there is more after it. */
 export const restGoalsSchema = z.object({ items: z.array(restGoalSchema), more: z.boolean() });
 export type RestGoals = z.infer<typeof restGoalsSchema>;
+
+/** A task as a project's glance shows it (ADR-0107): its title, its day and who is at work on it. */
+export const restGlanceTaskSchema = z.pick(restTaskSchema, {
+  id: true,
+  number: true,
+  title: true,
+  state: true,
+  dueOn: true,
+  workers: true,
+});
+export type RestGlanceTask = z.infer<typeof restGlanceTaskSchema>;
+
+/** A goal as a project's glance shows it: its title, its day and its tasks counted by state. */
+export const restGlanceGoalSchema = z.pick(restGoalSchema, {
+  id: true,
+  title: true,
+  state: true,
+  dueOn: true,
+  taskCounts: true,
+});
+export type RestGlanceGoal = z.infer<typeof restGlanceGoalSchema>;
+
+/**
+ * `GET /api/v1/projects/<key>/glance`: what a project's tile at a glance shows (ADR-0105), read
+ * at one moment so that its figures and its rows agree (ADR-0107). Each list is ordered and cut
+ * by the console, `GLANCE_ROWS` at most, and says how many it has in all.
+ */
+export const restProjectGlanceSchema = z.object({
+  /** The tasks on its board, those put away left out, counted by state. */
+  taskCounts: restTaskCountsSchema,
+  /** How many decisions in it wait for a person. */
+  openDecisions: count,
+  /** Its tasks in progress, the sooner due first and those due on no day after. */
+  inProgress: z.object({ items: z.array(restGlanceTaskSchema), total: count }),
+  /** Its tasks waiting for review, in the same order. */
+  inReview: z.object({ items: z.array(restGlanceTaskSchema), total: count }),
+  /** Its goals ahead, the active and the planned, as the roadmap orders them. */
+  goals: z.object({ items: z.array(restGlanceGoalSchema), total: count }),
+});
+export type RestProjectGlance = z.infer<typeof restProjectGlanceSchema>;
 
 /** What `POST /api/v1/projects/<key>/goals` is sent: the title, and the rest with defaults. */
 export const restGoalInputSchema = z.object({

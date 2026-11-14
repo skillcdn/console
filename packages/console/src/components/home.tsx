@@ -22,6 +22,7 @@ import {
   GLANCE_REM,
   GLANCE_ROOM_GUESS,
   glanceFit,
+  glanceProjects,
   HOME_TILE_CELLS,
   type HomeColumns,
   type HomeTile,
@@ -40,7 +41,13 @@ import {
 } from "../home-tiles.js";
 import { useWords } from "../i18n/index.js";
 import type { PluginWidgetSizeName } from "../plugin/bridge.js";
-import type { RestGoal, RestHome, RestPlugin, RestProject, RestTask } from "../schemas.js";
+import type {
+  RestGlanceTask,
+  RestHome,
+  RestPlugin,
+  RestProject,
+  RestProjectGlance,
+} from "../schemas.js";
 import { useAction } from "../use-action.js";
 import { DRAG_SLACK, edgeScrollOf, HOLD_MS, HOLD_SLACK } from "./board.js";
 import { ProjectMark, ProjectRoleBadge } from "./projects.js";
@@ -57,15 +64,14 @@ const SPARE_ROWS = 2;
 
 const NONE: readonly string[] = [];
 
-/** What a project's tile at a glance reads of its board (ADR-0105). */
-export interface ProjectGlance {
-  /** Its tasks in progress, as many as a glance shows at most. */
-  readonly tasks: readonly RestTask[];
-  /** Its goals ahead, the planned and the active, as its roadmap orders them. */
-  readonly goals: readonly RestGoal[];
-  /** Its tasks waiting for review; left out, none are shown. */
-  readonly review?: readonly RestTask[] | undefined;
-}
+/**
+ * What a project's tile at a glance reads of its board (ADR-0105): the one answer of
+ * `client.project(key).glance()`, its figures and its rows of one moment (ADR-0107).
+ */
+export type ProjectGlance = RestProjectGlance;
+
+/** What stands for a figure that is not read yet. */
+const UNREAD = "\u2013";
 
 export interface ProjectTileProps {
   readonly project: RestProject;
@@ -75,21 +81,6 @@ export interface ProjectTileProps {
   readonly onOpen?: ((project: RestProject) => void) | undefined;
   /** What its board holds, at a size that shows it; nothing while it is read. */
   readonly glance?: ProjectGlance | undefined;
-}
-
-/** The tasks in progress the soonest due first, those due on no day last, each kind as it came. */
-function soonestFirst(tasks: readonly RestTask[]): RestTask[] {
-  return [...tasks].sort((a, b) =>
-    a.dueOn === b.dueOn
-      ? 0
-      : a.dueOn === null
-        ? 1
-        : b.dueOn === null
-          ? -1
-          : a.dueOn < b.dueOn
-            ? -1
-            : 1,
-  );
 }
 
 /** How many days a task is due within for its day to be shown on a glance: a week, as the board's badge counts it. */
@@ -169,27 +160,26 @@ function ProjectGlanceTile(props: {
   const columns = props.size === "wide";
   const [body, measured] = useRoom();
   const room = measured ?? GLANCE_ROOM_GUESS[props.size] ?? 0;
-  const counts = project.taskCounts;
-  const tasks = soonestFirst(glance?.tasks ?? []);
-  const goals = glance?.goals ?? [];
-  const review = soonestFirst(glance?.review ?? []);
-  const working = counts?.in_progress ?? tasks.length;
-  const reviewing = counts?.in_review ?? review.length;
+  // The rows come ordered and cut by the console, each list with how many it has in all, and
+  // the figures with them, of the same moment (ADR-0107).
+  const tasks = glance?.inProgress.items ?? [];
+  const goals = glance?.goals.items ?? [];
+  const review = glance?.inReview.items ?? [];
   // The tasks and the goals say so in a row of their own when there are none; what waits for
   // review is shown only when something does.
   const taskList = {
     rows: Math.max(tasks.length, 1),
-    total: Math.max(working, tasks.length, 1),
+    total: Math.max(glance?.inProgress.total ?? 0, tasks.length, 1),
     row: GLANCE_REM.task,
   };
   const goalList = {
     rows: Math.max(goals.length, 1),
-    total: Math.max(goals.length, 1),
+    total: Math.max(glance?.goals.total ?? 0, goals.length, 1),
     row: GLANCE_REM.goal,
   };
   const reviewList = {
     rows: review.length,
-    total: Math.max(reviewing, review.length),
+    total: Math.max(glance?.inReview.total ?? 0, review.length),
     row: GLANCE_REM.task,
   };
   const beside = glanceFit(room, [taskList, reviewList], SHARING);
@@ -197,17 +187,23 @@ function ProjectGlanceTile(props: {
     ? [beside[0], glanceFit(room, [goalList], ALONE)[0], beside[1]]
     : glanceFit(room, [taskList, goalList, reviewList], STACKED);
   const now = today();
-  const figure = (label: string, value: number, waiting = false) => (
-    <div className={cx("sc-glance-fact", waiting && value > 0 && "sc-glance-fact-waiting")}>
+  // A figure that is not read yet is a dash in its place, so that nothing moves when it comes.
+  const figure = (label: string, value: number | undefined, waiting = false) => (
+    <div
+      className={cx(
+        "sc-glance-fact",
+        waiting && value !== undefined && value > 0 && "sc-glance-fact-waiting",
+      )}
+    >
       <dt>{label}</dt>
-      <dd>{value}</dd>
+      <dd>{value ?? UNREAD}</dd>
     </div>
   );
   const more = (shown: number, total: number) =>
     shown > 0 && shown < total ? (
       <p className="sc-glance-more">{glanceWords.more(total - shown)}</p>
     ) : null;
-  const taskRow = (task: RestTask) => {
+  const taskRow = (task: RestGlanceTask) => {
     const soon = task.dueOn !== null && daysBetween(now, task.dueOn) <= GLANCE_DUE_DAYS;
     return (
       <li key={task.id} className="sc-glance-row">
@@ -290,9 +286,9 @@ function ProjectGlanceTile(props: {
           <span className="sc-tile-about sc-glance-about">{project.description}</span>
         )}
         <dl className="sc-glance-facts">
-          {figure(glanceWords.working, working)}
-          {figure(glanceWords.review, reviewing)}
-          {figure(glanceWords.decisions, project.openDecisions, true)}
+          {figure(glanceWords.working, glance?.taskCounts.in_progress)}
+          {figure(glanceWords.review, glance?.taskCounts.in_review)}
+          {figure(glanceWords.decisions, glance?.openDecisions ?? project.openDecisions, true)}
         </dl>
       </div>
       {columns ? (
@@ -769,18 +765,17 @@ export function HomeGrid(props: HomeGridProps) {
     : rowsOf(shown, columns) + (editing ? SPARE_ROWS : 0);
   // The boards of the projects at a glance are read by whoever composes the page, once for each
   // set of them: the ids in order say when it changed.
-  const glancing = boxes.flatMap(({ tile, size }) =>
-    tile.kind === "project" && isGlanceSize(size) ? [tile.project] : [],
-  );
+  const glancing = glanceProjects(boxes);
   const glancingIds = glancing.map((project) => project.id).join(" ");
-  const { onGlance } = props;
-  const glancingNow = useRef(glancing);
-  glancingNow.current = glancing;
+  // Told when the set changes, to none too, so that what is no longer shown is no longer read;
+  // and never because the function it is told through is another one, which a console that
+  // passes one written in place would make at every render.
+  const told = useRef({ onGlance: props.onGlance, glancing });
+  told.current = { onGlance: props.onGlance, glancing };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the ids in order are the set
   useEffect(() => {
-    if (onGlance !== undefined && glancingIds.length > 0) {
-      onGlance(glancingNow.current);
-    }
-  }, [onGlance, glancingIds]);
+    told.current.onGlance?.(told.current.glancing);
+  }, [glancingIds]);
   return (
     <div
       ref={page}

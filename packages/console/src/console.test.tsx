@@ -503,6 +503,7 @@ describe("createConsole", () => {
   const project = (key: string): ProjectClient => ({
     key,
     get: never,
+    glance: never,
     update: never,
     setIcon: never,
     removeIcon: never,

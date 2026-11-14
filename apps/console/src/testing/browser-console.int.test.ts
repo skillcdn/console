@@ -7,6 +7,7 @@ import {
   REST_ROUTES,
   restAgentsSchema,
   restMeSchema,
+  restProjectGlanceSchema,
   restProjectSchema,
 } from "@skillcdn/console/api";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -247,7 +248,14 @@ describe("the preview console", () => {
         })
       ).json(),
     );
-    expect(project.taskCounts).toEqual({
+    const glance = restProjectGlanceSchema.parse(
+      await (
+        await started.harness.request(`${projectPath(PREVIEW_BOARD_KEY)}/glance`, {
+          headers: { cookie: member },
+        })
+      ).json(),
+    );
+    expect(glance.taskCounts).toEqual({
       idea: 0,
       ready: 3,
       in_progress: 6,

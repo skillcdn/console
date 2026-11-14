@@ -27,6 +27,8 @@ export const MAX_OPTION_LABEL_LENGTH = 120;
 export const MAX_NOTE_LENGTH = 2000;
 /** How many tasks or decisions one listing answers with. A board is read whole, for now. */
 export const LIST_LIMIT = 500;
+/** How many rows of each of its lists a project's glance answers with (ADR-0107): more than a tile of any size holds. */
+export const GLANCE_ROWS = 20;
 /** How many events one page of the feed carries. */
 export const EVENTS_PAGE_LIMIT = 100;
 /** What an agent calls itself when it takes a task: its kind, where it runs. One line. */

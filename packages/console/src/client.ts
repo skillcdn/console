@@ -92,6 +92,7 @@ import {
   type RestPluginSettingsPatch,
   type RestPlugins,
   type RestProject,
+  type RestProjectGlance,
   type RestProjectInput,
   type RestProjectPatch,
   type RestProjectRules,
@@ -193,6 +194,7 @@ import {
   restPluginRecordReadSchema,
   restPluginRecordVersionsSchema,
   restPluginsSchema,
+  restProjectGlanceSchema,
   restProjectRulesSchema,
   restProjectSchema,
   restProjectsSchema,
@@ -367,6 +369,13 @@ export interface ProjectClient {
   readonly key: string;
   /** The project, with what the asker is in it. */
   get(signal?: AbortSignal): Promise<RestProject>;
+  /**
+   * What the project's tile at a glance shows (ADR-0105), in one answer read at one moment
+   * (ADR-0107): its tasks counted by state, the decisions waiting, and its tasks in progress,
+   * its tasks in review and its goals ahead, each ordered and cut by the console with how many
+   * there are in all.
+   */
+  glance(signal?: AbortSignal): Promise<RestProjectGlance>;
   /** Changes the project's settings; for an owner. */
   update(patch: RestProjectPatch): Promise<RestProject>;
   /** Sets the project's own image for its mark, sent as a form; for an owner on the console's own pages. */
@@ -1095,6 +1104,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
     return {
       key,
       get: (signal) => request("GET", `${base}${at()}`, undefined, restProjectSchema, signal),
+      glance: (signal) =>
+        request("GET", `${base}${at("glance")}`, undefined, restProjectGlanceSchema, signal),
       update: (patch) => request("PATCH", `${base}${at()}`, patch, restProjectSchema),
       setIcon: (input) => request("POST", `${base}${at()}/icon`, formOf(input), restProjectSchema),
       removeIcon: () => request("DELETE", `${base}${at()}/icon`, undefined, restProjectSchema),

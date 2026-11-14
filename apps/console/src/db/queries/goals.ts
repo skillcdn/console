@@ -219,6 +219,15 @@ export async function listGoals(
   return { items: rows.slice(0, filter.limit).map(toGoal), more: rows.length > filter.limit };
 }
 
+/** How many goals of the roadmap are ahead, the active and the planned: what a glance says is left past its rows (ADR-0107). */
+export async function countOpenGoals(database: Database, scope: Scope): Promise<number> {
+  const [row] = await drizzleOf(database)
+    .select({ total: count() })
+    .from(goals)
+    .where(and(eq(goals.projectId, scope.projectId), inArray(goals.state, [...OPEN_GOAL_STATES])));
+  return row?.total ?? 0;
+}
+
 /** The category, named by its key, must be one of the workspace: its id, or `null` for none, or as it was. */
 async function categoryIdOf(
   tx: Transaction,

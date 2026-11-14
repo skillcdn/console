@@ -96,6 +96,7 @@ export {
 export {
   HomeGrid,
   type HomeGridProps,
+  type ProjectGlance,
   ProjectTile,
   type ProjectTileProps,
 } from "./components/home.js";
@@ -319,6 +320,20 @@ export {
   weekOf,
 } from "./dates.js";
 export { DocsPage, type DocsPageProps } from "./docs-page.js";
+export {
+  createGlanceReader,
+  GLANCE_RETRY_MAX_MS,
+  GLANCE_RETRY_MS,
+  type GlanceReader,
+  type GlanceReaderOptions,
+} from "./glances.js";
+export {
+  GLANCE_REM,
+  type GlanceList,
+  glanceFit,
+  glanceProjects,
+  isGlanceSize,
+} from "./home-tiles.js";
 export {
   chooseLanguage,
   DEFAULT_LANGUAGES,

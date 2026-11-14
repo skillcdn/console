@@ -132,6 +132,7 @@ import { ConnectPage } from "./connect-page.js";
 import { type ConsoleData, useConsoleData } from "./data.js";
 import { monthOf, today } from "./dates.js";
 import { DocsPage } from "./docs-page.js";
+import { createGlanceReader, type GlanceReader } from "./glances.js";
 import {
   browserPack,
   chooseLanguage,
@@ -483,71 +484,44 @@ function NotWithToken() {
   return <EmptyState title={words.title} body={words.body} />;
 }
 
-/** The tasks in progress and in review a glance reads of a project's board, and the goals ahead: more than a tile holds. */
-const GLANCE_TASKS = 20;
-const GLANCE_GOALS = 20;
-
 /**
- * The boards of the projects the front page shows at a glance (ADR-0105): each read when its tile
- * is first shown at such a size, and again when the projects are, so that the figures and the rows
- * agree. A board that cannot be read leaves its tile with the figures alone.
+ * The boards of the projects the front page shows at a glance (ADR-0105), each in one request
+ * (ADR-0107): read when its tile is first shown at such a size, each time the front page is
+ * shown, and again when the person comes back to the window, so that what a tile says is what
+ * holds now. A read that fails is tried again; one the console refuses leaves the tile with the
+ * project's own figure.
  */
-function useGlances(
-  client: ConsoleClient,
-  projects: readonly RestProject[],
-): {
+function useGlances(client: ConsoleClient): {
   readonly read: Readonly<Record<string, ProjectGlance>>;
   readonly want: (projects: readonly RestProject[]) => void;
+  /** Reads every glance shown again. */
+  readonly renew: () => void;
 } {
   const [read, setRead] = useState<Readonly<Record<string, ProjectGlance>>>({});
   const wanted = useRef<readonly RestProject[]>([]);
-  // Each board is read once for each reading of the projects: by the project's id, the list it
-  // was read with.
-  const asked = useRef(new Map<string, readonly RestProject[]>());
-  const current = useRef(projects);
-  current.current = projects;
-  const ask = useCallback(
-    (list: readonly RestProject[]) => {
-      const now = current.current;
-      for (const project of list) {
-        if (asked.current.get(project.id) === now) {
-          continue;
-        }
-        asked.current.set(project.id, now);
-        const board = client.project(project.key);
-        Promise.all([
-          board.tasks({ state: "in_progress", limit: GLANCE_TASKS }),
-          board.goals({ open: true, limit: GLANCE_GOALS }),
-          board.tasks({ state: "in_review", limit: GLANCE_TASKS }),
-        ]).then(
-          ([tasks, goals, review]) =>
-            setRead((before) => ({
-              ...before,
-              [project.id]: { tasks: tasks.items, goals: goals.items, review: review.items },
-            })),
-          () => asked.current.delete(project.id),
-        );
-      }
-    },
-    [client],
-  );
-  const want = useCallback(
-    (list: readonly RestProject[]) => {
-      wanted.current = list;
-      ask(list);
-    },
-    [ask],
-  );
+  const reader = useRef<GlanceReader<RestProject> | undefined>(undefined);
   useEffect(() => {
-    // The projects were read again: so are the boards shown at a glance, by the keys they have now.
-    ask(
-      wanted.current.flatMap((before) => {
-        const found = projects.find((project) => project.id === before.id);
-        return found === undefined ? [] : [found];
-      }),
-    );
-  }, [projects, ask]);
-  return { read, want };
+    const made = createGlanceReader<RestProject, ProjectGlance>({
+      read: (project) => client.project(project.key).glance(),
+      store: (id, glance) => setRead((before) => ({ ...before, [id]: glance })),
+      // What the console refused it refuses again: a project that is not the person's to read.
+      again: (failure) =>
+        !(failure instanceof ApiError) || failure.status === 0 || failure.status >= 500,
+    });
+    reader.current = made;
+    // The grid said what it shows before this ran: a child's effect comes first.
+    made.want(wanted.current);
+    return () => {
+      made.stop();
+      reader.current = undefined;
+    };
+  }, [client]);
+  const want = useCallback((list: readonly RestProject[]) => {
+    wanted.current = list;
+    reader.current?.want(list);
+  }, []);
+  const renew = useCallback(() => reader.current?.renew(), []);
+  return { read, want, renew };
 }
 
 function ProjectsPage(props: {
@@ -567,7 +541,26 @@ function ProjectsPage(props: {
   const [arranging, setArranging] = useState(false);
   const { busy, error, act } = useAction();
   const href = (project: RestProject) => projectHref(project.key);
-  const glances = useGlances(client, data.projects);
+  const glances = useGlances(client);
+  // What waits in each project is read with the projects, once when the console opens. Each
+  // time the front page is shown after that, and when the person comes back to its window,
+  // the projects are read again, and the glances with them.
+  const { refreshProjects } = data.actions;
+  const loaded = useRef(data.loaded);
+  const { renew } = glances;
+  useEffect(() => {
+    if (loaded.current) {
+      refreshProjects().catch(() => undefined);
+    }
+    const back = () => {
+      if (document.visibilityState === "visible") {
+        refreshProjects().catch(() => undefined);
+        renew();
+      }
+    };
+    document.addEventListener("visibilitychange", back);
+    return () => document.removeEventListener("visibilitychange", back);
+  }, [refreshProjects, renew]);
   // A project is made by an administrator (ADR-0045): a member sees the list alone, the form's
   // address included.
   const administrator = data.me?.person?.role === "admin";

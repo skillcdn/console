@@ -1,6 +1,7 @@
 import {
   CLAIM_PATH,
   EVENTS_PAGE_LIMIT,
+  GLANCE_ROWS,
   GOAL_STATES,
   hasForbiddenCodePoint,
   isDocumentPath,
@@ -45,6 +46,7 @@ import {
   type RestPackConnectStarted,
   type RestPeople,
   type RestPersonWorkBrief,
+  type RestProjectGlance,
   type RestProjectRules,
   type RestProjects,
   type RestReachedDecision,
@@ -180,7 +182,14 @@ import {
   type Scope,
 } from "../db/queries/events.js";
 import { fileBytesOf } from "../db/queries/files.js";
-import { createGoal, GoalError, getGoal, listGoals, updateGoal } from "../db/queries/goals.js";
+import {
+  countOpenGoals,
+  createGoal,
+  GoalError,
+  getGoal,
+  listGoals,
+  updateGoal,
+} from "../db/queries/goals.js";
 import {
   endPackConnect,
   type PackConnectRecord,
@@ -236,10 +245,12 @@ import {
 import {
   archiveTask,
   archiveTasksOfGoal,
+  countTasksByState,
   createTask,
   findTaskByNumber,
   getTask,
   listClosedTasksOf,
+  listGlanceTasks,
   listTasks,
   listTasksOf,
   restoreTask,
@@ -297,6 +308,8 @@ import {
   restDocument,
   restDocumentSummary,
   restEvent,
+  restGlanceGoal,
+  restGlanceTask,
   restGoal,
   restListing,
   restMember,
@@ -2372,6 +2385,32 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   app.get(PROJECT, async (c) => {
     const found = await reading(c);
     return found instanceof Response ? found : c.json(restProject(found.project));
+  });
+
+  // What the project's tile at a glance shows (ADR-0105), in one answer read at one moment
+  // (ADR-0107): the figures at its head and the rows under them, ordered and cut here, so that
+  // the first rows are the first of all and the figures never tell of another moment than the
+  // rows. Read by whoever may see the project; one they may not see is not there.
+  app.get(`${PROJECT}/glance`, async (c) => {
+    const found = await reading(c);
+    if (found instanceof Response) {
+      return found;
+    }
+    const [taskCounts, inProgress, inReview, goals, openGoals] = await Promise.all([
+      countTasksByState(database, found.scope),
+      listGlanceTasks(database, found.scope, "in_progress", GLANCE_ROWS),
+      listGlanceTasks(database, found.scope, "in_review", GLANCE_ROWS),
+      listGoals(database, found.scope, { open: true, limit: GLANCE_ROWS }),
+      countOpenGoals(database, found.scope),
+    ]);
+    const body: RestProjectGlance = {
+      taskCounts,
+      openDecisions: found.project.openDecisions,
+      inProgress: { items: inProgress.map(restGlanceTask), total: taskCounts.in_progress },
+      inReview: { items: inReview.map(restGlanceTask), total: taskCounts.in_review },
+      goals: { items: goals.items.map(restGlanceGoal), total: openGoals },
+    };
+    return c.json(body);
   });
 
   app.patch(PROJECT, tooLarge, async (c) => {

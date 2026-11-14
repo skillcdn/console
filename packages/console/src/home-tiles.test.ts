@@ -9,6 +9,7 @@ import {
   footprintOf,
   GLANCE_REM,
   glanceFit,
+  glanceProjects,
   type HomeColumns,
   type HomeTile,
   type HomeTileSize,
@@ -621,6 +622,52 @@ describe("a project at a glance (ADR-0105)", () => {
     expect(glanceFit(60, [tasks, goals, review], STACKED)).toEqual([6, 3, 2]);
     // A list with no rows takes no room.
     expect(glanceFit(60, [tasks, goals, list(0, 0)], STACKED)).toEqual([6, 3, 0]);
+  });
+
+  it("holds nothing in a room that is no number", () => {
+    const lists = [list(6, 9), list(3, 3, GLANCE_REM.goal)];
+    expect(glanceFit(Number.NaN, lists, STACKED)).toEqual([0, 0]);
+    expect(glanceFit(Number.POSITIVE_INFINITY, lists, STACKED)).toEqual([0, 0]);
+    expect(glanceFit(-3, lists, STACKED)).toEqual([0, 0]);
+    expect(glanceFit(10, [], STACKED)).toEqual([]);
+  });
+
+  it("names the projects a page shows at a glance, in its order, and none where there is none", () => {
+    const tiles = homeTiles([hr], [project(1), project(2), project(3)]);
+    const shown = arranged(
+      tiles,
+      layout(8, [
+        { tile: P1, x: 0, y: 0, size: "large" },
+        { tile: BALANCE, x: 4, y: 0, size: "medium" },
+        { tile: P2, x: 4, y: 2, size: "small" },
+        { tile: P3, x: 0, y: 4, size: "wide" },
+      ]),
+      8,
+    );
+    // The widget is no project, and a card is no glance.
+    expect(glanceProjects(shown).map((one) => one.key)).toEqual(["p1", "p3"]);
+    expect(glanceProjects(arranged(tiles, null, 8))).toEqual([]);
+    expect(glanceProjects([])).toEqual([]);
+  });
+
+  it("reads a project kept at a size it does not come in as an icon", () => {
+    const tiles = homeTiles([], [project(1), project(2)]);
+    // `full` was drawn for a project once and never kept by a release; a layout that holds it,
+    // or a word that is no size at all, must not break the page.
+    const kept = {
+      hidden: [],
+      layouts: {
+        8: [
+          { tile: P1, x: 0, y: 0, size: "full" },
+          { tile: P2, x: 0, y: 4, size: "enormous" },
+        ],
+      },
+    } as unknown as RestHome;
+    const shown = arranged(tiles, kept, 8);
+    expect(places(shown)[P1]?.[2]).toBe("icon");
+    expect(places(shown)[P2]?.[2]).toBe("icon");
+    expect(glanceProjects(shown)).toEqual([]);
+    expect(holdsTogether(shown, 8)).toBe(true);
   });
 
   it("drops the line of how many more where the last row fits in its place", () => {

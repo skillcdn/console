@@ -272,4 +272,98 @@ describe("the front page in a browser (ADR-0061)", () => {
     }
     await page.context().close();
   });
+
+  it("reads a project at a glance in one request, again each time the page is shown, its figures and its rows of one moment (ADR-0107)", async () => {
+    const page = await signedIn(BROWSER_ADMIN);
+    const tile = await made(page, "glanced");
+    const plain = await made(page, "plain");
+    await page.evaluate(async (glanced) => {
+      const write = (path: string, method: string, body: unknown) =>
+        fetch(path, {
+          method,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      for (const [title, state] of [
+        ["One in progress", "in_progress"],
+        ["Another in progress", "in_progress"],
+        ["One in review", "in_review"],
+        ["One that waits", "ready"],
+      ]) {
+        await write("/api/v1/projects/glanced/tasks", "POST", { title, state });
+      }
+      const layout = [{ tile: glanced, x: 0, y: 0, size: "large" }];
+      await write("/api/v1/me", "PATCH", {
+        home: { hidden: [], layouts: { 12: layout, 8: layout, 6: layout, 4: layout } },
+      });
+    }, tile);
+    const asked: string[] = [];
+    page.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.endsWith("/glance")) {
+        asked.push(pathname);
+      }
+    });
+    /** The three figures at the tile's head, and the titles of its rows, as the page shows them. */
+    const shown = () =>
+      page.evaluate(
+        `({ figures: [...document.querySelectorAll(".sc-tile-glance .sc-glance-fact dd")].map((dd) => dd.textContent), rows: [...document.querySelectorAll(".sc-tile-glance .sc-glance-row-main")].map((row) => row.textContent) })`,
+      ) as Promise<{ readonly figures: string[]; readonly rows: string[] }>;
+
+    await page.goto(`${console_.origin}/`);
+    await expect.poll(async () => (await shown()).figures).toEqual(["2", "1", "0"]);
+    expect((await shown()).rows).toEqual([
+      "Another in progress",
+      "One in progress",
+      "One in review",
+    ]);
+    // One request for the one project at a glance, and none for the one shown as an icon.
+    expect(asked).toEqual(["/api/v1/projects/glanced/glance"]);
+
+    // Into the project, where its board changes, and back to the front page as a person goes.
+    await page.click(".sc-tile-glance");
+    await page.waitForURL((url) => url.pathname.startsWith("/projects/glanced"));
+    await page.evaluate(async () => {
+      const listed = (await (await fetch("/api/v1/projects/glanced/tasks?state=ready")).json()) as {
+        readonly items: readonly { readonly id: string }[];
+      };
+      await fetch(`/api/v1/projects/glanced/tasks/${listed.items[0]?.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ state: "in_progress" }),
+      });
+      for (const key of ["glanced", "plain"]) {
+        await fetch(`/api/v1/projects/${key}/decisions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            question: "Which first?",
+            options: [{ label: "This" }, { label: "That" }],
+          }),
+        });
+      }
+    });
+    await page.goBack();
+    await page.waitForURL((url) => url.pathname === "/");
+    // The head and the rows are of the same moment: three in progress, three rows of them, and
+    // the decision that was raised.
+    await expect.poll(async () => (await shown()).figures).toEqual(["3", "1", "1"]);
+    expect((await shown()).rows).toEqual([
+      "One that waits",
+      "Another in progress",
+      "One in progress",
+      "One in review",
+    ]);
+    // The projects were read again with it: the one shown as an icon says its decision too.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          `document.querySelector('[data-tile="${plain}"] .sc-tile-count')?.firstChild?.textContent ?? ""`,
+        ),
+      )
+      .toBe("1");
+    // Read once more for the page shown again, and no more than that.
+    expect(asked).toEqual(["/api/v1/projects/glanced/glance", "/api/v1/projects/glanced/glance"]);
+    await page.context().close();
+  });
 });

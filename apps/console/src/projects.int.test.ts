@@ -1,8 +1,11 @@
 import {
+  GLANCE_ROWS,
   projectPath,
   REST_ROUTES,
   restErrorSchema,
   restEventsSchema,
+  restMeSchema,
+  restProjectGlanceSchema,
   restProjectSchema,
   restProjectsSchema,
   restTokenCreatedSchema,
@@ -156,40 +159,159 @@ describe("making a project (ADR-0045)", () => {
   });
 });
 
-describe("a project's tasks counted (ADR-0105)", () => {
-  it("are those of its board by state, the archived left out, in the list and in the project alike", async () => {
-    const made = await post(fromPages(admin), { key: "counted", name: "Counted" });
-    expect(made.status).toBe(201);
-    const at = (path = "") => `${projectPath("counted")}${path}`;
-    const task = async (state: string) => {
-      const answer = await h.request(at("/tasks"), {
-        method: "POST",
-        headers: { ...fromPages(admin), ...JSON_HEADERS },
-        body: JSON.stringify({ title: `A task ${state}`, state }),
+describe("a project at a glance (ADR-0107)", () => {
+  const at = (key: string, path = "") => `${projectPath(key)}${path}`;
+  const make = async (key: string, path: string, body: unknown): Promise<string> => {
+    const answer = await h.request(at(key, path), {
+      method: "POST",
+      headers: { ...fromPages(admin), ...JSON_HEADERS },
+      body: JSON.stringify(body),
+    });
+    expect(answer.status).toBe(201);
+    return ((await answer.json()) as { readonly id: string }).id;
+  };
+  const glanceOf = async (key: string, headers: Record<string, string>) => {
+    const answer = await h.request(at(key, "/glance"), { headers });
+    expect(answer.status).toBe(200);
+    const raw: unknown = await answer.json();
+    return { raw, glance: restProjectGlanceSchema.parse(raw) };
+  };
+
+  it("is one answer: the board counted by state, and its rows ordered and cut by the console with how many there are", async () => {
+    expect((await post(fromPages(admin), { key: "glanced", name: "Glanced" })).status).toBe(201);
+    const me = restMeSchema.parse(
+      await (await h.request(REST_ROUTES.me, { headers: { cookie: admin } })).json(),
+    );
+    const carol = me.person?.id ?? "";
+    // The first written is due the soonest: a listing newest first, cut, would never reach it.
+    const soonest = await make("glanced", "/tasks", {
+      title: "Due the soonest",
+      body: "A body a glance never carries.",
+      state: "in_progress",
+      dueOn: "2030-01-02",
+      workerIds: [carol],
+    });
+    // More in progress than a glance carries rows of, on later days and on none.
+    for (let n = 0; n < GLANCE_ROWS; n++) {
+      await make("glanced", "/tasks", {
+        title: `In progress ${n}`,
+        state: "in_progress",
+        dueOn: n % 2 === 0 ? `2030-02-${String(n + 1).padStart(2, "0")}` : null,
       });
-      expect(answer.status).toBe(201);
-      return ((await answer.json()) as { readonly id: string }).id;
-    };
-    await task("in_progress");
-    await task("in_progress");
-    await task("in_review");
-    await task("idea");
-    const putAway = await task("done");
-    await task("done");
-    const archived = await h.request(at(`/tasks/${putAway}/archive`), {
+    }
+    await make("glanced", "/tasks", { title: "Read me", state: "in_review", dueOn: "2030-03-01" });
+    await make("glanced", "/tasks", {
+      title: "Read me first",
+      state: "in_review",
+      dueOn: "2030-01-15",
+    });
+    await make("glanced", "/tasks", { title: "An idea", state: "idea" });
+    const putAway = await make("glanced", "/tasks", { title: "Done and put away", state: "done" });
+    await make("glanced", "/tasks", { title: "Done", state: "done" });
+    const archived = await h.request(at("glanced", `/tasks/${putAway}/archive`), {
       method: "POST",
       headers: fromPages(admin),
     });
     expect(archived.ok).toBe(true);
+    // A goal reached is not ahead; of those that are, the active one comes first.
+    await make("glanced", "/goals", { title: "Planned", state: "planned", dueOn: "2030-01-01" });
+    const active = await make("glanced", "/goals", { title: "Active", state: "active" });
+    await make("glanced", "/goals", { title: "Reached", state: "done" });
+    await make("glanced", "/tasks", { title: "Towards it", state: "done", goalId: active });
+    await make("glanced", "/decisions", {
+      question: "Which day?",
+      options: [{ label: "Monday" }, { label: "Friday" }],
+      taskId: soonest,
+    });
 
-    const expected = { idea: 1, ready: 0, in_progress: 2, in_review: 1, done: 1, dropped: 0 };
-    const one = restProjectSchema.parse(
-      await (await h.request(at(), { headers: { cookie: admin } })).json(),
+    const { raw, glance } = await glanceOf("glanced", { cookie: admin });
+    expect(glance.taskCounts).toEqual({
+      idea: 1,
+      ready: 0,
+      in_progress: GLANCE_ROWS + 1,
+      in_review: 2,
+      done: 2,
+      dropped: 0,
+    });
+    expect(glance.openDecisions).toBe(1);
+    // Cut to the rows a glance carries, with the true total beside them.
+    expect(glance.inProgress.total).toBe(GLANCE_ROWS + 1);
+    expect(glance.inProgress.items).toHaveLength(GLANCE_ROWS);
+    // The soonest due first, whenever it was written, with who is at work on it.
+    expect(glance.inProgress.items[0]?.title).toBe("Due the soonest");
+    expect(glance.inProgress.items[0]?.workers.map((worker) => worker.id)).toEqual([carol]);
+    // The days in order, and those due on no day after every one that is.
+    const days = glance.inProgress.items.map((task) => task.dueOn);
+    const dated = days.filter((day): day is string => day !== null);
+    expect(dated).toEqual([...dated].sort());
+    expect(days.slice(dated.length).every((day) => day === null)).toBe(true);
+    expect(dated.length).toBeGreaterThan(1);
+    expect(days.length - dated.length).toBeGreaterThan(1);
+    expect(glance.inReview).toMatchObject({ total: 2 });
+    expect(glance.inReview.items.map((task) => task.title)).toEqual(["Read me first", "Read me"]);
+    expect(glance.goals.total).toBe(2);
+    expect(glance.goals.items.map((goal) => goal.title)).toEqual(["Active", "Planned"]);
+    expect(glance.goals.items[0]?.taskCounts.done).toBe(1);
+    // What a tile does not draw is not sent: no body of a task or of a goal.
+    expect(JSON.stringify(raw)).not.toContain("A body a glance never carries.");
+    expect(JSON.stringify(raw)).not.toContain('"body"');
+
+    // The project itself carries no counts: they are the glance's.
+    const one: unknown = await (
+      await h.request(at("glanced"), { headers: { cookie: admin } })
+    ).json();
+    expect(one).not.toHaveProperty("taskCounts");
+    expect(restProjectSchema.parse(one).openDecisions).toBe(1);
+  });
+
+  it("is read by whoever may see the project and by nobody else, one that is not theirs the same as one that is not there", async () => {
+    expect((await post(fromPages(admin), { key: "closed", name: "Closed" })).status).toBe(201);
+    // Nobody signed in.
+    expect((await h.request(at("closed", "/glance"))).status).toBe(401);
+    // A member of the workspace who is not listed in a private project: it is not there, in
+    // the words of a project that never was.
+    const hidden = await h.request(at("closed", "/glance"), { headers: { cookie: member } });
+    const never = await h.request(at("no-such-project", "/glance"), {
+      headers: { cookie: member },
+    });
+    expect(hidden.status).toBe(404);
+    expect(never.status).toBe(404);
+    expect(await hidden.json()).toEqual(await never.json());
+    // An agent reads what its person may: the administrator's the project, the member's not.
+    const adminsAgent = await tokenFor(admin, "glance-admin");
+    const membersAgent = await tokenFor(member, "glance-member");
+    const { glance } = await glanceOf("closed", { authorization: `Bearer ${adminsAgent}` });
+    expect(glance.inProgress).toEqual({ items: [], total: 0 });
+    expect(glance.goals).toEqual({ items: [], total: 0 });
+    const refused = await h.request(at("closed", "/glance"), {
+      headers: { authorization: `Bearer ${membersAgent}` },
+    });
+    expect(refused.status).toBe(404);
+    expect(await refused.json()).toEqual(
+      await (
+        await h.request(at("no-such-project", "/glance"), {
+          headers: { authorization: `Bearer ${membersAgent}` },
+        })
+      ).json(),
     );
-    expect(one.taskCounts).toEqual(expected);
-    const listed = restProjectsSchema.parse(
-      await (await h.request(REST_ROUTES.projects, { headers: { cookie: admin } })).json(),
-    );
-    expect(listed.items.find((project) => project.key === "counted")?.taskCounts).toEqual(expected);
+    // Listed in it, the member reads it.
+    const alice = restMeSchema.parse(
+      await (await h.request(REST_ROUTES.me, { headers: { cookie: member } })).json(),
+    ).person?.id;
+    const listed = await h.request(at("closed", "/members"), {
+      method: "POST",
+      headers: { ...fromPages(admin), ...JSON_HEADERS },
+      body: JSON.stringify({ personId: alice, role: "member" }),
+    });
+    expect(listed.ok).toBe(true);
+    expect((await glanceOf("closed", { cookie: member })).glance.openDecisions).toBe(0);
+    // A key that is no key reaches nothing.
+    expect(
+      (
+        await h.request(`${REST_ROUTES.projects}/NOT%20A%20KEY/glance`, {
+          headers: { cookie: admin },
+        })
+      ).status,
+    ).toBe(404);
   });
 });
