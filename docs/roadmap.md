@@ -573,6 +573,12 @@ Goal: before a design pass over the pages, that a pass cannot leave the parts, a
 - [ ] The looks the pages still draw themselves, folded into the parts page by page, as each page is next redesigned.
 - [ ] The check of a plugin holding a plugin's pages to the parts the catalogue lists.
 
+## Milestone 48, a plugin's secret kept per key (2026-11-15)
+
+Goal: what the messenger needs to connect several workspaces of a chat service to one console, one app installed in each, a bot token per installation.
+
+- [x] A secret setting that keeps one value per key ([ADR-0111](adr/0111-a-secret-setting-may-keep-one-value-per-key.md)): `keyed: { max }` in the manifest; sealed under the key the same answer names, or one the plugin names, withheld as `no_key` or `too_many` where it cannot be; put into a request by its key; `ctx.secrets.keys`, `forget` and `move`, the last keeping the one value of before through an upgrade; kept in a table of its own; each key on the settings page and in `console plugin <key> settings`, set and removed one at a time by an administrator, and named in the feed; the test kit takes values by key. Tested against a real database and host, the service answered from the test: sealing, the bound, a key the answer does not hold, placing, the refusals, an administrator's keys, forgetting, moving, nothing of a value in an event, an answer or a log line, and the purge.
+
 ## After milestone 16
 
 Nothing is chosen yet; the list below is where the next milestone comes from.

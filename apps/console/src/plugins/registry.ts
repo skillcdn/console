@@ -26,6 +26,7 @@ import {
   type EndpointRequest,
   type EndpointResponse,
   isCalendarDay,
+  isPluginSecretKey,
   type LinkTarget,
   legacyWidgetSize,
   MAX_PLUGIN_EVENT_BYTES,
@@ -92,17 +93,23 @@ import {
   grantsHeldByPlugin,
   listGrants,
   listInstalls,
+  listKeyedSecrets,
   listSecrets,
+  moveSecretUnderKey,
   type PluginGrantRecord,
   type PluginInstallRecord,
+  type PluginSecretSummary,
   purgeInstall,
+  readKeyedSecret,
   readSecret,
   recordPluginCommand,
   recordPluginFailure,
   removeGrant,
+  removeKeyedSecret,
   removeSecret,
   rolesGrantedToPlugin,
   setInstallState,
+  setKeyedSecret,
   setSecret,
   updateInstallConsent,
   updateInstallSettings,
@@ -861,10 +868,23 @@ export class Plugins {
         secret,
       ]),
     );
+    const keyed = await listKeyedSecrets(this.options.database, workspace.id, entry.key);
     return manifest.settings.map((setting) => {
       const value = install?.settings[setting.key];
       const secret = setting.type === "secret";
-      const kept = secrets.get(setting.key);
+      // A keyed secret (ADR-0111) stands set where it keeps a value under any key, each said apart.
+      const keys =
+        setting.keyed === undefined
+          ? null
+          : keyed
+              .filter((kept) => kept.name === setting.key)
+              .map((kept) => ({
+                key: kept.key,
+                setAt: kept.setAt.toISOString(),
+                expiresAt: kept.expiresAt?.toISOString() ?? null,
+                source: kept.source,
+              }));
+      const kept = keys === null ? secrets.get(setting.key) : undefined;
       const setAt = kept?.setAt;
       return {
         key: setting.key,
@@ -878,13 +898,19 @@ export class Plugins {
         options: setting.options ?? null,
         of: setting.of ?? null,
         group: setting.group ?? null,
-        set: secret ? setAt !== undefined : value !== undefined && value !== null,
+        set: secret
+          ? keys === null
+            ? setAt !== undefined
+            : keys.length > 0
+          : value !== undefined && value !== null,
         value: secret || !admin ? null : (value ?? null),
         setAt: setAt?.toISOString() ?? null,
         expiresAt: kept?.expiresAt?.toISOString() ?? null,
         source: kept?.source ?? null,
         hosts: setting.hosts ?? null,
         use: setting.use ?? null,
+        keyed: setting.keyed ?? null,
+        keys,
       };
     });
   }
@@ -1409,10 +1435,54 @@ export class Plugins {
     return setting;
   }
 
-  /** Seals a secret for the plugin; its value is never read back by any route. */
-  async setSecret(key: string, name: string, value: string, by: Administrator): Promise<void> {
+  /**
+   * A secret setting named with the key of its value where it keeps one per key (ADR-0111), and
+   * with none where it keeps one value: the key as it is spelled, or the call is refused.
+   */
+  private keyedSetting(
+    entry: Entry,
+    name: string,
+    key: unknown,
+  ): { readonly setting: PluginSetting; readonly key: string | undefined } {
+    const setting = this.secretSetting(entry, name);
+    if (setting.keyed === undefined) {
+      if (key !== undefined) {
+        throw new PluginRefusal(
+          "plugin.invalid_args",
+          `the secret ${name} keeps one value, under no key`,
+        );
+      }
+      return { setting, key: undefined };
+    }
+    if (key === undefined) {
+      throw new PluginRefusal(
+        "plugin.invalid_args",
+        `the secret ${name} keeps a value per key: name the key`,
+      );
+    }
+    if (!isPluginSecretKey(key)) {
+      throw new PluginRefusal(
+        "plugin.invalid_args",
+        `the key of ${name} is letters, digits, _ and -, up to 64`,
+      );
+    }
+    return { setting, key };
+  }
+
+  /**
+   * Seals a secret for the plugin, under `under` for a keyed one (ADR-0111); its value is never
+   * read back by any route. A key the secret does not keep, where it keeps as many as its bound,
+   * is refused.
+   */
+  async setSecret(
+    key: string,
+    name: string,
+    value: string,
+    by: Administrator,
+    under?: string,
+  ): Promise<void> {
     const entry = this.entryOf(key);
-    this.secretSetting(entry, name);
+    const named = this.keyedSetting(entry, name, under);
     const secrets = this.options.secrets;
     if (secrets === undefined) {
       throw new PluginRefusal(
@@ -1422,7 +1492,7 @@ export class Plugins {
     }
     const workspace = await this.options.workspace();
     const install = await findInstall(this.options.database, workspace.id, key);
-    await setSecret(this.options.database, {
+    const input = {
       workspaceId: workspace.id,
       key,
       name,
@@ -1430,24 +1500,48 @@ export class Plugins {
       actor: by.actor,
       now: this.options.clock.now(),
       boardProjectId: install?.boardProjectId,
+    };
+    if (named.key === undefined || named.setting.keyed === undefined) {
+      await setSecret(this.options.database, input);
+      return;
+    }
+    const kept = await setKeyedSecret(this.options.database, {
+      ...input,
+      under: named.key,
+      max: named.setting.keyed.max,
     });
+    if (!kept) {
+      throw new PluginRefusal(
+        "plugin.too_many",
+        `the secret ${name} keeps ${named.setting.keyed.max} keys at most`,
+      );
+    }
   }
 
-  async removeSecret(key: string, name: string, by: Administrator): Promise<void> {
+  async removeSecret(key: string, name: string, by: Administrator, under?: string): Promise<void> {
     const entry = this.entryOf(key);
-    this.secretSetting(entry, name);
+    const named = this.keyedSetting(entry, name, under);
     const workspace = await this.options.workspace();
     const install = await findInstall(this.options.database, workspace.id, key);
-    const removed = await removeSecret(this.options.database, {
+    const input = {
       workspaceId: workspace.id,
       key,
       name,
       actor: by.actor,
       now: this.options.clock.now(),
       boardProjectId: install?.boardProjectId,
-    });
+    };
+    const removed =
+      named.key === undefined
+        ? await removeSecret(this.options.database, input)
+        : await removeKeyedSecret(this.options.database, { ...input, under: named.key });
     if (!removed) {
-      throw new PluginRefusal("plugin.not_found", `the secret ${name} is not set`);
+      throw new PluginRefusal(
+        "plugin.not_found",
+        named.key === undefined
+          ? `the secret ${name} is not set`
+          : `the secret ${name} keeps nothing under ${named.key}`,
+      );
     }
   }
 
@@ -2103,7 +2197,7 @@ export class Plugins {
     const { member, method, args } = call;
     switch (member) {
       case "secrets":
-        return this.secretCall(call.plugin, workspace.id, method, args);
+        return this.secretCall(entry, install, call, workspace.id, method, args);
       case "records":
         return this.recordCall(entry, install, call);
       case "events": {
@@ -2165,10 +2259,31 @@ export class Plugins {
           (typeof args[1] === "object" && args[1] !== null ? args[1] : {}) as PluginFetchInit,
           {
             // The hosts a secret goes to are the hosts whose answers it is sealed from (ADR-0070).
-            sealable: (name) => ({ hosts: this.secretSetting(entry, name).hosts }),
-            open: (name) => this.openSecret(entry, workspace.id, name),
-            seal: (name, value, expiresAt, host) =>
-              this.sealFromAnswer(entry, install, call, name, value, expiresAt, host),
+            sealable: async (name) => {
+              const setting = this.secretSetting(entry, name);
+              return {
+                hosts: setting.hosts,
+                keyed:
+                  setting.keyed === undefined
+                    ? undefined
+                    : {
+                        max: setting.keyed.max,
+                        keys: new Set(
+                          (
+                            await listKeyedSecrets(
+                              this.options.database,
+                              workspace.id,
+                              entry.key,
+                              name,
+                            )
+                          ).map((kept) => kept.key),
+                        ),
+                      },
+              };
+            },
+            open: (name, key) => this.openSecret(entry, workspace.id, name, key),
+            seal: (name, key, value, expiresAt, host) =>
+              this.sealFromAnswer(entry, install, call, name, key, value, expiresAt, host),
           },
         );
       case "plugins":
@@ -2618,15 +2733,19 @@ export class Plugins {
     entry: Entry,
     workspaceId: string,
     name: string,
+    under: string | undefined,
   ): Promise<OpenedSecret | undefined> {
-    const setting = this.secretSetting(entry, name);
+    const { setting, key } = this.keyedSetting(entry, name, under);
     if (setting.use === "verify") {
       throw new PluginRefusal(
         "plugin.forbidden",
         `the secret ${name} verifies and goes into no request`,
       );
     }
-    const row = await readSecret(this.options.database, workspaceId, entry.key, name);
+    const row =
+      key === undefined
+        ? await readSecret(this.options.database, workspaceId, entry.key, name)
+        : await readKeyedSecret(this.options.database, workspaceId, entry.key, name, key);
     const secrets = this.options.secrets;
     const value =
       row === undefined || secrets === undefined
@@ -2644,18 +2763,20 @@ export class Plugins {
    * refused before it went out otherwise. Recorded as the setting's change by the caller, or by
    * the administrator who enabled the plugin where the console's own call made the request, as
    * the board attributes those; with the host the answer came from as its source, and never its
-   * value.
+   * value. A keyed secret's value goes under its key (ADR-0111), and a key past the secret's
+   * bound is not kept: answers whether the value was.
    */
   private async sealFromAnswer(
     entry: Entry,
     install: PluginInstallRecord | undefined,
     call: ContextCall,
     name: string,
+    under: string | undefined,
     value: string,
     expiresAt: Date | undefined,
     host: string,
-  ): Promise<void> {
-    this.secretSetting(entry, name);
+  ): Promise<boolean> {
+    const { setting, key } = this.keyedSetting(entry, name, under);
     const secrets = this.options.secrets;
     if (secrets === undefined) {
       throw new PluginRefusal(
@@ -2664,30 +2785,54 @@ export class Plugins {
       );
     }
     const workspace = await this.options.workspace();
+    const input = {
+      workspaceId: workspace.id,
+      key: entry.key,
+      name,
+      sealed: secrets.seal("plugin-secret", value),
+      actor: this.pluginActor(entry, install, call),
+      now: this.options.clock.now(),
+      boardProjectId: install?.boardProjectId,
+      expiresAt,
+      source: host,
+    };
+    let kept = true;
+    if (key === undefined || setting.keyed === undefined) {
+      await setSecret(this.options.database, input);
+    } else {
+      kept = await setKeyedSecret(this.options.database, {
+        ...input,
+        under: key,
+        max: setting.keyed.max,
+      });
+    }
+    this.options.logger.info(
+      { plugin: entry.key, setting: name, key, kept, source: host, expiresAt },
+      "plugin secret sealed from an answer",
+    );
+    return kept;
+  }
+
+  /**
+   * Who a change the plugin made to its own secrets is recorded by: the caller whose command made
+   * it, or the administrator who enabled the plugin where the console's own job or hook did, as
+   * the board attributes those, through the plugin.
+   */
+  private pluginActor(
+    entry: Entry,
+    install: PluginInstallRecord | undefined,
+    call: ContextCall,
+  ): Actor {
     const caller = call.call.caller;
     const actorId = caller.kind === "person" ? caller.person.id : install?.enabledBy;
     if (actorId === undefined) {
       throw new PluginRefusal("plugin.disabled", "the plugin is not enabled");
     }
-    await setSecret(this.options.database, {
-      workspaceId: workspace.id,
-      key: entry.key,
-      name,
-      sealed: secrets.seal("plugin-secret", value),
-      actor: {
-        id: actorId,
-        ...(caller.kind === "person" && caller.agent !== null ? { agent: caller.agent } : {}),
-        plugin: entry.key,
-      },
-      now: this.options.clock.now(),
-      boardProjectId: install?.boardProjectId,
-      expiresAt,
-      source: host,
-    });
-    this.options.logger.info(
-      { plugin: entry.key, setting: name, source: host, expiresAt },
-      "plugin secret sealed from an answer",
-    );
+    return {
+      id: actorId,
+      ...(caller.kind === "person" && caller.agent !== null ? { agent: caller.agent } : {}),
+      plugin: entry.key,
+    };
   }
 
   /**
@@ -3018,25 +3163,77 @@ export class Plugins {
   }
 
   private async secretCall(
-    key: string,
+    entry: Entry,
+    install: PluginInstallRecord | undefined,
+    call: ContextCall,
     workspaceId: string,
     method: string,
     args: readonly unknown[],
   ): Promise<unknown> {
+    const key = entry.key;
     const name = typeof args[0] === "string" ? args[0] : "";
-    const row = await readSecret(this.options.database, workspaceId, key, name);
+    const setting = entry.manifest?.settings.find((s) => s.key === name && s.type === "secret");
     const now = this.options.clock.now();
-    const expired = row?.expiresAt !== undefined && row.expiresAt.getTime() <= now.getTime();
-    if (method === "has") {
-      return row !== undefined && !expired;
-    }
-    if (method === "status") {
+    const standing = (row: PluginSecretSummary | undefined) => {
+      const expired = row?.expiresAt !== undefined && row.expiresAt.getTime() <= now.getTime();
       return {
         set: row !== undefined && !expired,
         setAt: row?.setAt.toISOString() ?? null,
         expiresAt: row?.expiresAt?.toISOString() ?? null,
         source: row?.source ?? null,
       };
+    };
+    // A keyed secret (ADR-0111) answers by key: what it keeps, and what the plugin forgets or
+    // moves under a key, never a value.
+    if (method === "keys" || method === "forget" || method === "move") {
+      if (setting?.keyed === undefined) {
+        throw new PluginRefusal(
+          "plugin.invalid_args",
+          `${name} is not a secret setting of the plugin that keeps a value per key`,
+        );
+      }
+      if (method === "keys") {
+        return (await listKeyedSecrets(this.options.database, workspaceId, key, name)).map(
+          (row) => ({ key: row.key, ...standing(row) }),
+        );
+      }
+      const { key: under } = this.keyedSetting(entry, name, args[1]);
+      const input = {
+        workspaceId,
+        key,
+        name,
+        under: under as string,
+        actor: this.pluginActor(entry, install, call),
+        now,
+        boardProjectId: install?.boardProjectId,
+      };
+      if (method === "forget") {
+        return removeKeyedSecret(this.options.database, input);
+      }
+      const moved = await moveSecretUnderKey(this.options.database, {
+        ...input,
+        max: setting.keyed.max,
+      });
+      if (moved === "too_many") {
+        throw new PluginRefusal(
+          "plugin.too_many",
+          `the secret ${name} keeps ${setting.keyed.max} keys at most`,
+        );
+      }
+      return moved === "moved";
+    }
+    if (method === "has" || method === "status") {
+      const under = args[1];
+      // Without a key, the one value: for a keyed secret, the value it kept from before it was
+      // keyed, which `move` puts under a key. A key of a secret that keeps one value, or a key
+      // not spelled as one, stands unset, as a name that is no secret setting does.
+      const row =
+        under === undefined
+          ? await readSecret(this.options.database, workspaceId, key, name)
+          : setting?.keyed !== undefined && isPluginSecretKey(under)
+            ? await readKeyedSecret(this.options.database, workspaceId, key, name, under)
+            : undefined;
+      return method === "has" ? standing(row).set : standing(row);
     }
     if (method !== "sign" && method !== "verify") {
       throw new PluginRefusal("plugin.invalid_args", `secrets.${method} is not a call`);
@@ -3045,11 +3242,19 @@ export class Plugins {
     if (algorithm !== "hmac-sha256") {
       throw new PluginRefusal("plugin.invalid_args", "the algorithm is hmac-sha256");
     }
-    // A secret for verifying signs nothing, so that a request cannot be forged with it.
-    const setting = this.entries.get(key)?.manifest?.settings.find((s) => s.key === name);
+    // A secret for verifying signs nothing, so that a request cannot be forged with it; a keyed
+    // one goes into requests alone.
+    if (setting?.keyed !== undefined) {
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        `the secret ${name} keeps a value per key and signs nothing`,
+      );
+    }
     if (method === "sign" && setting?.use === "verify") {
       throw new PluginRefusal("plugin.forbidden", `the secret ${name} verifies and signs nothing`);
     }
+    const row = await readSecret(this.options.database, workspaceId, key, name);
+    const expired = row?.expiresAt !== undefined && row.expiresAt.getTime() <= now.getTime();
     const secrets = this.options.secrets;
     const value =
       row === undefined || expired || secrets === undefined

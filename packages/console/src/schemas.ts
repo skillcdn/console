@@ -2121,6 +2121,8 @@ export const restEventDataSchema = z.object({
   capabilities: z.optional(z.array(z.string())),
   /** For `plugin.configured` of a secret: `administrator`, or the host of the answer it was sealed from (ADR-0070). */
   source: z.optional(z.string()),
+  /** For `plugin.configured` of a keyed secret: the key its value was set, removed or moved under (ADR-0111). */
+  under: z.optional(z.string()),
   /** For `plugin.granted` and `plugin.revoked`: the plugin the role went to, by key, where one did (ADR-0072). */
   grantee: z.optional(z.string()),
   /** For `plugin.granted` and `plugin.revoked`: whether the role went to everyone. */

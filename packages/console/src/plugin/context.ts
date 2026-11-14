@@ -441,9 +441,11 @@ export type SecretPlacement =
   | "basic"
   | `body:${string}`;
 
-/** One secret setting and where it goes. */
+/** One secret setting and where it goes; for a keyed one (ADR-0111), the key whose value goes. */
 export interface SecretUse {
   readonly name: string;
+  /** The key of a keyed secret, and of no other. */
+  readonly key?: string | undefined;
   readonly as: SecretPlacement;
 }
 
@@ -451,22 +453,40 @@ export interface SecretUse {
  * A value of the answer to seal as a secret setting (ADR-0070): the path to it in the answer's
  * JSON (`$.access_token`, `$.credentials.signing_secret`, `$.items.0.token`), and, where it
  * expires, how long it lasts, in seconds or as a path to the seconds (`$.expires_in`). The
- * console seals the value and hands the plugin the answer with `"[sealed]"` in its place.
+ * console seals the value and hands the plugin the answer with `"[sealed]"` in its place. A
+ * keyed secret (ADR-0111) is sealed under `key`: a path into the same answer (`$.team.id`), or
+ * the key itself.
  */
 export type SecretSeal =
   | string
-  | { readonly path: string; readonly expiresIn?: number | string | undefined };
+  | {
+      readonly path: string;
+      readonly expiresIn?: number | string | undefined;
+      /** For a keyed secret, and no other: the key, or the path to it in the answer. */
+      readonly key?: string | undefined;
+    };
 
 /**
  * What became of a value `seal` named (ADR-0070). `sealed`: sealed as the setting, the answer
  * saying `"[sealed]"` in its place. `absent`: nothing at the path (no such key, `null` or an
  * empty string); nothing sealed, nothing taken out. `not_a_string`, `too_long` and `echoed`: a
  * value that is no string, is over the bound of a secret (4,096 characters), or holds a secret
- * the request carried from another setting; never sealed and never handed over, the answer saying
- * `"[withheld]"` in its place. `not_json`: an answer that is no JSON object or array, whose body
- * is withheld whole. Only `sealed` changed the setting.
+ * the request carried from another setting or key; `no_key`, for a keyed secret (ADR-0111), a
+ * key the answer does not hold where the seal names a path, or holds not as a key is spelled;
+ * `too_many`, a key the secret does not keep yet, where it keeps as many as its `max`: never
+ * sealed and never handed over, the answer saying `"[withheld]"` in its place. `not_json`: an
+ * answer that is no JSON object or array, whose body is withheld whole. Only `sealed` changed the
+ * setting.
  */
-export type SealOutcome = "sealed" | "absent" | "not_a_string" | "too_long" | "echoed" | "not_json";
+export type SealOutcome =
+  | "sealed"
+  | "absent"
+  | "not_a_string"
+  | "too_long"
+  | "echoed"
+  | "no_key"
+  | "too_many"
+  | "not_json";
 
 export interface PluginFetchInit {
   /** `GET` unless said; `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` or `OPTIONS`, and no other. */
@@ -507,12 +527,35 @@ export interface SecretStatus {
   readonly source: string | null;
 }
 
+/** How the value of a keyed secret under one key stands (ADR-0111). */
+export interface SecretKeyStatus extends SecretStatus {
+  readonly key: string;
+}
+
 export interface PluginSecrets {
-  /** Whether the secret is set and not past its expiry. */
-  has(name: string): Promise<boolean>;
-  /** How the secret stands, for a settings page to say and a job to decide whether to renew it. */
-  status(name: string): Promise<SecretStatus>;
-  /** Signs with the secret; refused for a secret declared `use: "verify"`, which signs nothing. */
+  /**
+   * Whether the secret is set and not past its expiry; for a keyed one, its value under `key`,
+   * and without a key the value it kept from before it was keyed, which `move` puts under one.
+   */
+  has(name: string, key?: string): Promise<boolean>;
+  /**
+   * How the secret stands, for a settings page to say and a job to decide whether to renew it;
+   * for a keyed one, its value under `key`, or without a key the value of before it was keyed.
+   */
+  status(name: string, key?: string): Promise<SecretStatus>;
+  /** The keys a keyed secret keeps a value under, each with how it stands, in the order of the keys. */
+  keys(name: string): Promise<readonly SecretKeyStatus[]>;
+  /**
+   * Forgets the value of a keyed secret under `key`, where what the key stood for is gone: an
+   * installation removed at the service, say. Answers whether there was one.
+   */
+  forget(name: string, key: string): Promise<boolean>;
+  /**
+   * Puts the value a keyed secret kept from before it was keyed under `key`, in place of what the
+   * key held: an upgrade's way to keep a token through the change. Answers whether there was one.
+   */
+  move(name: string, key: string): Promise<boolean>;
+  /** Signs with the secret; refused for a secret declared `use: "verify"`, which signs nothing, and for a keyed one. */
   sign(name: string, payload: string | Uint8Array, algorithm: "hmac-sha256"): Promise<string>;
   verify(
     name: string,

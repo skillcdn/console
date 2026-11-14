@@ -65,8 +65,12 @@ export interface TestContextOptions {
   readonly console?: TestConsoleOptions;
   readonly sql?: PluginSql;
   readonly fetch?: (url: string, init?: PluginFetchInit) => Promise<PluginFetchResponse>;
-  /** The secrets by name; `sign` and `verify` use them, and never hand them over. */
-  readonly secrets?: Readonly<Record<string, string>>;
+  /**
+   * The secrets by name; `sign` and `verify` use them, and never hand them over. A keyed secret
+   * (ADR-0111) is given its values by key; one given a single value stands as a keyed secret kept
+   * from before it was keyed, which `move` puts under a key.
+   */
+  readonly secrets?: Readonly<Record<string, string | Readonly<Record<string, string>>>>;
   readonly plugins?: Readonly<Record<string, TestOtherPlugin>>;
   /** The console's public origin, from which `ctx.endpoints.url` is answered; left out, it is `plugin.unavailable`. */
   readonly publicUrl?: string;
@@ -579,7 +583,41 @@ function build(store: Store, options: TestContextOptions, caller: PluginCaller):
     grants: [],
     ...options.plugin,
   };
-  const secrets = options.secrets ?? {};
+  // A copy, so that `forget` and `move` change what the context answers and nothing of the test's.
+  const secrets = new Map<string, string | Map<string, string>>(
+    Object.entries(options.secrets ?? {}).map(([name, value]) => [
+      name,
+      typeof value === "string" ? value : new Map(Object.entries(value)),
+    ]),
+  );
+  const secretValue = (name: string, key: string | undefined): string | undefined => {
+    const held = secrets.get(name);
+    return typeof held === "string"
+      ? key === undefined
+        ? held
+        : undefined
+      : key === undefined
+        ? undefined
+        : held?.get(key);
+  };
+  const secretStatus = (name: string, key: string | undefined) => {
+    const set = secretValue(name, key) !== undefined;
+    return {
+      set,
+      setAt: set ? now().toISOString() : null,
+      expiresAt: null,
+      source: set ? "administrator" : null,
+    };
+  };
+  const signingSecret = (name: string): string | undefined => {
+    if (secrets.get(name) instanceof Map) {
+      throw new PluginRefusal(
+        "plugin.forbidden",
+        `the secret ${name} is kept per key and signs nothing`,
+      );
+    }
+    return secretValue(name, undefined);
+  };
   const records = ((collection: CollectionDefinition | string) => {
     const name = typeof collection === "string" ? collection : collection.name;
     const definition = typeof collection === "string" ? collections.get(collection) : collection;
@@ -606,22 +644,35 @@ function build(store: Store, options: TestContextOptions, caller: PluginCaller):
     },
     fetch: options.fetch ?? (async () => forbidden("fetch", "fetch")),
     secrets: {
-      has: async (name) => name in secrets,
-      status: async (name) => ({
-        set: name in secrets,
-        setAt: name in secrets ? now().toISOString() : null,
-        expiresAt: null,
-        source: name in secrets ? "administrator" : null,
-      }),
+      has: async (name, key) => secretValue(name, key) !== undefined,
+      status: async (name, key) => secretStatus(name, key),
+      keys: async (name) => {
+        const held = secrets.get(name);
+        return held instanceof Map
+          ? [...held.keys()].sort().map((key) => ({ key, ...secretStatus(name, key) }))
+          : [];
+      },
+      forget: async (name, key) => {
+        const held = secrets.get(name);
+        return held instanceof Map && held.delete(key);
+      },
+      move: async (name, key) => {
+        const held = secrets.get(name);
+        if (typeof held !== "string") {
+          return false;
+        }
+        secrets.set(name, new Map([[key, held]]));
+        return true;
+      },
       sign: async (name, payload) => {
-        const secret = secrets[name];
+        const secret = signingSecret(name);
         if (secret === undefined) {
           throw new PluginRefusal("plugin.forbidden", `the secret ${name} is not set`);
         }
         return hmacSha256(secret, payload);
       },
       verify: async (name, payload, signature) => {
-        const secret = secrets[name];
+        const secret = signingSecret(name);
         return (
           secret !== undefined && (await hmacSha256(secret, payload)) === signature.toLowerCase()
         );

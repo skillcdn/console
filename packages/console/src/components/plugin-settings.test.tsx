@@ -377,6 +377,58 @@ describe("a plugin's settings page", () => {
     expect(html).not.toContain("삭제하려면 먼저 비활성화하세요.");
   });
 
+  it("shows a secret kept per key as its keys, each with how its value stands, and a key and a value to set one (ADR-0111)", () => {
+    const keyed = (keys: NonNullable<RestPluginDetail["settings"][number]["keys"]>) =>
+      render({
+        ...DETAIL,
+        settings: [
+          {
+            key: "teamToken",
+            type: "secret",
+            name: { en: "Bot token", ko: "봇 토큰" },
+            description: null,
+            required: false,
+            default: null,
+            min: null,
+            max: null,
+            options: null,
+            of: null,
+            set: keys.length > 0,
+            value: null,
+            setAt: null,
+            expiresAt: null,
+            source: null,
+            hosts: ["slack.com"],
+            use: null,
+            keyed: { max: 50 },
+            keys,
+          },
+        ],
+      });
+    const html = keyed([
+      { key: "T0001", setAt: "2026-11-15T01:00:00.000Z", expiresAt: null, source: "slack.com" },
+      {
+        key: "T0002",
+        setAt: "2026-11-15T02:00:00.000Z",
+        expiresAt: null,
+        source: "administrator",
+      },
+    ]);
+    expect(html).toContain("키 50개 중 2개에 값이 있습니다.");
+    expect(html).toContain('<code class="sc-project-key">T0001</code>');
+    expect(html).toMatch(
+      /T0001<\/code><p class="sc-settings-hint">[^<]*slack\.com에서 받아 저장됨/,
+    );
+    expect(html).toMatch(/T0002<\/code><p class="sc-settings-hint">[^<]*설정됨/);
+    expect(html).toContain('aria-label="T0001의 값 지우기"');
+    expect(html).toContain('placeholder="키"');
+    expect(html).toContain("slack.com에만 보냅니다.");
+    // One field for a value, never one holding it, and no row of a secret that keeps one value.
+    expect(count(html, 'type="password"')).toBe(1);
+    expect(html).not.toContain("설정 안 됨");
+    expect(keyed([])).toContain("아직 값이 있는 키가 없습니다.");
+  });
+
   it("says that a role which follows the reporting line is held by whoever someone reports to (ADR-0068)", () => {
     const html = render({
       ...DETAIL,

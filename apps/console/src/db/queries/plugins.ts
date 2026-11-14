@@ -7,6 +7,7 @@ import {
   people,
   pluginGrants,
   pluginInstalls,
+  pluginKeyedSecrets,
   pluginSecrets,
   projects,
   teamMembers,
@@ -73,6 +74,16 @@ export interface PluginSecretSummary {
 
 /** A sealed secret as the console reads it to use it: never for a plugin. */
 export interface PluginSecretRow extends PluginSecretSummary {
+  readonly sealed: string;
+}
+
+/** The value of a keyed secret under one key (ADR-0111), as the pages may show it: never the value. */
+export interface PluginKeyedSecretSummary extends PluginSecretSummary {
+  readonly key: string;
+}
+
+/** The value of a keyed secret under one key, sealed, as the console reads it to use it: never for a plugin. */
+export interface PluginKeyedSecretRow extends PluginKeyedSecretSummary {
   readonly sealed: string;
 }
 
@@ -1024,6 +1035,14 @@ export async function purgeInstall(
         ),
       );
     await tx
+      .delete(pluginKeyedSecrets)
+      .where(
+        and(
+          eq(pluginKeyedSecrets.workspaceId, input.workspaceId),
+          eq(pluginKeyedSecrets.pluginKey, input.key),
+        ),
+      );
+    await tx
       .delete(pluginInstalls)
       .where(
         and(eq(pluginInstalls.workspaceId, input.workspaceId), eq(pluginInstalls.key, input.key)),
@@ -1056,5 +1075,284 @@ export async function listSecrets(
     .from(pluginSecrets)
     .where(and(eq(pluginSecrets.workspaceId, workspaceId), eq(pluginSecrets.pluginKey, key)))
     .orderBy(asc(pluginSecrets.name));
+  return rows.map((row) => ({ ...row, expiresAt: row.expiresAt ?? undefined }));
+}
+
+/** The lock under which a keyed secret's keys are counted and one is added, so that two seals at once keep its bound. */
+async function lockKeyedSecret(
+  tx: Transaction,
+  workspaceId: string,
+  key: string,
+  name: string,
+): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`plugin-keyed-secret:${workspaceId}:${key}:${name}`}))`,
+  );
+}
+
+/**
+ * Sets the value of a keyed secret under one key (ADR-0111), sealed by the caller, in place of
+ * what the key held: an administrator's, or one sealed from an answer a plugin received, with its
+ * host as its source. A key the secret does not keep yet is added only below `max`: answers
+ * `false`, and changes nothing, where the secret keeps as many already. Tells the board which
+ * setting, under which key and from where, never its value.
+ */
+export async function setKeyedSecret(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly key: string;
+    readonly name: string;
+    /** The key the value is kept under. */
+    readonly under: string;
+    readonly max: number;
+    readonly sealed: string;
+    readonly actor: Actor;
+    readonly now: Date;
+    readonly boardProjectId: string | undefined;
+    readonly expiresAt?: Date | undefined;
+    /** `administrator` when left out. */
+    readonly source?: string | undefined;
+  },
+): Promise<boolean> {
+  const source = input.source ?? "administrator";
+  return drizzleOf(database).transaction(async (tx) => {
+    await lockKeyedSecret(tx, input.workspaceId, input.key, input.name);
+    const kept = await tx
+      .select({ key: pluginKeyedSecrets.key })
+      .from(pluginKeyedSecrets)
+      .where(
+        and(
+          eq(pluginKeyedSecrets.workspaceId, input.workspaceId),
+          eq(pluginKeyedSecrets.pluginKey, input.key),
+          eq(pluginKeyedSecrets.name, input.name),
+        ),
+      );
+    if (!kept.some((row) => row.key === input.under) && kept.length >= input.max) {
+      return false;
+    }
+    await tx
+      .insert(pluginKeyedSecrets)
+      .values({
+        workspaceId: input.workspaceId,
+        pluginKey: input.key,
+        name: input.name,
+        key: input.under,
+        sealed: input.sealed,
+        setAt: input.now,
+        setBy: input.actor.id,
+        expiresAt: input.expiresAt ?? null,
+        source,
+      })
+      .onConflictDoUpdate({
+        target: [
+          pluginKeyedSecrets.workspaceId,
+          pluginKeyedSecrets.pluginKey,
+          pluginKeyedSecrets.name,
+          pluginKeyedSecrets.key,
+        ],
+        set: {
+          sealed: input.sealed,
+          setAt: input.now,
+          setBy: input.actor.id,
+          expiresAt: input.expiresAt ?? null,
+          source,
+        },
+      });
+    await recordEvent(tx, {
+      workspaceId: input.workspaceId,
+      projectId: input.boardProjectId,
+      kind: "plugin.configured",
+      actor: input.actor,
+      plugin: input.key,
+      data: { key: input.key, fields: [input.name], under: input.under, source },
+      now: input.now,
+    });
+    return true;
+  });
+}
+
+/** Removes the value of a keyed secret under one key; answers whether there was one, and tells the board where there was. */
+export async function removeKeyedSecret(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly key: string;
+    readonly name: string;
+    readonly under: string;
+    readonly actor: Actor;
+    readonly now: Date;
+    readonly boardProjectId: string | undefined;
+  },
+): Promise<boolean> {
+  return drizzleOf(database).transaction(async (tx) => {
+    const removed = await tx
+      .delete(pluginKeyedSecrets)
+      .where(
+        and(
+          eq(pluginKeyedSecrets.workspaceId, input.workspaceId),
+          eq(pluginKeyedSecrets.pluginKey, input.key),
+          eq(pluginKeyedSecrets.name, input.name),
+          eq(pluginKeyedSecrets.key, input.under),
+        ),
+      )
+      .returning({ key: pluginKeyedSecrets.key });
+    if (removed.length === 0) {
+      return false;
+    }
+    await recordEvent(tx, {
+      workspaceId: input.workspaceId,
+      projectId: input.boardProjectId,
+      kind: "plugin.configured",
+      actor: input.actor,
+      plugin: input.key,
+      data: { key: input.key, fields: [input.name], under: input.under },
+      now: input.now,
+    });
+    return true;
+  });
+}
+
+/**
+ * Moves the value a secret setting kept from before it was keyed under one key (ADR-0111), in
+ * place of what the key held, in one transaction with the event: the value goes as it was sealed,
+ * with when, by whom and from where it was set, and is never opened. Answers `moved`, `none`
+ * where there was none, or `too_many`, nothing moved, where the key is new and the secret keeps
+ * `max` keys already.
+ */
+export async function moveSecretUnderKey(
+  database: Database,
+  input: {
+    readonly workspaceId: string;
+    readonly key: string;
+    readonly name: string;
+    readonly under: string;
+    readonly max: number;
+    readonly actor: Actor;
+    readonly now: Date;
+    readonly boardProjectId: string | undefined;
+  },
+): Promise<"moved" | "none" | "too_many"> {
+  return drizzleOf(database).transaction(async (tx) => {
+    await lockKeyedSecret(tx, input.workspaceId, input.key, input.name);
+    const kept = await tx
+      .select({ key: pluginKeyedSecrets.key })
+      .from(pluginKeyedSecrets)
+      .where(
+        and(
+          eq(pluginKeyedSecrets.workspaceId, input.workspaceId),
+          eq(pluginKeyedSecrets.pluginKey, input.key),
+          eq(pluginKeyedSecrets.name, input.name),
+        ),
+      );
+    const theOneValue = and(
+      eq(pluginSecrets.workspaceId, input.workspaceId),
+      eq(pluginSecrets.pluginKey, input.key),
+      eq(pluginSecrets.name, input.name),
+    );
+    if (!kept.some((row) => row.key === input.under) && kept.length >= input.max) {
+      // The value stays where it was, unmoved and unread.
+      const [waiting] = await tx
+        .select({ name: pluginSecrets.name })
+        .from(pluginSecrets)
+        .where(theOneValue)
+        .limit(1);
+      return waiting === undefined ? "none" : "too_many";
+    }
+    const [moved] = await tx.delete(pluginSecrets).where(theOneValue).returning({
+      sealed: pluginSecrets.sealed,
+      setAt: pluginSecrets.setAt,
+      setBy: pluginSecrets.setBy,
+      expiresAt: pluginSecrets.expiresAt,
+      source: pluginSecrets.source,
+    });
+    if (moved === undefined) {
+      return "none";
+    }
+    await tx
+      .insert(pluginKeyedSecrets)
+      .values({
+        workspaceId: input.workspaceId,
+        pluginKey: input.key,
+        name: input.name,
+        key: input.under,
+        ...moved,
+      })
+      .onConflictDoUpdate({
+        target: [
+          pluginKeyedSecrets.workspaceId,
+          pluginKeyedSecrets.pluginKey,
+          pluginKeyedSecrets.name,
+          pluginKeyedSecrets.key,
+        ],
+        set: moved,
+      });
+    await recordEvent(tx, {
+      workspaceId: input.workspaceId,
+      projectId: input.boardProjectId,
+      kind: "plugin.configured",
+      actor: input.actor,
+      plugin: input.key,
+      data: { key: input.key, fields: [input.name], under: input.under },
+      now: input.now,
+    });
+    return "moved";
+  });
+}
+
+/** The value of a keyed secret under one key, sealed, with how it stands, for the console to open where the plugin names it; never for the plugin. */
+export async function readKeyedSecret(
+  database: Database,
+  workspaceId: string,
+  key: string,
+  name: string,
+  under: string,
+): Promise<PluginKeyedSecretRow | undefined> {
+  const [row] = await drizzleOf(database)
+    .select({
+      name: pluginKeyedSecrets.name,
+      key: pluginKeyedSecrets.key,
+      sealed: pluginKeyedSecrets.sealed,
+      setAt: pluginKeyedSecrets.setAt,
+      expiresAt: pluginKeyedSecrets.expiresAt,
+      source: pluginKeyedSecrets.source,
+    })
+    .from(pluginKeyedSecrets)
+    .where(
+      and(
+        eq(pluginKeyedSecrets.workspaceId, workspaceId),
+        eq(pluginKeyedSecrets.pluginKey, key),
+        eq(pluginKeyedSecrets.name, name),
+        eq(pluginKeyedSecrets.key, under),
+      ),
+    )
+    .limit(1);
+  return row === undefined ? undefined : { ...row, expiresAt: row.expiresAt ?? undefined };
+}
+
+/** The keys a plugin's keyed secrets keep a value under, by setting and key: what the pages and `keys` may say of them, never a value. */
+export async function listKeyedSecrets(
+  database: Database,
+  workspaceId: string,
+  key: string,
+  name?: string,
+): Promise<PluginKeyedSecretSummary[]> {
+  const rows = await drizzleOf(database)
+    .select({
+      name: pluginKeyedSecrets.name,
+      key: pluginKeyedSecrets.key,
+      setAt: pluginKeyedSecrets.setAt,
+      expiresAt: pluginKeyedSecrets.expiresAt,
+      source: pluginKeyedSecrets.source,
+    })
+    .from(pluginKeyedSecrets)
+    .where(
+      and(
+        eq(pluginKeyedSecrets.workspaceId, workspaceId),
+        eq(pluginKeyedSecrets.pluginKey, key),
+        ...(name === undefined ? [] : [eq(pluginKeyedSecrets.name, name)]),
+      ),
+    )
+    .orderBy(asc(pluginKeyedSecrets.name), asc(pluginKeyedSecrets.key));
   return rows.map((row) => ({ ...row, expiresAt: row.expiresAt ?? undefined }));
 }

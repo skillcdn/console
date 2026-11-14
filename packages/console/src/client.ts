@@ -676,9 +676,12 @@ export interface PluginClient {
   updateSettings(patch: RestPluginSettingsPatch): Promise<RestPluginDetail>;
   /** Says what an enabled plugin holds: those it requires, named again, and the optional ones to turn on. */
   updateConsent(consent: readonly string[]): Promise<RestPluginDetail>;
-  /** Seals a secret for the plugin; it is answered by nothing from then on. */
-  setSecret(name: string, value: string): Promise<void>;
-  removeSecret(name: string): Promise<void>;
+  /**
+   * Seals a secret for the plugin; it is answered by nothing from then on. A keyed secret
+   * (ADR-0111) is set and removed under a key, one value at a time.
+   */
+  setSecret(name: string, value: string, key?: string): Promise<void>;
+  removeSecret(name: string, key?: string): Promise<void>;
   grants(signal?: AbortSignal): Promise<RestPluginGrants>;
   grant(input: RestPluginGrantInput): Promise<RestPluginGrant>;
   revoke(grantId: string): Promise<RestPluginGrant>;
@@ -1572,10 +1575,20 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         request("PATCH", `${base}${at("settings")}`, patch, restPluginDetailSchema),
       updateConsent: (consent) =>
         request("PATCH", `${base}${at("consent")}`, { consent }, restPluginDetailSchema),
-      setSecret: (name, value) =>
-        request("PUT", `${base}${at("secrets", name)}`, { value }, undefined),
-      removeSecret: (name) =>
-        request("DELETE", `${base}${at("secrets", name)}`, undefined, undefined),
+      setSecret: (name, value, under) =>
+        request(
+          "PUT",
+          `${base}${under === undefined ? at("secrets", name) : at("secrets", name, "keys", under)}`,
+          { value },
+          undefined,
+        ),
+      removeSecret: (name, under) =>
+        request(
+          "DELETE",
+          `${base}${under === undefined ? at("secrets", name) : at("secrets", name, "keys", under)}`,
+          undefined,
+          undefined,
+        ),
       grants: (signal) =>
         request("GET", `${base}${at("grants")}`, undefined, restPluginGrantsSchema, signal),
       grant: (input) => request("POST", `${base}${at("grants")}`, input, restPluginGrantSchema),

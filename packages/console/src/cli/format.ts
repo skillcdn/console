@@ -916,21 +916,40 @@ export function formatPluginHelp(detail: RestPluginDetail, name: string | undefi
   return parts.join("\n");
 }
 
-/** A setting in a line: its key and type, what it holds or whether it is set, and its name. */
+/** When a secret was set, from where where it was sealed from an answer, and when it expires: never what it holds. */
+function secretStanding(standing: {
+  readonly setAt: string | null;
+  readonly source?: string | null | undefined;
+  readonly expiresAt?: string | null | undefined;
+}): string {
+  return `set${standing.setAt === null ? "" : ` ${moment(standing.setAt)}`}${
+    standing.source === null || standing.source === undefined || standing.source === "administrator"
+      ? ""
+      : ` from ${standing.source}`
+  }${standing.expiresAt === null || standing.expiresAt === undefined ? "" : `, expires ${moment(standing.expiresAt)}`}`;
+}
+
+/**
+ * A setting in a line: its key and type, what it holds or whether it is set, and its name; for a
+ * secret kept per key (ADR-0111), how many keys of how many, and a line under it for each key.
+ */
 export function formatPluginSettingLine(
   setting: RestPluginSetting,
   language: string | null | undefined,
 ): string {
+  const keys = setting.keys ?? null;
+  if (setting.type === "secret" && keys !== null) {
+    const max = setting.keyed?.max;
+    const count = `${keys.length}${max === undefined ? "" : ` of ${max}`} ${keys.length === 1 && max === undefined ? "key" : "keys"}`;
+    return [
+      `  ${setting.key} (secret, per key): ${count}  ${localized(setting.name, language)}`,
+      ...keys.map((kept) => `    ${kept.key}: ${secretStanding(kept)}`),
+    ].join("\n");
+  }
   const holds =
     setting.type === "secret"
       ? setting.set
-        ? `set${setting.setAt === null ? "" : ` ${moment(setting.setAt)}`}${
-            setting.source === null ||
-            setting.source === undefined ||
-            setting.source === "administrator"
-              ? ""
-              : ` from ${setting.source}`
-          }${setting.expiresAt === null || setting.expiresAt === undefined ? "" : `, expires ${moment(setting.expiresAt)}`}`
+        ? secretStanding(setting)
         : "not set"
       : setting.set
         ? setting.value === null

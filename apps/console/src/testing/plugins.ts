@@ -81,6 +81,9 @@ export const GATE_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-gate/", 
 export const LEAVE_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-leave/", import.meta.url));
 export const AUDIT_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-audit/", import.meta.url));
 
+/** The fixture that keeps a token per workspace of a chat service, for the tests of the keyed secrets (ADR-0111). */
+export const CHAT_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-chat/", import.meta.url));
+
 /** The fixture whose page may use WebRTC where an administrator turns it on. */
 export const CALL_PLUGIN_DIR = fileURLToPath(new URL("./fixtures/plugin-call/", import.meta.url));
 

@@ -233,6 +233,9 @@ function contextOf(
     secrets: {
       has: group("secrets")("has") as never,
       status: group("secrets")("status") as never,
+      keys: group("secrets")("keys") as never,
+      forget: group("secrets")("forget") as never,
+      move: group("secrets")("move") as never,
       sign: group("secrets")("sign") as never,
       verify: group("secrets")("verify") as never,
     },

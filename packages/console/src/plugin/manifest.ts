@@ -19,6 +19,7 @@ import {
   MAX_PLUGIN_OPTIONS,
   MAX_PLUGIN_PAGES,
   MAX_PLUGIN_ROLES,
+  MAX_PLUGIN_SECRET_KEYS,
   MAX_PLUGIN_SETTING_GROUPS,
   MAX_PLUGIN_SETTINGS,
   MAX_PLUGIN_WIDGETS,
@@ -284,6 +285,17 @@ const settingItemType = z.enum(
   PLUGIN_SETTING_TYPES.filter((type) => type !== "secret" && type !== "list"),
 );
 
+/**
+ * A key a keyed secret keeps a value under (ADR-0111): letters, digits, `_` and `-`, up to 64, a
+ * workspace's id at a service, say. It is no secret, and a path into an answer (`$.team.id`)
+ * never reads as one.
+ */
+export const PLUGIN_SECRET_KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+export function isPluginSecretKey(value: unknown): value is string {
+  return typeof value === "string" && PLUGIN_SECRET_KEY_PATTERN.test(value);
+}
+
 /** A setting's key, as code and `--set` name it: a lowercase letter, then letters and digits. */
 export const SETTING_KEY_PATTERN = /^[a-z][a-zA-Z0-9]{0,31}$/;
 
@@ -316,6 +328,15 @@ const pluginSettingSchema = z
     hosts: z.optional(z.array(z.string().check(z.maxLength(300))).check(z.maxLength(20))),
     /** For a `secret`: `verify`, a secret that verifies signatures and signs nothing, so that a request cannot be forged with it. */
     use: z.optional(z.literal("verify")),
+    /**
+     * For a `secret`: one value per key, up to `max` keys (ADR-0111), each key named by the
+     * plugin or read from the answer it was sealed from, a workspace's id elsewhere, say.
+     */
+    keyed: z.optional(
+      z.strictObject({
+        max: z.int().check(z.minimum(1), z.maximum(MAX_PLUGIN_SECRET_KEYS)),
+      }),
+    ),
   })
   .check(
     z.superRefine((setting, ctx) => {
@@ -373,10 +394,23 @@ function settingProblems(setting: {
   of?: Exclude<PluginSettingType, "secret" | "list">;
   hosts?: readonly string[];
   use?: "verify";
+  keyed?: { max: number };
+  required?: boolean;
 }): string[] {
   const problems: string[] = [];
-  if (setting.type !== "secret" && (setting.hosts !== undefined || setting.use !== undefined)) {
-    problems.push(`only a secret takes hosts or use`);
+  if (
+    setting.type !== "secret" &&
+    (setting.hosts !== undefined || setting.use !== undefined || setting.keyed !== undefined)
+  ) {
+    problems.push(`only a secret takes hosts, use or keyed`);
+  }
+  // A keyed secret's values come and go with what each key stands for, so that none is required
+  // to enable the plugin; and it goes into requests alone, never verifying a signature.
+  if (setting.keyed !== undefined && setting.use !== undefined) {
+    problems.push("a keyed secret takes no use");
+  }
+  if (setting.keyed !== undefined && setting.required === true) {
+    problems.push("a keyed secret is not required");
   }
   for (const host of setting.hosts ?? []) {
     if (!isPluginCapability(`outbound:${host}`) || host === "webrtc") {

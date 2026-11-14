@@ -377,6 +377,11 @@ export const en = {
       secretHosts: (hosts: string) => `Sent to ${hosts} only.`,
       secretUnset: "Not set",
       secretNew: "New value",
+      /** A secret kept per key (ADR-0111): how many keys hold a value, of how many it may keep. */
+      secretKeys: (count: number, max: number) => `${count} of ${max} keys hold a value.`,
+      secretKeysNone: "No key holds a value yet.",
+      secretKeyNew: "Key",
+      secretKeyRemove: (key: string) => `Remove the value under ${key}`,
       enable: "Enable",
       disable: "Disable",
       roles: "Roles",

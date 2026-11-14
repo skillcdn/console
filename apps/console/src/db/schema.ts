@@ -1580,6 +1580,33 @@ export const pluginSecrets = pgTable(
 );
 
 /**
+ * A value of a keyed secret setting of a plugin under one key (ADR-0111), sealed as a secret
+ * setting is: the key is the plugin's or read from the answer it was sealed from, and no secret;
+ * the value is never returned by any route, never handed to plugin code. A table of its own, so
+ * that what a release before it reads and writes of `plugin_secrets` stands as it was.
+ */
+export const pluginKeyedSecrets = pgTable(
+  "plugin_keyed_secrets",
+  {
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    pluginKey: text().notNull(),
+    name: text().notNull(),
+    /** The key the value is kept under, as `PLUGIN_SECRET_KEY_PATTERN` spells one. */
+    key: text().notNull(),
+    sealed: text().notNull(),
+    setAt: instant().notNull(),
+    setBy: uuid().references(() => people.id),
+    /** When the value expires, where the answer it was sealed from said so; null for one that does not. */
+    expiresAt: instant(),
+    /** `administrator` for one an administrator set; the host of the answer it was sealed from otherwise. */
+    source: text().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId, table.pluginKey, table.name, table.key] })],
+);
+
+/**
  * A plugin's record (ADR-0051, docs/specs/plugins.md, "Records"): one document of a collection
  * the plugin declared, kept by the console. `data` is the plugin's, checked against the
  * collection's schema in the plugin's thread on every write; `search_text` is what the

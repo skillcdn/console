@@ -77,6 +77,14 @@
       "hosts": ["other.example.test"]
     },
     {
+      "key": "teamTokens",
+      "type": "secret",
+      "name": { "en": "Workspace tokens" },
+      "description": { "en": "One per workspace the app is installed in, sealed from its answer." },
+      "hosts": ["api.example.test"],
+      "keyed": { "max": 20 }
+    },
+    {
       "key": "daysPerYear",
       "type": "number",
       "name": { "en": "Days a year" },

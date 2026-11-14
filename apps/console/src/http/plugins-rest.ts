@@ -510,6 +510,48 @@ export function registerPluginsRest(
     }
   });
 
+  // The value of a keyed secret under one key (ADR-0111): set and removed as one secret is, the
+  // key in the path, held to its spelling by the registry.
+  app.put(`${PLUGIN}/secrets/:name/keys/:under`, tooLarge, async (c) => {
+    const by = await administering(c);
+    if (by instanceof Response) {
+      return by;
+    }
+    const key = keyOf(c);
+    const name = secretNameOf(c);
+    if (key === undefined || name === undefined) {
+      return notFound(c);
+    }
+    const input = await bodyOf(c, restPluginSecretInputSchema);
+    if (input instanceof Response) {
+      return input;
+    }
+    try {
+      await plugins.setSecret(key, name, input.value, by, c.req.param("under") ?? "");
+      return c.body(null, 204);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  app.delete(`${PLUGIN}/secrets/:name/keys/:under`, async (c) => {
+    const by = await administering(c);
+    if (by instanceof Response) {
+      return by;
+    }
+    const key = keyOf(c);
+    const name = secretNameOf(c);
+    if (key === undefined || name === undefined) {
+      return notFound(c);
+    }
+    try {
+      await plugins.removeSecret(key, name, by, c.req.param("under") ?? "");
+      return c.body(null, 204);
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
+
   app.get(`${PLUGIN}/grants`, async (c) => {
     const by = await readingAdministrator(c);
     if (by instanceof Response) {

@@ -226,6 +226,29 @@ describe("createTestContext", () => {
     expect(await ctx.secrets.verify("token", "other", signature, "hmac-sha256")).toBe(false);
   });
 
+  it("keeps a keyed secret's values by key, forgets one and moves one kept from before (ADR-0111)", async () => {
+    const given = { botToken: { T2: "xoxb-2", T1: "xoxb-1" } };
+    const ctx = createTestContext({ secrets: { ...given, legacy: "xoxb-0" } });
+    expect(await ctx.secrets.has("botToken", "T1")).toBe(true);
+    expect(await ctx.secrets.has("botToken")).toBe(false);
+    expect(await ctx.secrets.has("botToken", "T9")).toBe(false);
+    expect((await ctx.secrets.keys("botToken")).map((one) => [one.key, one.set])).toEqual([
+      ["T1", true],
+      ["T2", true],
+    ]);
+    expect(await ctx.secrets.forget("botToken", "T2")).toBe(true);
+    expect(await ctx.secrets.forget("botToken", "T2")).toBe(false);
+    expect(await ctx.secrets.status("botToken", "T2")).toMatchObject({ set: false });
+    expect(given.botToken).toEqual({ T2: "xoxb-2", T1: "xoxb-1" });
+    await expect(ctx.secrets.sign("botToken", "payload", "hmac-sha256")).rejects.toMatchObject({
+      code: "plugin.forbidden",
+    });
+    expect(await ctx.secrets.move("legacy", "T0")).toBe(true);
+    expect(await ctx.secrets.has("legacy")).toBe(false);
+    expect(await ctx.secrets.has("legacy", "T0")).toBe(true);
+    expect(await ctx.secrets.move("legacy", "T0")).toBe(false);
+  });
+
   it("answers an endpoint's address from the public origin given, and refuses without one", async () => {
     const ctx = createTestContext({
       plugin: { key: "leave" },

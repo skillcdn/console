@@ -13,19 +13,41 @@ type Sent = Parameters<OutboundSend>[0];
 const encode = (text: string) => new TextEncoder().encode(text);
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
-/** The plugin's secret settings as the registry answers them: a value where one is set, and the hosts it is pinned to. */
+/**
+ * The plugin's secret settings as the registry answers them: a value where one is set, the hosts
+ * it is pinned to, and for a keyed one (ADR-0111) its bound and the values it keeps by key.
+ */
 const SETTINGS: Readonly<
-  Record<string, { readonly value?: string; readonly hosts?: readonly string[] }>
+  Record<
+    string,
+    {
+      readonly value?: string;
+      readonly hosts?: readonly string[];
+      readonly keyed?: { readonly max: number };
+      readonly keys?: Readonly<Record<string, string>>;
+    }
+  >
 > = {
   apiToken: { value: "t0k/3n" },
   pair: { value: "client:s3cr3t" },
   botToken: { hosts: ["api.example.test"] },
   pinned: { value: "p1n", hosts: ["*.elsewhere.test"] },
+  teamToken: { hosts: ["api.example.test"], keyed: { max: 2 }, keys: { T1: "xoxb-t1-s3cret" } },
 };
 
-function harness(answer: (input: Sent) => OutboundAnswer) {
+function harness(
+  answer: (input: Sent) => OutboundAnswer,
+  options: { readonly keepsNothingMore?: boolean } = {},
+) {
   const sent: Sent[] = [];
-  const sealed: { name: string; value: string; host: string }[] = [];
+  const sealed: { name: string; key?: string; value: string; host: string }[] = [];
+  // What the keyed secrets keep, changed by what is sealed, as the registry's table would be.
+  const kept = new Map(
+    Object.entries(SETTINGS).map(([name, setting]) => [
+      name,
+      new Map(Object.entries(setting.keys ?? {})),
+    ]),
+  );
   const outbound = new Outbound({
     clock: { now: () => new Date("2026-11-08T12:00:00.000Z") },
     logger: pino({ level: "silent" }),
@@ -36,21 +58,35 @@ function harness(answer: (input: Sent) => OutboundAnswer) {
     },
   });
   const secrets: SecretAccess = {
-    sealable: (name) => {
+    sealable: async (name) => {
       const setting = SETTINGS[name];
       if (setting === undefined) {
         throw new PluginRefusal("plugin.invalid_args", `${name} is not a secret setting`);
       }
-      return { hosts: setting.hosts };
+      return {
+        hosts: setting.hosts,
+        keyed:
+          setting.keyed === undefined
+            ? undefined
+            : { max: setting.keyed.max, keys: new Set(kept.get(name)?.keys()) },
+      };
     },
-    open: async (name) => {
+    open: async (name, key) => {
       const setting = SETTINGS[name];
-      return setting?.value === undefined
+      const value = key === undefined ? setting?.value : kept.get(name)?.get(key);
+      return value === undefined
         ? undefined
-        : { value: setting.value, expiresAt: undefined, hosts: setting.hosts };
+        : { value, expiresAt: undefined, hosts: setting?.hosts };
     },
-    seal: async (name, value, _expiresAt, host) => {
-      sealed.push({ name, value, host });
+    seal: async (name, key, value, _expiresAt, host) => {
+      if (options.keepsNothingMore === true) {
+        return false;
+      }
+      if (key !== undefined) {
+        kept.get(name)?.set(key, value);
+      }
+      sealed.push({ name, ...(key === undefined ? {} : { key }), value, host });
+      return true;
     },
   };
   const fetch = (url: string, init: PluginFetchInit) =>
@@ -259,5 +295,123 @@ describe("the hosts a secret is sealed from", () => {
       "plugin.invalid_args",
     );
     expect(sent).toHaveLength(2);
+  });
+});
+
+describe("a secret kept per key (ADR-0111)", () => {
+  /** Slack's answer to an installation: the bot's token, and the workspace it was installed in. */
+  const installed = (team: unknown) => (): OutboundAnswer => ({
+    status: 200,
+    headers: { "content-type": "application/json" },
+    bytes: encode(
+      JSON.stringify({ ok: true, access_token: "xoxb-new-s3cret", team: { id: team } }),
+    ),
+  });
+
+  it("sealed under the key the same answer names, or under the key the plugin names", async () => {
+    const { fetch, sealed } = harness(installed("T2"));
+    const answer = await fetch("https://api.example.test/oauth.v2.access", {
+      method: "POST",
+      seal: { teamToken: { path: "$.access_token", key: "$.team.id", expiresIn: 3600 } },
+    });
+    expect(answer.sealed).toEqual({ teamToken: "sealed" });
+    // The key is no secret, and stays in the answer for the plugin to read.
+    expect(JSON.parse(text(answer.bytes))).toEqual({
+      ok: true,
+      access_token: "[sealed]",
+      team: { id: "T2" },
+    });
+    const literal = await fetch("https://api.example.test/oauth.v2.access", {
+      method: "POST",
+      seal: { teamToken: { path: "$.access_token", key: "T1" } },
+    });
+    expect(literal.sealed).toEqual({ teamToken: "sealed" });
+    expect(sealed).toEqual([
+      { name: "teamToken", key: "T2", value: "xoxb-new-s3cret", host: "api.example.test" },
+      { name: "teamToken", key: "T1", value: "xoxb-new-s3cret", host: "api.example.test" },
+    ]);
+  });
+
+  it("refused before the request goes out, sealed without a key or with one where the secret keeps one value", async () => {
+    const { fetch, sent } = harness(installed("T2"));
+    for (const seal of [
+      { teamToken: "$.access_token" },
+      { teamToken: { path: "$.access_token" } },
+      { botToken: { path: "$.access_token", key: "T2" } },
+      { teamToken: { path: "$.access_token", key: "T 2" } },
+      { teamToken: { path: "$.access_token", key: 2 } },
+      { teamToken: { path: "$.access_token", key: "x".repeat(65) } },
+    ]) {
+      expect(
+        await codeOf(fetch("https://api.example.test/", { seal } as unknown as PluginFetchInit)),
+      ).toBe("plugin.invalid_args");
+    }
+    expect(
+      await codeOf(
+        fetch("https://api.example.test/", {
+          secret: { name: "teamToken", key: "T 1", as: "bearer" },
+        }),
+      ),
+    ).toBe("plugin.invalid_args");
+    expect(sent).toEqual([]);
+  });
+
+  it("never sealed, and withheld, where the answer holds no key as a key is spelled", async () => {
+    for (const team of [undefined, 42, "T 2", "", "x".repeat(65)]) {
+      const { fetch, sealed } = harness(installed(team));
+      const answer = await fetch("https://api.example.test/oauth.v2.access", {
+        method: "POST",
+        seal: { teamToken: { path: "$.access_token", key: "$.team.id" } },
+      });
+      expect(answer.sealed).toEqual({ teamToken: "no_key" });
+      expect(JSON.parse(text(answer.bytes)).access_token).toBe("[withheld]");
+      expect(text(answer.bytes)).not.toContain("xoxb-new-s3cret");
+      expect(sealed).toEqual([]);
+    }
+  });
+
+  it("never sealed, and withheld, under a key past the secret's bound; a key it keeps is sealed again", async () => {
+    const { fetch, sealed } = harness(installed("T2"));
+    const seal = (key: string) =>
+      fetch("https://api.example.test/oauth.v2.access", {
+        method: "POST",
+        seal: { teamToken: { path: "$.access_token", key } },
+      });
+    expect((await seal("T2")).sealed).toEqual({ teamToken: "sealed" });
+    const past = await seal("T3");
+    expect(past.sealed).toEqual({ teamToken: "too_many" });
+    expect(JSON.parse(text(past.bytes)).access_token).toBe("[withheld]");
+    expect((await seal("T1")).sealed).toEqual({ teamToken: "sealed" });
+    expect(sealed.map((one) => one.key)).toEqual(["T2", "T1"]);
+  });
+
+  it("past its bound where another request took the last place meanwhile, and the value is never handed over", async () => {
+    const { fetch } = harness(installed("T2"), { keepsNothingMore: true });
+    const answer = await fetch("https://api.example.test/oauth.v2.access", {
+      method: "POST",
+      seal: { teamToken: { path: "$.access_token", key: "$.team.id" } },
+    });
+    expect(answer.sealed).toEqual({ teamToken: "too_many" });
+    expect(text(answer.bytes)).not.toContain("xoxb-new-s3cret");
+  });
+
+  it("put into a request by its key, and an echo of it sealed under no other key", async () => {
+    const { fetch, sent, sealed } = harness(echo);
+    const echoed = await fetch("https://api.example.test/echo", {
+      secret: { name: "teamToken", key: "T1", as: "bearer" },
+      seal: { teamToken: { path: "$.headers.authorization", key: "T2" } },
+    });
+    expect(sent[0]?.headers.authorization).toBe("Bearer xoxb-t1-s3cret");
+    expect(echoed.sealed).toEqual({ teamToken: "echoed" });
+    expect(text(echoed.bytes)).not.toContain("xoxb-t1-s3cret");
+    // Under the same key it is the same secret again, as a refresh token that comes back is.
+    const again = await fetch("https://api.example.test/echo", {
+      secret: { name: "teamToken", key: "T1", as: "bearer" },
+      seal: { teamToken: { path: "$.headers.authorization", key: "T1" } },
+    });
+    expect(again.sealed).toEqual({ teamToken: "sealed" });
+    expect(sealed).toEqual([
+      { name: "teamToken", key: "T1", value: "Bearer xoxb-t1-s3cret", host: "api.example.test" },
+    ]);
   });
 });

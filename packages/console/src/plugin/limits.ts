@@ -27,6 +27,8 @@ export const MAX_PLUGIN_INDEXES = 8;
 export const MAX_PLUGIN_ABOUT_LENGTH = 200;
 /** The options of an `enum` setting or argument. */
 export const MAX_PLUGIN_OPTIONS = 50;
+/** The most keys a keyed secret setting may keep a value under, whatever its `max` says (ADR-0111). */
+export const MAX_PLUGIN_SECRET_KEYS = 1000;
 /** A record, how many a plugin keeps, and how many versions one record keeps. */
 export const MAX_PLUGIN_RECORD_BYTES = 64 * 1024;
 export const MAX_PLUGIN_RECORDS = 100_000;

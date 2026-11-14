@@ -1,5 +1,5 @@
 import type { SealOutcome, SecretPlacement, SecretSeal } from "@skillcdn/console/plugin";
-import { PluginRefusal } from "@skillcdn/console/plugin";
+import { isPluginSecretKey, PluginRefusal } from "@skillcdn/console/plugin";
 
 // Where a secret goes into an outbound request, and what of an answer is sealed as one
 // (docs/specs/plugins.md, "The context", `ctx.fetch`; ADR-0070): pure, so that the tests need no
@@ -153,9 +153,14 @@ export function validateSeal(value: unknown): Readonly<Record<string, SecretSeal
       typeof wanted === "string"
         ? { path: wanted, expiresIn: undefined }
         : typeof wanted === "object" && wanted !== null && !Array.isArray(wanted)
-          ? (wanted as { readonly path?: unknown; readonly expiresIn?: unknown })
+          ? (wanted as {
+              readonly path?: unknown;
+              readonly expiresIn?: unknown;
+              readonly key?: unknown;
+            })
           : {};
     const { path, expiresIn } = given;
+    const key = "key" in given ? given.key : undefined;
     if (typeof path !== "string" || !PATH.test(path)) {
       throw new PluginRefusal(
         "plugin.invalid_args",
@@ -172,9 +177,31 @@ export function validateSeal(value: unknown): Readonly<Record<string, SecretSeal
         `the seal of ${name} says how long it lasts in seconds, or as a path to the seconds`,
       );
     }
-    seal[name] = expiresIn === undefined ? path : { path, expiresIn };
+    // A key is a path into the answer or the key itself, which no path is spelled as (ADR-0111).
+    if (
+      key !== undefined &&
+      !(typeof key === "string" && (PATH.test(key) || isPluginSecretKey(key)))
+    ) {
+      throw new PluginRefusal(
+        "plugin.invalid_args",
+        `the seal of ${name} names its key as a path into the answer, or as letters, digits, _ and -, up to 64`,
+      );
+    }
+    seal[name] =
+      expiresIn === undefined && key === undefined
+        ? path
+        : {
+            path,
+            ...(expiresIn === undefined ? {} : { expiresIn }),
+            ...(key === undefined ? {} : { key }),
+          };
   }
   return seal;
+}
+
+/** The key a seal names (ADR-0111), as a path into the answer or as the key itself; none for a secret that is not keyed. */
+export function sealKeyOf(seal: SecretSeal): string | undefined {
+  return typeof seal === "string" ? undefined : seal.key;
 }
 
 /**
@@ -201,19 +228,24 @@ export function readPath(value: unknown, path: string): unknown {
   return current;
 }
 
-/** The path a seal names, and how long its value lasts, in seconds or as a path to them. */
+/** The path a seal names, how long its value lasts, in seconds or as a path to them, and its key. */
 function sealOf(seal: SecretSeal): {
   readonly path: string;
   readonly expiresIn: number | string | undefined;
+  readonly key: string | undefined;
 } {
   return typeof seal === "string"
-    ? { path: seal, expiresIn: undefined }
-    : { path: seal.path, expiresIn: seal.expiresIn };
+    ? { path: seal, expiresIn: undefined, key: undefined }
+    : { path: seal.path, expiresIn: seal.expiresIn, key: seal.key };
 }
 
-/** What was taken out of an answer to be sealed: the setting's name, the value, and when it expires. */
+/**
+ * What was taken out of an answer to be sealed: the setting's name, the key of a keyed one
+ * (ADR-0111), the value, and when it expires.
+ */
 export interface Sealed {
   readonly name: string;
+  readonly key: string | undefined;
   readonly value: string;
   readonly expiresAt: Date | undefined;
 }
@@ -224,11 +256,18 @@ const SEALED_MARK = "[sealed]";
 /** What the plugin reads where the console withheld a value: one it could not seal, or a secret the request carried. */
 const WITHHELD_MARK = "[withheld]";
 
-/** A secret a request carried, by its setting, as the forms it may come back in. */
+/** A secret a request carried, by its setting and the key of a keyed one, as the forms it may come back in. */
 export interface Carried {
   readonly name: string;
+  readonly key?: string | undefined;
   readonly forms: readonly string[];
 }
+
+/**
+ * Whether a keyed secret takes a value under a key (ADR-0111): one it keeps, or another below its
+ * bound. Answers for every key of a setting that is not keyed.
+ */
+export type KeyAdmits = (name: string, key: string) => boolean;
 
 /** An answer as sealing leaves it: the bytes the plugin reads, what to seal, and what became of each value named. */
 export interface SealedAnswer {
@@ -248,6 +287,9 @@ export interface SealedAnswer {
  * is no JSON object or array is withheld whole, since nothing in it can be told apart from the
  * values named. A path that leads to nothing, `null` or an empty string seals nothing and takes
  * nothing out. Every value is read before any is replaced, so that no seal reads another's mark.
+ * A keyed secret (ADR-0111) is sealed under its key, read from the answer where the seal names a
+ * path: a key the answer does not hold as a key is spelled, and a key past the secret's bound,
+ * seal nothing and withhold the value as well.
  */
 export function sealAnswer(
   bytes: Uint8Array,
@@ -255,6 +297,7 @@ export function sealAnswer(
   now: Date,
   maxLength: number,
   carried: readonly Carried[] = [],
+  admits: KeyAdmits = () => true,
 ): SealedAnswer {
   const entries = Object.entries(seal);
   if (entries.length === 0) {
@@ -276,14 +319,23 @@ export function sealAnswer(
     };
   }
   const named = entries.map(([name, wanted]) => {
-    const { path, expiresIn } = sealOf(wanted);
-    return { name, path, expiresIn, value: readPath(parsed, path) };
+    const { path, expiresIn, key } = sealOf(wanted);
+    const found =
+      key === undefined ? undefined : key.startsWith("$.") ? readPath(parsed, key) : key;
+    return {
+      name,
+      path,
+      expiresIn,
+      keyed: key !== undefined,
+      key: isPluginSecretKey(found) ? found : undefined,
+      value: readPath(parsed, path),
+    };
   });
   const sealed: Sealed[] = [];
   const outcomes: Record<string, SealOutcome> = {};
   const taken: string[] = [];
   const marks: (readonly [path: string, mark: string])[] = [];
-  for (const { name, path, expiresIn, value } of named) {
+  for (const { name, path, expiresIn, keyed, key, value } of named) {
     if (value === undefined || value === null || value === "") {
       outcomes[name] = "absent";
       continue;
@@ -295,15 +347,22 @@ export function sealAnswer(
     }
     taken.push(value);
     // A value that holds a secret the request carried is an echo of it: sealed as another
-    // setting, it would go where that setting lets it, past the hosts its own setting names.
+    // setting, it would go where that setting lets it, past the hosts its own setting names; and
+    // under another key of the same, it would stand for what that key stands for.
     const withheld: SealOutcome | undefined =
       value.length > maxLength
         ? "too_long"
-        : carried.some(
-              (secret) => secret.name !== name && secret.forms.some((form) => value.includes(form)),
-            )
-          ? "echoed"
-          : undefined;
+        : keyed && key === undefined
+          ? "no_key"
+          : carried.some(
+                (secret) =>
+                  (secret.name !== name || secret.key !== key) &&
+                  secret.forms.some((form) => value.includes(form)),
+              )
+            ? "echoed"
+            : key !== undefined && !admits(name, key)
+              ? "too_many"
+              : undefined;
     if (withheld !== undefined) {
       outcomes[name] = withheld;
       marks.push([path, WITHHELD_MARK]);
@@ -319,7 +378,7 @@ export function sealAnswer(
       typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0
         ? new Date(now.getTime() + Math.min(Math.floor(seconds), MAX_SECRET_LIFE_SECONDS) * 1000)
         : undefined;
-    sealed.push({ name, value, expiresAt });
+    sealed.push({ name, key, value, expiresAt });
     outcomes[name] = "sealed";
     marks.push([path, SEALED_MARK]);
   }

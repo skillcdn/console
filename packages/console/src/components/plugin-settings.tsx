@@ -790,7 +790,11 @@ function SettingsForm(props: {
  */
 function secretStanding(
   settings: Messages["plugins"]["settings"],
-  setting: RestPluginSetting,
+  setting: {
+    readonly setAt: string | null;
+    readonly source?: string | null | undefined;
+    readonly expiresAt?: string | null | undefined;
+  },
   language: string,
 ): string {
   const when = formatInstant(setting.setAt ?? "", language);
@@ -873,6 +877,96 @@ function SecretRow(props: {
               {words.common.remove}
             </Button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A secret kept per key (ADR-0111): how many keys hold a value of how many it may keep, each key
+ * on a line with how its value stands and the way to remove it, and a key and a value to set one
+ * by hand. The values are never shown; the keys are no secret.
+ */
+function KeyedSecretRow(props: {
+  readonly setting: RestPluginSetting;
+  readonly language: string;
+  readonly busy: boolean;
+  readonly onSet: (key: string, value: string) => void;
+  readonly onRemove: (key: string) => void;
+}) {
+  const words = useWords();
+  const settings = words.plugins.settings;
+  const [key, setKey] = useState("");
+  const [value, setValue] = useState("");
+  const id = useId();
+  const { setting } = props;
+  const keys = setting.keys ?? [];
+  const max = setting.keyed?.max ?? keys.length;
+  return (
+    <div className="sc-settings-row">
+      <div>
+        <label className="sc-settings-label" htmlFor={id}>
+          {pluginWord(setting.name, props.language)}
+        </label>
+        <p className="sc-settings-hint">
+          {keys.length === 0 ? settings.secretKeysNone : settings.secretKeys(keys.length, max)}
+        </p>
+        {setting.hosts !== null && setting.hosts !== undefined && setting.hosts.length > 0 && (
+          <p className="sc-settings-hint">{settings.secretHosts(setting.hosts.join(", "))}</p>
+        )}
+        {setting.description !== null && (
+          <p className="sc-settings-hint">{pluginWord(setting.description, props.language)}</p>
+        )}
+      </div>
+      <div className="sc-settings-control">
+        {keys.map((kept) => (
+          <div key={kept.key} className="sc-plugin-line">
+            <div>
+              <code className="sc-project-key">{kept.key}</code>
+              <p className="sc-settings-hint">{secretStanding(settings, kept, props.language)}</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={props.busy}
+              aria-label={settings.secretKeyRemove(kept.key)}
+              onClick={() => props.onRemove(kept.key)}
+            >
+              {words.common.remove}
+            </Button>
+          </div>
+        ))}
+        <input
+          id={id}
+          className="sc-input"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={settings.secretKeyNew}
+          aria-label={settings.secretKeyNew}
+          value={key}
+          onChange={(event) => setKey(event.target.value)}
+        />
+        <div className="sc-plugin-line">
+          <input
+            className="sc-input sc-plugin-line-input"
+            type="password"
+            autoComplete="off"
+            placeholder={settings.secretNew}
+            aria-label={settings.secretNew}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+          <Button
+            disabled={props.busy || key.trim().length === 0 || value.length === 0}
+            onClick={() => {
+              props.onSet(key.trim(), value);
+              setKey("");
+              setValue("");
+            }}
+          >
+            {words.common.save}
+          </Button>
         </div>
       </div>
     </div>
@@ -1564,16 +1658,27 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
             />
             {detail.settings
               .filter((setting) => setting.type === "secret")
-              .map((setting) => (
-                <SecretRow
-                  key={setting.key}
-                  setting={setting}
-                  language={language}
-                  busy={busy}
-                  onSet={(value) => change(() => plugin.setSecret(setting.key, value))}
-                  onRemove={() => change(() => plugin.removeSecret(setting.key))}
-                />
-              ))}
+              .map((setting) =>
+                setting.keyed !== null && setting.keyed !== undefined ? (
+                  <KeyedSecretRow
+                    key={setting.key}
+                    setting={setting}
+                    language={language}
+                    busy={busy}
+                    onSet={(key, value) => change(() => plugin.setSecret(setting.key, value, key))}
+                    onRemove={(key) => change(() => plugin.removeSecret(setting.key, key))}
+                  />
+                ) : (
+                  <SecretRow
+                    key={setting.key}
+                    setting={setting}
+                    language={language}
+                    busy={busy}
+                    onSet={(value) => change(() => plugin.setSecret(setting.key, value))}
+                    onRemove={() => change(() => plugin.removeSecret(setting.key))}
+                  />
+                ),
+              )}
           </div>
         </section>
       )}

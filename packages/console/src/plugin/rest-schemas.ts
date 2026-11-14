@@ -160,6 +160,17 @@ export const restPluginsSchema = z.object({
 });
 export type RestPlugins = z.infer<typeof restPluginsSchema>;
 
+/** The value of a keyed secret under one key (ADR-0111), as the pages show it: never the value. */
+export const restPluginSecretKeySchema = z.object({
+  key: z.string(),
+  setAt: instant,
+  /** When it expires, or `null`. */
+  expiresAt: z.nullable(instant),
+  /** `administrator`, or the host of the answer it was sealed from. */
+  source: z.string(),
+});
+export type RestPluginSecretKey = z.infer<typeof restPluginSecretKeySchema>;
+
 /** A setting as the pages draw its form: the manifest's declaration, and whether and what it holds. */
 export const restPluginSettingSchema = z.object({
   key: z.string(),
@@ -187,6 +198,13 @@ export const restPluginSettingSchema = z.object({
   hosts: z.optional(z.nullable(z.array(z.string()))),
   /** `verify` for a secret that verifies and signs nothing, or `null`. */
   use: z.optional(z.nullable(z.literal("verify"))),
+  /** For a secret that keeps a value per key (ADR-0111), how many keys it may keep; `null` otherwise. Answered from 0.5.1 and read as optional. */
+  keyed: z.optional(z.nullable(z.object({ max: z.int() }))),
+  /**
+   * For a keyed secret, the keys it keeps a value under, each with when and from where it was set
+   * and when it expires, never the value; `null` otherwise. Answered from 0.5.1 and read as optional.
+   */
+  keys: z.optional(z.nullable(z.array(restPluginSecretKeySchema))),
 });
 export type RestPluginSetting = z.infer<typeof restPluginSettingSchema>;
 

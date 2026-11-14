@@ -1,0 +1,8 @@
+{
+  "name": "console-plugin-chat",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A fixture: a token kept per workspace of a chat service, for the tests of the keyed secrets.",
+  "license": "MIT",
+  "type": "module"
+}

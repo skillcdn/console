@@ -6249,6 +6249,48 @@ describe("the plugins on the command line (ADR-0049, ADR-0053)", () => {
     expect(await runCli(["plugin", "hello", "capabilities", "files"], stray.io)).toBe(EXIT.usage);
   });
 
+  it("lists a secret kept per key by its keys, and sets and removes its value under one key (ADR-0111)", async () => {
+    const TEAM = {
+      ...SECRET,
+      key: "teamToken",
+      name: { en: "Bot token" },
+      set: true,
+      setAt: null,
+      keyed: { max: 50 },
+      keys: [
+        { key: "T0001", setAt: WHEN, expiresAt: null, source: "slack.com" },
+        { key: "T0002", setAt: WHEN, expiresAt: null, source: "administrator" },
+      ],
+    };
+    const { fetch, calls } = fakeConsole({
+      [`GET ${AT}`]: { body: { ...DETAIL, settings: [SETTING, TEAM] } },
+      "GET /api/v1/me": { body: ME },
+      [`PUT ${AT}/secrets/teamToken/keys/T0003`]: { status: 204 },
+      [`DELETE ${AT}/secrets/teamToken/keys/T0001`]: { status: 204 },
+    });
+    const shown = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["plugin", "hello", "settings"], shown.io)).toBe(EXIT.ok);
+    expect(shown.out()).toContain("  teamToken (secret, per key): 2 of 50 keys  Bot token\n");
+    expect(shown.out()).toMatch(/\n {4}T0001: set [^\n]* from slack\.com\n {4}T0002: set /);
+    const sealed = harness({ fetch, env: SIGNED_IN, readStdin: async () => "xoxb-s3cret\n" });
+    expect(
+      await runCli(["plugin", "hello", "secret", "teamToken", "--key", "T0003"], sealed.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`PUT ${AT}/secrets/teamToken/keys/T0003`);
+    expect(calls.at(-1)?.body).toEqual({ value: "xoxb-s3cret" });
+    expect(sealed.out()).toContain("Set the secret teamToken under T0003 of hello");
+    expect(sealed.out()).not.toContain("xoxb-s3cret");
+    const removed = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["plugin", "hello", "secret", "teamToken", "--key", "T0001", "--remove"],
+        removed.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`DELETE ${AT}/secrets/teamToken/keys/T0001`);
+    expect(removed.out()).toContain("Removed the secret teamToken under T0001 of hello.");
+  });
+
   it("enables with consent to every capability after saying what each opens, configures, seals a secret, grants and revokes", async () => {
     const { fetch, calls } = fakeConsole({
       [`GET ${AT}`]: { body: { ...DETAIL, state: "installed", capabilities: ["files"] } },

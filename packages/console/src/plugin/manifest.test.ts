@@ -318,7 +318,10 @@ describe("parsePluginManifest", () => {
     expect(setting({ type: "list", of: "list" })).toMatch(/^settings\.0\.of: /);
     expect(setting({ type: "person", default: "x" })).toMatch(/takes no default/);
     expect(setting({ type: "secret", default: "x" })).toMatch(/takes no default/);
-    expect(setting({ hosts: ["api.example.com"] })).toMatch(/only a secret takes hosts or use/);
+    expect(setting({ hosts: ["api.example.com"] })).toMatch(
+      /only a secret takes hosts, use or keyed/,
+    );
+    expect(setting({ keyed: { max: 5 } })).toMatch(/only a secret takes hosts, use or keyed/);
     expect(setting({ type: "secret", hosts: ["not a host"] })).toMatch(/is not a host/);
     expect(setting({ type: "secret", hosts: ["webrtc"] })).toMatch(/is not a host/);
     expect(setting({ type: "secret", use: "sign" })).toMatch(/^settings\.0\.use/);
@@ -328,6 +331,22 @@ describe("parsePluginManifest", () => {
       /not a list of number/,
     );
     expect(setting({ type: "list", of: "number", default: [1, 2] })).toBeUndefined();
+  });
+
+  it("takes a secret that keeps a value per key, bounded, never required and never verifying (ADR-0111)", () => {
+    const setting = (changes: Record<string, unknown>) =>
+      problemsOf({ settings: [{ key: "s", type: "secret", name: { en: "S" }, ...changes }] })[0];
+    expect(setting({ keyed: { max: 50 }, hosts: ["slack.com"] })).toBeUndefined();
+    expect(setting({ keyed: { max: 1000 } })).toBeUndefined();
+    expect(setting({ keyed: { max: 1001 } })).toMatch(/^settings\.0\.keyed\.max/);
+    expect(setting({ keyed: { max: 0 } })).toMatch(/^settings\.0\.keyed\.max/);
+    expect(setting({ keyed: { max: 2.5 } })).toMatch(/^settings\.0\.keyed\.max/);
+    expect(setting({ keyed: {} })).toMatch(/^settings\.0\.keyed\.max/);
+    expect(setting({ keyed: { max: 5, pattern: "x" } })).toMatch(/^settings\.0\.keyed/);
+    expect(setting({ keyed: { max: 5 }, use: "verify" })).toMatch(/a keyed secret takes no use/);
+    expect(setting({ keyed: { max: 5 }, required: true })).toMatch(
+      /a keyed secret is not required/,
+    );
   });
 
   it("holds what a plugin asks of other plugins to its shape, and never of itself (ADR-0072)", () => {

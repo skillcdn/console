@@ -27,7 +27,11 @@ function sentenceOf(event: RestEvent, words: Messages): string {
       : `#${data.number}${data.title === undefined ? "" : ` ${data.title}`}`;
   const project = data.name ?? data.key ?? feed.aProject;
   const changed = (data.fields ?? []).map((field) => feed.field[field] ?? field);
-  const fields = changed.length === 0 ? feed.something : changed.join(", ");
+  // A keyed secret's value is named with the key it is kept under (ADR-0111).
+  const fields =
+    changed.length === 0
+      ? feed.something
+      : `${changed.join(", ")}${data.under === undefined ? "" : ` (${data.under})`}`;
   const page = feed.thePage(data.title ?? data.path ?? "");
   const role = (value: string | undefined): string =>
     value === "admin"

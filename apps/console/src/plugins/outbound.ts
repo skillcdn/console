@@ -3,6 +3,7 @@ import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { MAX_PLUGIN_SECRET_LENGTH } from "@skillcdn/console/api";
 import {
+  isPluginSecretKey,
   MAX_PLUGIN_OUTBOUND_BYTES,
   outboundAllows,
   PLUGIN_OUTBOUND_MS,
@@ -24,6 +25,7 @@ import {
   SECRETS_PER_REQUEST,
   scrubAnswer,
   sealAnswer,
+  sealKeyOf,
   validateSeal,
 } from "./placements.js";
 import { createRateLimiter, type RateLimiter } from "./rate.js";
@@ -85,15 +87,31 @@ export interface OpenedSecret {
   readonly hosts: readonly string[] | undefined;
 }
 
+/** What the console says of a secret setting a request seals, before the request goes out. */
+export interface Sealable {
+  /** The hosts the setting pins it to, whose answers alone it is sealed from; any when none. */
+  readonly hosts: readonly string[] | undefined;
+  /** For a keyed secret (ADR-0111): how many keys it may keep, and the keys it keeps now. */
+  readonly keyed: { readonly max: number; readonly keys: ReadonlySet<string> } | undefined;
+}
+
 /** The console's side of the secrets a request names: opening one to put it in, sealing one from the answer. */
 export interface SecretAccess {
   /**
    * Refuses a name that is no secret setting of the plugin, before the request goes out; answers
-   * the hosts its setting pins it to otherwise, whose answers alone it is sealed from.
+   * what is needed to seal it otherwise.
    */
-  sealable(name: string): { readonly hosts: readonly string[] | undefined };
-  open(name: string): Promise<OpenedSecret | undefined>;
-  seal(name: string, value: string, expiresAt: Date | undefined, host: string): Promise<void>;
+  sealable(name: string): Promise<Sealable>;
+  /** The secret's value, under `key` for a keyed one; refuses a key given for one that is not, and none for one that is. */
+  open(name: string, key: string | undefined): Promise<OpenedSecret | undefined>;
+  /** Seals the value, under `key` for a keyed one; answers `false` where a new key would be past the secret's bound. */
+  seal(
+    name: string,
+    key: string | undefined,
+    value: string,
+    expiresAt: Date | undefined,
+    host: string,
+  ): Promise<boolean>;
 }
 
 export interface OutboundOptions {
@@ -193,6 +211,12 @@ function secretsOf(init: PluginFetchInit): readonly SecretUse[] {
     if (typeof use?.name !== "string" || typeof use.as !== "string") {
       throw new PluginRefusal("plugin.invalid_args", "a secret is named, with where it goes");
     }
+    if (use.key !== undefined && !isPluginSecretKey(use.key)) {
+      throw new PluginRefusal(
+        "plugin.invalid_args",
+        `the key of ${use.name} is letters, digits, _ and -, up to 64`,
+      );
+    }
   }
   return uses;
 }
@@ -266,8 +290,21 @@ export class Outbound {
     // What the answer is to give up is checked before anything is sent: a request with a side
     // elsewhere is not made for a seal that would be refused after it.
     const seal = validateSeal(init.seal);
-    for (const name of Object.keys(seal)) {
-      const { hosts } = secrets.sealable(name);
+    const keyed = new Map<string, NonNullable<Sealable["keyed"]>>();
+    for (const [name, wanted] of Object.entries(seal)) {
+      const { hosts, keyed: keeps } = await secrets.sealable(name);
+      // A keyed secret is sealed under a key, and a secret that is not under none (ADR-0111).
+      if ((keeps === undefined) !== (sealKeyOf(wanted) === undefined)) {
+        throw new PluginRefusal(
+          "plugin.invalid_args",
+          keeps === undefined
+            ? `the secret ${name} keeps one value, and is sealed under no key`
+            : `the secret ${name} keeps a value per key, and its seal names the key`,
+        );
+      }
+      if (keeps !== undefined) {
+        keyed.set(name, keeps);
+      }
       // A secret pinned to hosts is sealed from their answers alone, as it goes to them alone: a
       // value from another host could stand in for a token, or for a signing secret and let a
       // forged webhook through.
@@ -291,7 +328,7 @@ export class Outbound {
     const now = this.options.clock.now();
     const carried: Carried[] = [];
     for (const use of secretsOf(init)) {
-      const secret = await secrets.open(use.name);
+      const secret = await secrets.open(use.name, use.key);
       if (secret === undefined) {
         throw new PluginRefusal("plugin.forbidden", `the secret ${use.name} is not set`);
       }
@@ -309,7 +346,7 @@ export class Outbound {
         );
       }
       placed = placeSecret(placed, use.as, secret.value);
-      carried.push({ name: use.name, forms: formsOf(secret.value, use.as) });
+      carried.push({ name: use.name, key: use.key, forms: formsOf(secret.value, use.as) });
     }
     const addresses =
       isIP(host) !== 0
@@ -349,9 +386,18 @@ export class Outbound {
       this.options.clock.now(),
       MAX_PLUGIN_SECRET_LENGTH,
       carried,
+      (name, under) => {
+        const keeps = keyed.get(name);
+        return keeps === undefined || keeps.keys.has(under) || keeps.keys.size < keeps.max;
+      },
     );
+    const outcomes: Record<string, SealOutcome> = { ...sealing.outcomes };
     for (const one of sealing.sealed) {
-      await secrets.seal(one.name, one.value, one.expiresAt, host);
+      // A key added by another request since the keys were read may have taken the last place:
+      // the value is not kept, and was taken out of the answer all the same.
+      if (!(await secrets.seal(one.name, one.key, one.value, one.expiresAt, host))) {
+        outcomes[one.name] = "too_many";
+      }
     }
     // What the console put into the request, or took out of the answer, is taken out of the rest
     // of it in every form it knows: an echo of the request, a redirect carrying its URL.
@@ -366,7 +412,7 @@ export class Outbound {
         method,
         status: answer.status,
         bytes: answer.bytes.byteLength,
-        sealed: sealing.outcomes,
+        sealed: outcomes,
         durationMs: Math.round(performance.now() - startedAt),
       },
       "plugin outbound request",
@@ -375,7 +421,7 @@ export class Outbound {
       status: answer.status,
       headers: scrubbed.headers,
       bytes: scrubbed.bytes,
-      ...(Object.keys(seal).length === 0 ? {} : { sealed: sealing.outcomes }),
+      ...(Object.keys(seal).length === 0 ? {} : { sealed: outcomes }),
     };
   }
 }

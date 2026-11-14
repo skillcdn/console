@@ -1,0 +1,46 @@
+{
+  "key": "chat",
+  "name": {
+    "en": "Chat"
+  },
+  "description": {
+    "en": "Keeps a token per workspace of a chat service, for the tests of the keyed secrets."
+  },
+  "pluginApi": 1,
+  "server": "server/index.js",
+  "capabilities": ["outbound:chat.example.test"],
+  "roles": {
+    "member": {
+      "name": {
+        "en": "Member"
+      },
+      "description": {
+        "en": "Installs and posts."
+      }
+    }
+  },
+  "defaultRole": "member",
+  "board": {
+    "needs": "none"
+  },
+  "settings": [
+    {
+      "key": "tokens",
+      "type": "secret",
+      "name": {
+        "en": "Bot tokens"
+      },
+      "hosts": ["chat.example.test"],
+      "keyed": {
+        "max": 2
+      }
+    },
+    {
+      "key": "apiKey",
+      "type": "secret",
+      "name": {
+        "en": "API key"
+      }
+    }
+  ]
+}

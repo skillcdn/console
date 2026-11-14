@@ -1729,7 +1729,7 @@ function splitWords(
 }
 
 const PLUGIN_USAGE =
-  "console plugin <key> [help [<command>] | <command> [args] | records <collection> | skills | skill <path> | enable | disable | settings | secret <name> | grant <role> | revoke <id>]. console plugins lists the plugins.";
+  "console plugin <key> [help [<command>] | <command> [args] | records <collection> | skills | skill <path> | enable | disable | settings | secret <name> [--key <key>] | grant <role> | revoke <id>]. console plugins lists the plugins.";
 
 const plugin: Command = async (args, io) => {
   const { values, words } = splitWords(args, PLUGIN_GLOBAL_FLAGS);
@@ -2249,31 +2249,38 @@ async function pluginSecret(
   client: PluginClient,
   rest: readonly string[],
 ): Promise<number> {
-  const { values, positionals } = parse(rest, { remove: { type: "boolean" } });
+  const { values, positionals } = parse(rest, {
+    remove: { type: "boolean" },
+    key: { type: "string" },
+  });
   const name = theOne(
     positionals,
-    `Say which secret: console plugin ${client.key} secret <name> [--remove]; the value is typed at the prompt, unseen, or piped in.`,
+    `Say which secret: console plugin ${client.key} secret <name> [--key <key>] [--remove]; the value is typed at the prompt, unseen, or piped in.`,
   );
+  // A secret kept per key (ADR-0111) is set and removed one key at a time.
+  const key = text(values, "key");
+  const which = key === undefined ? `the secret ${name}` : `the secret ${name} under ${key}`;
+  const data = key === undefined ? { name } : { name, key };
   if (on(values, "remove")) {
-    await client.removeSecret(name);
-    answer(io, session, { name, set: false }, () => `Removed the secret ${name} of ${client.key}.`);
+    await client.removeSecret(name, key);
+    answer(io, session, { ...data, set: false }, () => `Removed ${which} of ${client.key}.`);
     return EXIT.ok;
   }
   const value = await secretGiven(
     io,
-    `Secret ${name} of ${client.key} (typed unseen; Enter ends it): `,
+    `Secret ${name}${key === undefined ? "" : ` under ${key}`} of ${client.key} (typed unseen; Enter ends it): `,
   );
   if (value.length === 0) {
     throw misuse(
-      `Type the value at the prompt, or redirect a file into it: console plugin ${client.key} secret ${name} < file. Never give it on the command line or through echo, which a shell keeps; the console seals it and shows it never.`,
+      `Type the value at the prompt, or redirect a file into it: console plugin ${client.key} secret ${name}${key === undefined ? "" : ` --key ${key}`} < file. Never give it on the command line or through echo, which a shell keeps; the console seals it and shows it never.`,
     );
   }
-  await client.setSecret(name, value);
+  await client.setSecret(name, value, key);
   answer(
     io,
     session,
-    { name, set: true },
-    () => `Set the secret ${name} of ${client.key}: sealed, and shown by nothing from now on.`,
+    { ...data, set: true },
+    () => `Set ${which} of ${client.key}: sealed, and shown by nothing from now on.`,
   );
   return EXIT.ok;
 }
