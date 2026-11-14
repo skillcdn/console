@@ -1,0 +1,178 @@
+/* Sources: components/sign-in.tsx */
+
+.sc-sign-in {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--sc-color-glass-edge);
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
+}
+
+/* Signing in: one pane in the light, with the mark on a small stage of its own. */
+
+.sc-sign-in {
+  display: grid;
+  gap: var(--sc-space-4);
+  max-width: 26rem;
+  margin: 10dvh auto 0;
+  padding: var(--sc-space-7) var(--sc-space-6) var(--sc-space-6);
+  border-radius: var(--sc-radius-xl);
+  text-align: center;
+}
+
+.sc-sign-in-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 6.5rem;
+}
+
+/* The light behind the mark, and the rings that leave it. */
+.sc-sign-in-stage::before {
+  content: "";
+  position: absolute;
+  width: 14rem;
+  height: 14rem;
+  border-radius: var(--sc-radius-full);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--sc-color-accent) 35%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+.sc-sign-in-badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-xl);
+  background: var(--sc-color-bg);
+  box-shadow: var(--sc-glass-lift);
+}
+
+.sc-sign-in-badge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--sc-color-accent);
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sc-sign-in-badge::after {
+    animation: sc-ring 3.6s ease-out infinite;
+  }
+}
+
+@keyframes sc-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.sc-sign-in-symbol {
+  width: 2rem;
+  height: 2rem;
+}
+
+.sc-sign-in-wordmark {
+  display: block;
+  max-width: 12rem;
+  height: 1.25rem;
+  margin-inline: auto;
+}
+
+.sc-sign-in-title {
+  font-size: var(--sc-text-xl);
+}
+
+.sc-sign-in-lead {
+  color: var(--sc-color-text-muted);
+}
+
+.sc-sign-in .sc-callout {
+  margin-bottom: 0;
+  text-align: left;
+}
+
+/* The ways in, one under the other, each a button with who gets in through it under it. */
+.sc-sign-in-ways {
+  display: grid;
+  justify-items: center;
+  gap: var(--sc-space-4);
+  margin-top: var(--sc-space-2);
+}
+
+.sc-sign-in-way {
+  display: grid;
+  justify-items: center;
+  gap: var(--sc-space-2);
+  width: 100%;
+}
+
+/* The button is the page's one call: wide, a step taller than a control, the provider's mark
+   before its words. */
+.sc-sign-in-button {
+  width: 100%;
+  max-width: 20rem;
+  min-height: 2.75rem;
+  gap: var(--sc-space-3);
+  font-size: var(--sc-text-md);
+}
+
+.sc-sign-in-button:focus-visible {
+  outline: var(--sc-focus-ring);
+  outline-offset: 3px;
+  border-radius: var(--sc-radius-md);
+}
+
+/* On the way to the provider: the button keeps its color and turns its ring in the text's color. */
+.sc-sign-in-button-going {
+  cursor: progress;
+}
+
+.sc-sign-in-spinner .sc-spinner-ring {
+  width: 1rem;
+  height: 1rem;
+  border-color: color-mix(in srgb, var(--sc-color-accent-contrast) 40%, transparent);
+  border-top-color: var(--sc-color-accent-contrast);
+}
+
+.sc-sign-in-mark {
+  flex: none;
+}
+
+/* A mark in colors of its own sits on a light tile, whatever the button's color. */
+.sc-sign-in-mark-tile {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-accent-contrast);
+}
+
+.sc-sign-in-admits {
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}
+
+@media (max-width: 40rem) {
+  .sc-sign-in {
+    margin-top: var(--sc-space-6);
+    padding: var(--sc-space-6) var(--sc-space-5) var(--sc-space-5);
+  }
+}

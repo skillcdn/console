@@ -1,0 +1,171 @@
+/* Sources: components/workspace.tsx, components/categories.tsx, components/skills.tsx, components/pack-connect.tsx, components/pack-token.tsx */
+
+.sc-skill {
+  border: var(--sc-border);
+  background: var(--sc-color-sheet);
+  box-shadow: var(--sc-shadow-sheet);
+}
+
+/* Skills: the project's, or the organization's, as SkillCDN serves them at the address. */
+
+.sc-skills {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr));
+  gap: var(--sc-space-3);
+}
+
+.sc-skill {
+  display: grid;
+  align-content: start;
+  padding: var(--sc-space-4) var(--sc-space-5);
+  border-radius: var(--sc-radius-lg);
+}
+
+.sc-skill-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-3);
+  margin: 0;
+}
+
+.sc-skill-name {
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-bold);
+}
+
+/* The folder a skill is in: a line of its own under the name, in the code face. */
+.sc-skill-head > .sc-muted {
+  flex: 1 1 100%;
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-skill-description {
+  margin: var(--sc-space-2) 0 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-skill-uri {
+  display: block;
+  margin-top: var(--sc-space-3);
+  padding-top: var(--sc-space-2);
+  border-top: var(--sc-hairline);
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  word-break: break-all;
+}
+
+/* The categories: a row each, with its name and its colour open to an administrator. */
+.sc-categories {
+  display: grid;
+  gap: var(--sc-space-4);
+  max-width: var(--sc-width-prose);
+}
+
+.sc-category-list {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-category-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+}
+
+.sc-category-row > .sc-project-key {
+  margin-inline-start: auto;
+}
+
+.sc-category-form {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+}
+
+.sc-category-form .sc-field-inline {
+  flex: 1 1 10rem;
+}
+
+/* The pack token (ADR-0028, ADR-0036): what it is for first, then the two ways to one side by
+   side, each a card with its words before its controls, and the code shown large while the
+   page waits for the approval. */
+.sc-pack-intro {
+  max-width: var(--sc-width-prose);
+  margin: 0 0 var(--sc-space-5);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-pack-ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--sc-space-4);
+}
+
+.sc-pack-way {
+  display: grid;
+  align-content: start;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-sheet);
+}
+
+.sc-pack-way-title {
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-pack-way .sc-field-hint {
+  margin-top: 0;
+}
+
+.sc-pack-connect {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-pack-connect-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-3);
+}
+
+.sc-pack-code {
+  font-size: var(--sc-text-xl);
+  letter-spacing: var(--sc-tracking-code);
+}
+
+.sc-pack-connect-waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-pack-actions {
+  margin-top: var(--sc-space-5);
+}
+
+@media (max-width: 40rem) {
+  .sc-skill {
+    padding: var(--sc-space-4);
+    border-radius: var(--sc-radius-lg);
+  }
+}

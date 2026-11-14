@@ -54,7 +54,7 @@ export function SessionList(props: SessionListProps) {
         ? words.on(session.browser, session.platform)
         : (session.browser ?? session.platform ?? words.unknownBrowser);
   return (
-    <section className="sc-panel sc-sessions" aria-label={words.title}>
+    <section className="sc-panel" aria-label={words.title}>
       <div className="sc-section-head">
         <h2 className="sc-section-title">{words.title}</h2>
         {props.onEndOthers !== undefined && others.length > 0 && (

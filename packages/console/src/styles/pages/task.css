@@ -1,0 +1,108 @@
+/* Sources: components/task-view.tsx, components/task-list.tsx, components/task-form.tsx */
+
+.sc-links {
+  gap: var(--sc-space-2);
+}
+
+/* The way to add one more line stands at the start, as wide as its words. */
+.sc-links > .sc-button {
+  justify-self: start;
+}
+
+/* One task, and a page of the documents: the text in a column for reading, the facts beside it
+   where the window is wide enough, under it where it is not. */
+
+.sc-task {
+  display: grid;
+  gap: var(--sc-space-5);
+}
+
+.sc-task-editing {
+  max-width: var(--sc-width-prose);
+}
+
+.sc-task-heading {
+  display: grid;
+  flex: 1 1 28rem;
+  gap: var(--sc-space-2);
+  min-width: 0;
+}
+
+.sc-task-parent {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-subtasks {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-subtasks > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  font-size: var(--sc-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.sc-subtasks .sc-badge {
+  margin-inline-start: auto;
+}
+
+.sc-subtasks a {
+  flex: 1 1 14rem;
+  min-width: 0;
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
+  text-decoration: none;
+}
+
+.sc-subtasks a:hover {
+  color: var(--sc-color-accent);
+}
+
+/* Under the wide layout a task reads its text first, then its facts and the ways to its forms, two
+   to a row so that they stay short, then the discussion and what happened: the text says what the
+   task is, and its state is changed right under it. A document keeps its text first. */
+@media (max-width: 63.99rem) {
+  .sc-task .sc-task-main {
+    display: contents;
+  }
+
+  .sc-task .sc-task-aside {
+    order: 1;
+  }
+
+  .sc-task .sc-task-main > .sc-task-section {
+    order: 2;
+  }
+
+  .sc-task .sc-task-aside .sc-facts {
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+}
+
+@media (max-width: 40rem) {
+  /* A task's facts: one to a row, as on the wide layout's side, instead of two abreast with
+     the select and the dates pressed against each other. */
+  .sc-task .sc-task-aside .sc-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 40rem) {
+  .sc-task-parent {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}

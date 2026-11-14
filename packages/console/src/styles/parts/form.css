@@ -1,0 +1,110 @@
+.sc-form > *,
+.sc-field > * {
+  min-width: 0;
+}
+
+.sc-field-label {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: var(--sc-tracking-wide);
+  text-transform: uppercase;
+}
+
+/* Forms */
+
+.sc-form {
+  display: grid;
+  gap: var(--sc-space-4);
+}
+
+.sc-field {
+  display: grid;
+  gap: var(--sc-space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sc-field-inline {
+  grid-auto-flow: column;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-field-label {
+  color: var(--sc-color-text-muted);
+}
+
+.sc-field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--sc-space-4);
+  align-items: start;
+}
+
+.sc-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+/* A form in parts, each under its heading: what one settles before the next, with room between. */
+.sc-form-part {
+  display: grid;
+  gap: var(--sc-space-4);
+  min-width: 0;
+}
+
+.sc-form-part + .sc-form-part {
+  margin-top: var(--sc-space-4);
+}
+
+.sc-form-error {
+  color: var(--sc-color-danger);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-person-row > .sc-field-inline {
+  margin-top: var(--sc-space-1);
+}
+
+.sc-field-hint {
+  margin-top: var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-member-form .sc-field-row {
+  align-items: end;
+}
+
+.sc-filters .sc-field-inline {
+  flex: none;
+}
+
+.sc-settings-form .sc-form-actions {
+  padding-top: var(--sc-space-4);
+  border-top: var(--sc-border);
+}
+
+/* The plugins' settings (docs/specs/plugins.md, "The settings pages"): one plugin's page. */
+
+/* A choice with its box or its dot, on one line with its word. */
+.sc-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  padding-block: var(--sc-space-1);
+}
+
+/* A list of several choices too long for pills: a column of boxes. */
+.sc-check-list {
+  display: grid;
+  gap: var(--sc-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

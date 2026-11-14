@@ -227,7 +227,7 @@ export function TaskForm(props: TaskFormProps) {
           </label>
         )}
       </div>
-      <fieldset className="sc-field sc-workers-field">
+      <fieldset className="sc-field">
         <legend className="sc-field-label">{form.workers}</legend>
         <div className="sc-chips">
           {chosenWorkers.map((person) => (

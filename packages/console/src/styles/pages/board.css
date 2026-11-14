@@ -1,0 +1,380 @@
+/* Sources: components/board.tsx */
+
+.sc-card > *,
+.sc-column-body > * {
+  min-width: 0;
+}
+
+.sc-column {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--sc-color-glass-edge);
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
+}
+
+/* A column of the board has no rim and no lift: its glass alone parts it from the field, so that
+   no line runs down its sides and the gaps between columns stay as light as the field. */
+.sc-column {
+  border-color: transparent;
+  box-shadow: var(--sc-glass-sheen);
+}
+
+.sc-card {
+  border: var(--sc-border);
+  background: var(--sc-color-sheet);
+  box-shadow: var(--sc-shadow-sheet);
+}
+
+/* The board: one pane per state, the tasks in it as cards. It takes the height the page has left
+   and the width the window has, the columns share the width while it is enough for them and
+   scroll sideways when it is not, and each column scrolls within itself. */
+
+.sc-board {
+  display: flex;
+  flex: 1 1 0;
+  align-items: stretch;
+  gap: var(--sc-space-3);
+  min-height: 24rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sc-scrollbar-thumb) transparent;
+}
+
+.sc-column {
+  display: flex;
+  flex: 1 0 var(--sc-column-width);
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  /* The body scrolls; the column clips, so that nothing of it reaches the board's own scrolling. */
+  overflow: hidden;
+  border-radius: var(--sc-radius-xl);
+  scroll-snap-align: start;
+}
+
+.sc-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-2);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border-bottom: var(--sc-border);
+}
+
+.sc-column-header h2 {
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-bold);
+}
+
+/* The name of a column stands first; its count and the way to fold it keep to the end. */
+.sc-column-header > .sc-column-title {
+  margin-inline-end: auto;
+}
+
+/* The way to fold a column of finished work, or to open it again. */
+.sc-column-toggle {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: transparent;
+  color: var(--sc-color-text-muted);
+  transition:
+    background var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-column-toggle:hover {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
+.sc-column-toggle svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* A folded column is a strip: the way to open it on top, its name down its length, its count. */
+/* A folded column is its header alone, the height of a header and as wide as its name: the way
+   to open it, the name and the count in a row, at the top of the board. */
+.sc-column-folded {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: auto;
+}
+
+.sc-column-folded .sc-column-header {
+  gap: var(--sc-space-2);
+  padding: var(--sc-space-3) var(--sc-space-4) var(--sc-space-3) var(--sc-space-3);
+  border-bottom: 0;
+}
+
+.sc-column-folded .sc-column-toggle {
+  order: -1;
+}
+
+.sc-column-in_progress .sc-column-title,
+.sc-column-in_review .sc-column-title {
+  color: var(--sc-color-accent);
+}
+
+.sc-column-done .sc-column-title {
+  color: var(--sc-color-success);
+}
+
+.sc-column-dropped .sc-column-title {
+  color: var(--sc-color-text-faint);
+}
+
+.sc-column-folded .sc-column-header > .sc-column-title {
+  margin-inline-end: 0;
+}
+
+/* The cards of a column scroll within it; where more of them are below, the last one in view
+   fades at the foot rather than being cut, the room below the cards keeping a whole one clear. */
+.sc-column-body {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: var(--sc-space-2);
+  min-height: 0;
+  padding: var(--sc-space-2) var(--sc-space-2) var(--sc-space-6);
+  overflow-y: auto;
+  mask-image: linear-gradient(
+    to bottom,
+    var(--sc-color-shade) calc(100% - var(--sc-space-6)),
+    transparent
+  );
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+/* The scrollbar of a column shows only while the pointer is over the column; the fade at the foot
+   says there is more. */
+.sc-column:hover .sc-column-body,
+.sc-column-body:focus-within {
+  scrollbar-color: var(--sc-scrollbar-thumb) transparent;
+}
+
+/* A card is compact, since a column holds many: the number, the title and one row of badges, with
+   the people at its end, and no line between them; what is due reads from the badges as before. */
+.sc-card {
+  display: grid;
+  gap: var(--sc-space-1);
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border-radius: var(--sc-radius-lg);
+  transition:
+    border-color var(--sc-transition),
+    background var(--sc-transition),
+    box-shadow var(--sc-transition);
+}
+
+.sc-card:hover,
+.sc-card:focus-within {
+  border-color: var(--sc-color-accent);
+  background: var(--sc-color-sheet-hover);
+  box-shadow: var(--sc-glow);
+}
+
+.sc-card-title {
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+  line-height: var(--sc-leading-snug);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.sc-card-title:hover {
+  color: var(--sc-color-text);
+}
+
+/* On a card the number stands on a line of its own above the title, rather than in its run. */
+.sc-card-title .sc-card-number {
+  display: block;
+  margin-bottom: var(--sc-space-1);
+  line-height: 1;
+}
+
+.sc-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1);
+  margin-top: var(--sc-space-1);
+}
+
+.sc-card-meta:empty {
+  display: none;
+}
+
+.sc-card-spacer {
+  flex: 1;
+}
+
+/* The people at work stay at the end of the row, also when the badges push them onto a line of
+   their own. */
+.sc-card-meta .sc-workers {
+  margin-inline-start: auto;
+}
+
+@media (max-width: 40rem) {
+  .sc-board {
+    grid-auto-columns: min(var(--sc-column-width), 85vw);
+  }
+}
+
+/* A card is dragged to another column from anywhere on it but its menu, its title included: with
+   a mouse at once, under a finger once it has rested a moment, so that a finger that moves
+   scrolls. The column under the dragged card says it would take it, and the card itself, whole,
+   follows the pointer while a faded one keeps its place. */
+.sc-card {
+  position: relative;
+}
+
+.sc-card-movable {
+  cursor: grab;
+}
+
+/* A finger resting on a card is neither selecting its words nor asking for the page's menu. */
+@media (pointer: coarse) {
+  .sc-card-movable {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+}
+
+.sc-card-dragging {
+  opacity: 0.55;
+}
+
+.sc-board-dragging,
+.sc-board-dragging .sc-card,
+.sc-board-dragging .sc-card * {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* The card's menu: three dots in the corner, seen on the card under the pointer or with the
+   focus, and always to a finger; the menu itself stands over the page, clipped by no column. */
+.sc-card-menu-button {
+  position: absolute;
+  top: var(--sc-space-1);
+  right: var(--sc-space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: none;
+  color: var(--sc-color-text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--sc-transition),
+    background var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-card-menu-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Shown on the card under the pointer or with the focus, while the menu is open, and on the card
+   in hand, which is the card as it was hovered: its menu's dots, and the room they take. */
+.sc-drag-ghost .sc-card-menu-button,
+.sc-card:hover .sc-card-menu-button,
+.sc-card:focus-within .sc-card-menu-button,
+.sc-card-menu-button[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.sc-card-menu-button:hover,
+.sc-card-menu-button[aria-expanded="true"] {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
+.sc-card-menu-button:focus-visible {
+  outline: var(--sc-focus-ring);
+  outline-offset: 1px;
+}
+
+@media (pointer: coarse) {
+  .sc-card-menu-button {
+    opacity: 1;
+  }
+}
+
+.sc-card:has(.sc-card-menu-button) .sc-card-title {
+  padding-right: 1.75rem;
+}
+
+.sc-card-menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 8rem;
+  padding: var(--sc-space-1);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-raised);
+  box-shadow: var(--sc-shadow-menu);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-card-menu .sc-menu-link {
+  padding: calc(var(--sc-space-1) + 1px) var(--sc-space-2);
+  border-radius: var(--sc-radius-sm);
+}
+
+.sc-column-over {
+  outline: var(--sc-focus-ring);
+  outline-offset: -2px;
+}
+
+.sc-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.sc-drag-ghost .sc-card {
+  border-color: var(--sc-color-accent);
+  background: var(--sc-color-bg-raised);
+  box-shadow: var(--sc-shadow-stage);
+  transform: scale(1.02);
+}
+
+/* A phone's pages, one by one. */
+@media (max-width: 40rem) {
+  /* The board: a column nearly as wide as the window, so that a card's title has room and one
+     column is read at a time, the next peeking in from the side. */
+  .sc-column {
+    flex-basis: min(18rem, 82vw);
+  }
+}
+
+@media (max-width: 40rem) {
+  /* The board scrolls from edge to edge of the window, its columns snapping into place. */
+  .sc-board {
+    min-height: 0;
+    margin-inline: calc(-1 * var(--sc-space-4));
+    padding-inline: var(--sc-space-4);
+    scroll-padding-inline: var(--sc-space-4);
+  }
+}

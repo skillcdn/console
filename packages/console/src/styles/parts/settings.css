@@ -1,0 +1,101 @@
+/* The views of the settings: the workspace's, and the browsers the person is signed in on. */
+.sc-settings-views {
+  margin-bottom: var(--sc-space-5);
+}
+
+/* The workspace's settings (ADR-0035): each setting a row, its name beside its value; on the form,
+   its name and its hint beside a control of a bounded width, so that a short choice is not a
+   field as wide as the page. */
+.sc-settings-list {
+  display: grid;
+  margin: 0;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-settings-item {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) minmax(0, 1fr);
+  gap: var(--sc-space-1) var(--sc-space-5);
+  padding: var(--sc-space-3) 0;
+  border-top: var(--sc-border);
+}
+
+.sc-settings-item:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sc-settings-item:last-child {
+  padding-bottom: 0;
+}
+
+.sc-settings-item dt {
+  color: var(--sc-color-text-muted);
+}
+
+.sc-settings-item dd {
+  margin: 0;
+}
+
+.sc-settings-note {
+  margin-left: var(--sc-space-3);
+  color: var(--sc-color-text-muted);
+}
+
+.sc-settings-form {
+  gap: 0;
+}
+
+.sc-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 20rem);
+  gap: var(--sc-space-3) var(--sc-space-6);
+  align-items: start;
+  padding: var(--sc-space-4) 0;
+  border-top: var(--sc-border);
+}
+
+.sc-settings-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sc-settings-label {
+  display: block;
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-settings-hint {
+  max-width: var(--sc-width-prose);
+  margin: var(--sc-space-1) 0 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-settings-control {
+  display: grid;
+  justify-items: start;
+  gap: var(--sc-space-2);
+}
+
+@media (max-width: 40rem) {
+  .sc-settings-item,
+  .sc-settings-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The settings form divided into groups: each a titled block after the ungrouped settings. */
+.sc-settings-group {
+  padding-top: var(--sc-space-5);
+}
+
+.sc-settings-group-title {
+  margin: 0;
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-settings-group > .sc-settings-row:first-of-type {
+  border-top: 0;
+}

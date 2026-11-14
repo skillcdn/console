@@ -1,0 +1,122 @@
+/* Prose: what people and agents write, rendered from Markdown. Element selectors on purpose. */
+
+.sc-prose {
+  max-width: var(--sc-width-prose);
+  overflow-wrap: anywhere;
+}
+
+/* The text of a task and of a page is read at length: at the size of reading. */
+.sc-task-main > .sc-prose {
+  font-size: var(--sc-text-md);
+}
+
+.sc-prose > * + * {
+  margin-top: var(--sc-space-4);
+}
+
+.sc-prose h1,
+.sc-prose h2,
+.sc-prose h3,
+.sc-prose h4 {
+  margin-top: var(--sc-space-6);
+}
+
+.sc-prose > :first-child {
+  margin-top: 0;
+}
+
+.sc-prose h1 {
+  font-size: var(--sc-text-xl);
+}
+
+.sc-prose h2 {
+  padding-bottom: var(--sc-space-2);
+  border-bottom: var(--sc-border);
+  font-size: var(--sc-text-lg);
+}
+
+.sc-prose h3,
+.sc-prose h4 {
+  font-size: var(--sc-text-md);
+}
+
+.sc-prose ul,
+.sc-prose ol {
+  padding-left: var(--sc-space-5);
+}
+
+.sc-prose ul {
+  list-style: disc;
+}
+
+.sc-prose ol {
+  list-style: decimal;
+}
+
+.sc-prose li + li {
+  margin-top: var(--sc-space-1);
+}
+
+.sc-prose blockquote {
+  padding-left: var(--sc-space-4);
+  border-left: 2px solid var(--sc-color-accent);
+  color: var(--sc-color-text-muted);
+}
+
+.sc-prose code {
+  padding: 0.1em 0.35em;
+  border-radius: var(--sc-radius-sm);
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-prose pre {
+  padding: var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  font-size: var(--sc-text-sm);
+  line-height: var(--sc-leading-code);
+  white-space: pre-wrap;
+}
+
+.sc-prose pre code {
+  padding: 0;
+  background: none;
+}
+
+.sc-prose table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-prose th,
+.sc-prose td {
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: var(--sc-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.sc-prose th {
+  background: var(--sc-color-sheet);
+}
+
+.sc-prose img {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--sc-radius-md);
+}
+
+.sc-prose-image-text {
+  color: var(--sc-color-text-faint);
+  font-style: italic;
+}
+
+.sc-prose input[type="checkbox"] {
+  margin-right: var(--sc-space-2);
+}

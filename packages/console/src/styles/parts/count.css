@@ -1,0 +1,27 @@
+/* What waits, beside a tab's name: a count in the point colour, so it reads before the words. */
+.sc-nav-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  padding-inline: var(--sc-space-1);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-point-subtle);
+  color: var(--sc-color-point);
+  font-size: var(--sc-text-xs);
+  line-height: 1.25rem;
+}
+
+.sc-column-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  padding-inline: var(--sc-space-2);
+  border-radius: var(--sc-radius-full);
+  background: color-mix(in srgb, var(--sc-color-text-muted) 12%, transparent);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  line-height: 1.5rem;
+}

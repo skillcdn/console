@@ -1,0 +1,377 @@
+/* Sources: components/roadmap.tsx, components/goals.tsx */
+
+.sc-goal-tasks-state {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: var(--sc-tracking-wide);
+  text-transform: uppercase;
+}
+
+/* The roadmap: a goal a pane, with how far it is as a bar. */
+.sc-goals {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
+  gap: var(--sc-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-goal {
+  display: grid;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-4) var(--sc-space-5);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-xl);
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+}
+
+.sc-goal-done {
+  opacity: 0.55;
+}
+
+.sc-goal-dropped {
+  opacity: 0.55;
+}
+
+.sc-goal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-goal-title {
+  flex: 1 1 100%;
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-lg);
+  font-weight: var(--sc-weight-medium);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.sc-goal-title:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-goal-tasks {
+  margin-top: var(--sc-space-3);
+}
+
+.sc-goal-tasks-state {
+  margin-bottom: var(--sc-space-2);
+}
+
+/* The roadmap as months (ADR-0026): the months as columns, each goal a bar from its start to its target. */
+.sc-timeline {
+  display: grid;
+  gap: var(--sc-space-3);
+  margin-bottom: var(--sc-space-6);
+}
+
+.sc-timeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-2);
+}
+
+.sc-timeline-title {
+  margin: 0;
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-timeline-grid {
+  display: grid;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.sc-timeline-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) minmax(20rem, 1fr);
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+/* A label keeps to one line, so that every row is as tall as its bar and the labels line up with
+   the bars: a long title is cut short, said in full on hover, and the state stays beside it. */
+.sc-timeline-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-width: 0;
+}
+
+.sc-timeline-label .sc-badge {
+  flex: none;
+}
+
+.sc-timeline-goal {
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.sc-timeline-label .sc-timeline-goal {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-timeline-goal:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-timeline-track {
+  position: relative;
+  display: flex;
+  height: 1.75rem;
+}
+
+.sc-timeline-months .sc-timeline-track {
+  height: auto;
+}
+
+.sc-timeline-month {
+  flex: none;
+  padding: var(--sc-space-1) var(--sc-space-2);
+  border-left: var(--sc-border);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-timeline-column {
+  flex: none;
+  height: 100%;
+  border-left: var(--sc-border);
+  background: var(--sc-color-sheet);
+}
+
+.sc-timeline-today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--sc-color-accent);
+  opacity: 0.55;
+}
+
+.sc-timeline-today-mark {
+  top: auto;
+  bottom: 0;
+  height: var(--sc-space-2);
+}
+
+.sc-timeline-bar {
+  position: absolute;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border-block: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
+  background: var(--sc-category-fill);
+  color: var(--sc-category-line);
+  font-size: var(--sc-text-xs);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.sc-timeline-bar:hover {
+  background: color-mix(in srgb, var(--sc-category-fill), var(--sc-category-line) 14%);
+}
+
+.sc-timeline-bar.sc-timeline-bar-begins {
+  border-left: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
+  border-start-start-radius: var(--sc-radius-full);
+  border-end-start-radius: var(--sc-radius-full);
+}
+
+.sc-timeline-bar.sc-timeline-bar-ends {
+  border-right: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
+  border-start-end-radius: var(--sc-radius-full);
+  border-end-end-radius: var(--sc-radius-full);
+}
+
+.sc-timeline-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 40%, transparent);
+}
+
+.sc-timeline-words {
+  position: relative;
+  padding-inline: var(--sc-space-2);
+}
+
+.sc-timeline-point {
+  position: absolute;
+  top: 50%;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-left: -0.375rem;
+  transform: translateY(-50%) rotate(45deg);
+  border: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 75%, transparent);
+  background: var(--sc-category-fill);
+}
+
+.sc-goal-done .sc-timeline-bar,
+.sc-goal-done .sc-timeline-point {
+  opacity: 0.55;
+}
+
+.sc-goal-dropped .sc-timeline-bar,
+.sc-goal-dropped .sc-timeline-point {
+  opacity: 0.55;
+}
+
+.sc-timeline-undated {
+  margin: 0;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-goal-days {
+  margin-inline-start: auto;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}
+
+@media (max-width: 40rem) {
+  .sc-timeline-row {
+    grid-template-columns: minmax(6rem, 8rem) minmax(16rem, 1fr);
+  }
+
+  /* A narrow label is the title's: the goal's state is on its card below the months. */
+  .sc-timeline-label .sc-badge {
+    display: none;
+  }
+}
+
+/* A goal's page reads as the board does: the facts in a row at its head, then a switch between
+   the views of its tasks, then the view, which takes the rest of the height as the board does. A
+   view that needs more makes the page longer, as on any page: held to the window, it would run out
+   of the shell, and the header, which stays within the shell, would go with the scrolling. */
+.sc-goal-page {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--sc-space-4);
+}
+
+.sc-goal-header {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-goal-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 20rem) auto;
+  align-items: center;
+  gap: var(--sc-space-3);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-goal-progress .sc-progress-words {
+  display: none;
+}
+
+.sc-goal-about-summary {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  cursor: pointer;
+}
+
+.sc-goal-about .sc-prose {
+  max-width: var(--sc-width-prose);
+  margin-top: var(--sc-space-3);
+}
+
+.sc-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1);
+}
+
+.sc-view {
+  padding: var(--sc-space-1) var(--sc-space-3);
+  border-radius: var(--sc-radius-full);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  text-decoration: none;
+}
+
+.sc-view:hover {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
+.sc-view-current {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-goal-tasks-view {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+
+.sc-goal-view-list {
+  display: block;
+}
+
+@media (max-width: 40rem) {
+  /* A goal's card: the badges on one line, the span of days on a line of its own. */
+  .sc-goal-days {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+  }
+
+  /* The goal page's progress: the words under the bar. */
+  .sc-goal-progress {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sc-space-1);
+  }
+
+  /* The roadmap's months: too narrow for the year and the month on one line, so the two
+     stand one over the other, small. */
+  .sc-timeline-month {
+    padding-inline: 2px;
+    font-size: 0.6rem;
+    line-height: var(--sc-leading-tight);
+    white-space: normal;
+    word-break: keep-all;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
+@media (max-width: 40rem) {
+  .sc-goal {
+    padding: var(--sc-space-4);
+    border-radius: var(--sc-radius-lg);
+  }
+
+  /* The roadmap's label column, narrower, so that the months have the room. */
+  .sc-timeline-row {
+    grid-template-columns: minmax(5.5rem, 7rem) minmax(14rem, 1fr);
+  }
+}

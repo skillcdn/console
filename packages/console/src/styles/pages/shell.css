@@ -1,0 +1,208 @@
+/* Sources: components/shell.tsx, console.tsx */
+
+/*
+ * The shell (ADR-0010): the field the pages lie on, a header that names the product, the
+ * workspace and the project with the person's menu at its end, the tabs of the level the
+ * person is on, and the page below.
+ */
+
+.sc-shell {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background-color: var(--sc-color-bg);
+  /* Fixed to the window, so that the page travels over the field and the field stays. */
+  background-image: var(--sc-field-gradient);
+  background-attachment: fixed;
+}
+
+.sc-skip {
+  position: absolute;
+  top: var(--sc-space-2);
+  left: var(--sc-space-2);
+  z-index: 20;
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-accent-solid);
+  color: var(--sc-color-accent-contrast);
+  transform: translateY(-200%);
+}
+
+.sc-skip:focus {
+  transform: none;
+  color: var(--sc-color-accent-contrast);
+}
+
+.sc-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: var(--sc-border);
+  background: color-mix(in srgb, var(--sc-color-bg) 70%, transparent);
+  backdrop-filter: var(--sc-glass-backdrop);
+}
+
+.sc-header-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-4);
+  width: 100%;
+  height: var(--sc-header-height);
+  padding-inline: var(--sc-gutter);
+}
+
+/* The brand: the lockup of the symbol and the wordmark where the console has marks, the name
+   of the workspace where it has none. The symbol, the wordmark and the room between them keep
+   the proportions of the brand's lockup file. */
+.sc-brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: calc(var(--sc-brand-size) * var(--sc-brand-gap-ratio));
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-bold);
+  letter-spacing: var(--sc-tracking-tight);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.sc-brand:hover {
+  color: var(--sc-color-text);
+}
+
+.sc-brand-symbol {
+  width: var(--sc-brand-size);
+  height: var(--sc-brand-size);
+}
+
+.sc-brand-wordmark {
+  width: auto;
+  height: calc(var(--sc-brand-size) * var(--sc-brand-wordmark-ratio));
+}
+
+.sc-brand-name {
+  font-size: var(--sc-text-md);
+}
+
+/* The person's menu: a quiet label at the end of the header that opens a short list. */
+
+.sc-header-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0;
+  margin-left: auto;
+}
+
+/* A plugin in a group's list: its name alone, lined up under the tab's, which wraps rather than
+   run out of the list. The one the page is on is in the accent. */
+.sc-menu-link.sc-group-link {
+  padding: var(--sc-space-2) 0.625rem;
+  color: var(--sc-color-text);
+  line-height: var(--sc-leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.sc-group-link + .sc-group-link {
+  margin-top: 0.125rem;
+}
+
+.sc-group-link[aria-current="page"] {
+  background: color-mix(in srgb, var(--sc-color-accent-subtle) 55%, transparent);
+  color: var(--sc-color-accent);
+}
+
+.sc-live {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-text-faint);
+}
+
+.sc-live-on {
+  background: var(--sc-color-success);
+}
+
+/* The page. */
+
+/* The page is a column of blocks that fills the window below the header, so that a block which
+   wants the rest of the height, the board, can take it. */
+.sc-main {
+  --sc-main-top: var(--sc-space-6);
+  --sc-main-side: var(--sc-gutter);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  padding: var(--sc-main-top) var(--sc-main-side) var(--sc-space-8);
+}
+
+/* A page as wide as the window: the board, whose columns want every bit of it. It starts at the
+   same height as the other pages and, being as tall as the window, ends with the same room. */
+.sc-main-wide {
+  max-width: none;
+  padding: var(--sc-main-top) var(--sc-main-side);
+}
+
+/* On the wide page the head and the lead keep out of the board's way. */
+.sc-main-wide .sc-page-head {
+  margin-bottom: var(--sc-space-3);
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.sc-main-wide .sc-lead {
+  margin-bottom: var(--sc-space-4);
+  font-size: var(--sc-text-sm);
+}
+
+/* The views of the agents' page stand as the people's do. */
+.sc-agents-views {
+  margin-bottom: var(--sc-space-5);
+}
+
+/* Small screens. */
+
+@media (max-width: 40rem) {
+  .sc-header-inner {
+    gap: var(--sc-space-3);
+    padding-inline: var(--sc-space-4);
+  }
+
+  .sc-brand {
+    gap: calc(var(--sc-brand-size-compact) * var(--sc-brand-gap-ratio));
+  }
+
+  .sc-brand-symbol {
+    width: var(--sc-brand-size-compact);
+    height: var(--sc-brand-size-compact);
+  }
+
+  .sc-brand-wordmark {
+    height: calc(var(--sc-brand-size-compact) * var(--sc-brand-wordmark-ratio));
+  }
+
+  .sc-main {
+    --sc-main-top: var(--sc-space-5);
+    --sc-main-side: var(--sc-space-4);
+    padding-bottom: var(--sc-space-7);
+  }
+}
+
+/* The categories on the settings, as chips, with the way to the page that keeps them. */
+.sc-category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: 0 0 var(--sc-space-4);
+}
+
+/* The end of a phone's header: the live dot, the avatar and the caret close together. */
+@media (max-width: 40rem) {
+  .sc-header-end {
+    gap: 0;
+  }
+}

@@ -728,7 +728,7 @@ function SettingsForm(props: {
   const rows = (shown: readonly RestPluginSetting[]) =>
     shown.map((setting) => (
       <div key={setting.key} className="sc-settings-row">
-        <div className="sc-settings-words">
+        <div>
           <label className="sc-settings-label" htmlFor={`${prefix}-${setting.key}`}>
             {pluginWord(setting.name, props.language)}
             {setting.required && " *"}
@@ -831,7 +831,7 @@ function SecretRow(props: {
   const { setting } = props;
   return (
     <div className="sc-settings-row">
-      <div className="sc-settings-words">
+      <div>
         <label className="sc-settings-label" htmlFor={id}>
           {pluginWord(setting.name, props.language)}
           {setting.required && " *"}
@@ -1323,17 +1323,14 @@ function RoleRow(props: {
         {description !== "" && <p className="sc-settings-hint">{description}</p>}
       </div>
       <div>
-        <div className="sc-chips sc-plugin-holders">
-          {props.isDefault && <Chip className="sc-plugin-holder">{settings.everyMember}</Chip>}
-          {role.follows === "reports" && (
-            <Chip className="sc-plugin-holder">{settings.whoeverManages}</Chip>
-          )}
+        <div className="sc-chips">
+          {props.isDefault && <Chip>{settings.everyMember}</Chip>}
+          {role.follows === "reports" && <Chip>{settings.whoeverManages}</Chip>}
           {grants.map((grant) => {
             const holder = holderOf(grant, settings);
             return (
               <Chip
                 key={grant.id}
-                className="sc-plugin-holder"
                 onRemove={() => props.onRevoke(grant.id)}
                 removeLabel={`${settings.revoke}: ${holder}`}
                 disabled={props.busy}
@@ -1608,7 +1605,7 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
         <h2 className="sc-section-title">{settings.data}</h2>
         <div>
           <div className="sc-settings-row">
-            <div className="sc-settings-words">
+            <div>
               <p className="sc-settings-label">{settings.export}</p>
               <p className="sc-settings-hint">{settings.exportHint}</p>
             </div>
@@ -1619,7 +1616,7 @@ export function PluginSettingsView(props: PluginSettingsViewProps) {
             </div>
           </div>
           <div className="sc-settings-row">
-            <div className="sc-settings-words">
+            <div>
               <p className="sc-settings-label">{settings.purge}</p>
               <p className="sc-settings-hint">{settings.purgeHint}</p>
             </div>

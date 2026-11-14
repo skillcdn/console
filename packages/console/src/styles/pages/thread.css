@@ -1,0 +1,331 @@
+/* Sources: components/comments.tsx, components/runs.tsx, components/pictures.tsx */
+
+.sc-run > *,
+.sc-report > *,
+.sc-comment > * {
+  min-width: 0;
+}
+
+.sc-report > .sc-time {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: var(--sc-tracking-wide);
+  text-transform: uppercase;
+}
+
+.sc-run,
+.sc-comment {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--sc-color-glass-edge);
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
+}
+
+/* Runs: an agent at work on a task, what it reported and handed in. */
+
+.sc-runs {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-run {
+  display: grid;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-4) var(--sc-space-5);
+  border-radius: var(--sc-radius-lg);
+}
+
+.sc-run-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  padding-bottom: var(--sc-space-3);
+  border-bottom: var(--sc-hairline);
+}
+
+.sc-run-agent {
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-bold);
+}
+
+/* The way to end a run stands at the end of the first line. */
+.sc-run-header > .sc-button {
+  order: 1;
+  margin-inline-start: auto;
+}
+
+/* Who the run is for and since when: the second line of the head. */
+.sc-run-meta {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  order: 2;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-run-waiting {
+  color: var(--sc-color-warning);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-run-reports {
+  display: grid;
+  gap: var(--sc-space-3);
+  padding-left: 0;
+  list-style: none;
+}
+
+.sc-report {
+  display: grid;
+  gap: var(--sc-space-1);
+  padding-left: var(--sc-space-3);
+  border-left: 2px solid var(--sc-color-accent);
+  font-size: var(--sc-text-sm);
+}
+
+/* The hour of a report heads it, small and apart from its words. */
+.sc-run-summary {
+  padding-top: var(--sc-space-3);
+  border-top: var(--sc-border);
+}
+
+/* The discussion on a task (ADR-0024): what was said, the runs and the decisions, one thread in
+   the order they came, with the way to say something at its end. */
+.sc-thread {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-comment {
+  display: grid;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-4) var(--sc-space-5);
+  border-radius: var(--sc-radius-lg);
+}
+
+.sc-comment-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-comment-meta {
+  margin-inline-start: auto;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+/* A picture in a comment, or handed in on a run, is a thumbnail, no taller than a few lines, that
+   opens large over the page; a picture that only comes over https, or one on a page of the
+   documents, stays where it is, as the text has it. */
+.sc-picture-thumb {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sc-radius-md);
+  background: none;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.sc-picture-thumb:focus-visible {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
+}
+
+.sc-picture-thumb img,
+.sc-comment .sc-prose img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 10rem;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+}
+
+.sc-prose .sc-picture-thumb {
+  margin: var(--sc-space-2) 0;
+}
+
+/* The picture large, over the page: a bar with its name and the ways to zoom and to close, the
+   stage it moves on, and a hint. The page under it is dimmed and does not scroll. */
+.sc-overlay {
+  position: fixed;
+  z-index: 100;
+  display: grid;
+  /* One column no wider than the window: a long name in the bar is cut, never the stage widened. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  inset: 0;
+  background: color-mix(in srgb, var(--sc-color-bg) 90%, transparent);
+  backdrop-filter: var(--sc-glass-backdrop);
+}
+
+.sc-overlay-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-3) var(--sc-space-4);
+}
+
+.sc-overlay-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-overlay-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--sc-space-1);
+}
+
+.sc-overlay-stage {
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.sc-overlay-stage[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+/* The picture is placed by its centre, from the stage's: drawn at the size its scale gives it,
+   which the overlay writes on it once the picture has said how large it is. */
+.sc-overlay-picture {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: none;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+}
+
+/* Until then it is held within the stage, whole: against the stage's own size, which a picture
+   laid out in the flow of a stage as tall as its content never was, so that a long one was cut. */
+.sc-overlay-picture-unsized {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+}
+
+.sc-overlay-hint {
+  margin: 0;
+  padding: var(--sc-space-2) var(--sc-space-4) var(--sc-space-3);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  text-align: center;
+}
+
+@media (max-width: 40rem) {
+  .sc-overlay-hint {
+    display: none;
+  }
+}
+
+.sc-comment-files {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-comment-picture,
+.sc-artifact-picture {
+  display: grid;
+  gap: var(--sc-space-1);
+  justify-items: start;
+}
+
+.sc-comment-form {
+  display: grid;
+  gap: var(--sc-space-2);
+}
+
+.sc-comment-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-comment-chosen-file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  padding: var(--sc-space-1) var(--sc-space-2);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+}
+
+.sc-comment-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sc-space-2);
+}
+
+.sc-comment-form-actions label {
+  position: relative;
+  cursor: pointer;
+}
+
+/* The label shows where the keyboard is, since the input it holds is not seen. */
+.sc-comment-form-actions label:has(:focus-visible) {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
+}
+
+/* The file input is the label's: there for the keyboard and the screen reader, not seen. */
+.sc-comment-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+}
+
+.sc-comment-form .sc-field-hint {
+  margin-top: 0;
+}
+
+@media (max-width: 40rem) {
+  .sc-run,
+  .sc-comment {
+    padding: var(--sc-space-4);
+    border-radius: var(--sc-radius-lg);
+  }
+}
+
+/* The ways under a comment's field stand on one row at one height, the small file button
+   included, so that none sits lower than the one beside it. */
+.sc-comment-form-actions > .sc-button,
+.sc-comment-form-actions > label {
+  min-height: var(--sc-control-size);
+  padding-inline: var(--sc-space-4);
+  font-size: var(--sc-text-sm);
+}

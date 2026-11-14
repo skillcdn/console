@@ -427,7 +427,7 @@ export function DecisionCard(props: DecisionCardProps) {
 
   return (
     <article id={decision.id} className={cx("sc-decision", answered && "sc-decision-answered")}>
-      <header className="sc-decision-header">
+      <header>
         <h3 className="sc-decision-question">
           {props.href === undefined ? (
             decision.question

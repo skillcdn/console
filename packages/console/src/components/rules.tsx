@@ -33,7 +33,7 @@ export function RulesView(props: RulesViewProps) {
   const page = rules.page;
   if (rules.source === "none" || rules.body === null) {
     return (
-      <div className="sc-rules">
+      <div>
         <p className="sc-muted">{words.rules.none}</p>
         {props.editHref !== undefined && (
           <div className="sc-rules-actions">
@@ -47,7 +47,7 @@ export function RulesView(props: RulesViewProps) {
   }
   const text = <Markdown source={fillRules(rules.body, language)} docHref={props.docHref} />;
   return (
-    <div className="sc-rules">
+    <div>
       {rules.source === "reference" ? (
         <Callout tone="info">{words.rules.reference}</Callout>
       ) : (

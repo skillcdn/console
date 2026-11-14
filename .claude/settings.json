@@ -34,6 +34,7 @@
       "Bash(pnpm test)",
       "Bash(pnpm lint)",
       "Bash(pnpm lint:fix)",
+      "Bash(pnpm check:styles)",
       "Bash(pnpm turbo run *)",
       "Bash(pnpm exec biome *)",
       "Bash(pnpm exec vitest *)",
@@ -43,6 +44,20 @@
       "Bash(git log *)",
       "Bash(git show *)",
       "Bash(git branch --show-current)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pnpm -w --silent check:styles --hook",
+            "timeout": 60
+          }
+        ]
+      }
     ]
   }
 }

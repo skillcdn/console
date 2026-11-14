@@ -1,0 +1,33 @@
+/*
+ * Panes: the surfaces of the page are glass over the field. A pane is a veil of the page's own
+ * dark over a blur of what is behind it, with a thin lit edge; two panes differ only in what
+ * each has behind it. The rim is a ring with a filter of its own, under the content, so that
+ * what draws the edge of a pane is the field behind that edge, bent.
+ */
+
+.sc-panel {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--sc-color-glass-edge);
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
+}
+
+.sc-panel {
+  margin-bottom: var(--sc-space-5);
+  padding: var(--sc-space-5);
+  border-radius: var(--sc-radius-xl);
+}
+
+/* A panel that holds a form: as wide as a form is comfortable to fill in, and no wider. */
+.sc-panel-form {
+  max-width: 56rem;
+}
+
+@media (max-width: 40rem) {
+  .sc-panel {
+    padding: var(--sc-space-4);
+    border-radius: var(--sc-radius-lg);
+  }
+}

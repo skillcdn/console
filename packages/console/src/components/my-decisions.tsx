@@ -74,7 +74,7 @@ function More(props: {
     return null;
   }
   return (
-    <div className="sc-paged-more">
+    <div>
       <Button variant="secondary" size="sm" disabled={props.busy} onClick={page.onMore}>
         {props.label}
       </Button>

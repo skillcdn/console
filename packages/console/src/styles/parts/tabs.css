@@ -1,0 +1,175 @@
+/* The tabs: the pages of the level the person is on, under the header's first row. */
+
+/* The bar lies one pixel over the header's line, so that the current tab's underline sits on it;
+   the tabs scroll sideways where they do not fit, and nothing in the bar ever scrolls down. */
+.sc-tabs {
+  width: 100%;
+  margin-bottom: -1px;
+  padding-inline: var(--sc-gutter);
+  overflow: auto hidden;
+  scrollbar-width: none;
+}
+
+.sc-tabs-inner {
+  display: flex;
+  gap: var(--sc-space-5);
+}
+
+.sc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  padding: var(--sc-space-2) 0 var(--sc-space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    border-color var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-tab:hover {
+  color: var(--sc-color-text);
+}
+
+.sc-tab-current {
+  border-bottom-color: var(--sc-color-accent);
+  color: var(--sc-color-text);
+}
+
+/* A tab that opens a list of pages: a group of several plugins (ADR-0054). A button; its list is
+   a popover, .sc-tab-group-panel below the menu's panel. */
+
+.sc-tab-group {
+  display: inline-flex;
+}
+
+.sc-tab-summary {
+  font-family: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.sc-tab-summary[aria-expanded="true"] {
+  color: var(--sc-color-text);
+}
+
+/* A tab's name: a long one stops short with an ellipsis, and the tab's title says it whole. */
+.sc-tab-label {
+  min-width: 0;
+  max-width: 15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The views within a page, as a plugin has in its frame: the console's view switch, in a tab's
+   words, so that the row reads as a level below the tabs. What stands around it is the page's. */
+.sc-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1);
+}
+
+.sc-subtabs .sc-tab {
+  padding: var(--sc-space-1) var(--sc-space-3);
+  border-bottom: 0;
+  border-radius: var(--sc-radius-full);
+  cursor: pointer;
+}
+
+.sc-subtabs .sc-tab:hover {
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-subtabs .sc-tab-current {
+  background: var(--sc-color-bg-raised);
+  box-shadow: 0 0 0 1px var(--sc-color-border);
+  color: var(--sc-color-text);
+}
+
+/* The list a group tab opens: a popover in the top layer, placed under its tab by the shell, so
+   that the row of tabs, which scrolls sideways and clips whatever hangs out of it, clips nothing
+   of the list. In the type of the tabs; as wide as its names, within a column a name reads at a
+   glance in, and within the window. */
+.sc-tab-group-panel {
+  position: fixed;
+  inset: auto;
+  min-width: 11rem;
+  max-width: min(18rem, calc(100vw - 1rem));
+  margin: 0;
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+}
+
+/* Where the browser has no popover, the tab shows and hides the list itself. */
+.sc-tab-group-panel[hidden] {
+  display: none;
+}
+
+.sc-tab-group-panel:popover-open {
+  animation: sc-menu-in 120ms ease-out;
+}
+
+@keyframes sc-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-tab-group-panel:popover-open {
+    animation: none;
+  }
+}
+
+.sc-people-views .sc-tab {
+  align-items: baseline;
+}
+
+.sc-tab-count {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-tab-current .sc-tab-count {
+  color: var(--sc-color-text-muted);
+}
+
+@media (max-width: 40rem) {
+  /* Tabs that do not fit stay on one line and scroll sideways, the edge fading where more of them
+     are; the current one is brought into view by the shell. */
+  .sc-tabs {
+    padding-inline: var(--sc-space-4);
+    mask-image: linear-gradient(
+      to right,
+      var(--sc-color-shade) calc(100% - var(--sc-space-6)),
+      transparent
+    );
+  }
+
+  .sc-tabs-inner {
+    gap: var(--sc-space-4);
+    /* As wide as the tabs and some room past the last, so that it scrolls clear of the fading edge. */
+    width: max-content;
+    padding-inline-end: var(--sc-space-6);
+  }
+}
+
+@media (max-width: 40rem) {
+  /* The tabs snap tab by tab, the first keeping its room from the edge. */
+  .sc-tabs {
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: var(--sc-space-4);
+  }
+
+  .sc-tab {
+    scroll-snap-align: start;
+  }
+}

@@ -1,0 +1,71 @@
+/* A setting of several choices (a list of an enum): a pill per choice, lit while chosen. */
+.sc-toggle-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* A choice is a chip that is its own box: the browser's square kept for the keyboard and a
+   screen reader, out of sight; a choice made is lit in the accent, a tick drawn before its word. */
+.sc-toggle-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-height: 2rem;
+  padding: 0 var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-sheet);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--sc-transition),
+    border-color var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-toggle-chip:hover {
+  border-color: var(--sc-color-border-strong);
+  color: var(--sc-color-text);
+}
+
+.sc-toggle-chip input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sc-toggle-chip:has(input:focus-visible) {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
+}
+
+.sc-toggle-chip:has(input:checked) {
+  border-color: color-mix(in srgb, var(--sc-color-accent) 40%, transparent);
+  background: var(--sc-color-accent-subtle);
+  color: var(--sc-color-accent);
+}
+
+.sc-toggle-chip:has(input:checked)::before {
+  content: "";
+  width: 0.3125rem;
+  height: 0.5625rem;
+  margin-inline: 0.125rem 0.0625rem;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: translateY(-0.0625rem) rotate(45deg);
+}
+
+.sc-toggle-chip:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

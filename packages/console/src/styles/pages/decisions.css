@@ -1,0 +1,370 @@
+/* Sources: components/decision-list.tsx, components/decision-form.tsx, components/my-decisions.tsx */
+
+.sc-decisions > *,
+.sc-decision > *,
+.sc-decision-section > *,
+.sc-answer > *,
+.sc-answer-form > *,
+.sc-address-form > * {
+  min-width: 0;
+}
+
+.sc-decision-label {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: var(--sc-tracking-wide);
+  text-transform: uppercase;
+}
+
+.sc-decision {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--sc-color-glass-edge);
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
+}
+
+.sc-option,
+.sc-answer {
+  border: var(--sc-border);
+  background: var(--sc-color-sheet);
+  box-shadow: var(--sc-shadow-sheet);
+}
+
+.sc-options {
+  gap: var(--sc-space-2);
+}
+
+.sc-options > .sc-button {
+  justify-self: start;
+}
+
+/* Decisions: each a pane, the ones that wait marked in the point colour. */
+
+.sc-decisions {
+  display: grid;
+  gap: var(--sc-space-6);
+  align-items: start;
+}
+
+@media (min-width: 64rem) {
+  .sc-decisions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* A person's own decisions: the sections of what waits, stacked in the first column. */
+.sc-decisions-waiting {
+  display: grid;
+  gap: var(--sc-space-6);
+  align-content: start;
+}
+
+.sc-decision {
+  display: grid;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-5);
+  border-radius: var(--sc-radius-xl);
+}
+
+.sc-decision + .sc-decision {
+  margin-top: var(--sc-space-3);
+}
+
+.sc-decision-question {
+  font-size: var(--sc-text-lg);
+  overflow-wrap: anywhere;
+}
+
+.sc-decision-question a {
+  color: var(--sc-color-text);
+  text-decoration: none;
+}
+
+.sc-decision-question a:hover {
+  color: var(--sc-color-accent);
+}
+
+/* A waiting decision has a warm mark before its question: the one thing on the page to look at. */
+.sc-decision:not(.sc-decision-answered) .sc-decision-question::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: var(--sc-space-2);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-point);
+  vertical-align: 0.1em;
+}
+
+.sc-decision-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  margin-top: var(--sc-space-1);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+/* The task a decision is about: a chip in the line, cut short where it is long. */
+.sc-decision-meta > a {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 var(--sc-space-2);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-sheet);
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  line-height: 1.5rem;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-decision-meta > a:hover {
+  border-color: var(--sc-color-accent);
+  color: var(--sc-color-accent);
+}
+
+.sc-decision-waiting {
+  color: var(--sc-color-warning);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-answer {
+  display: grid;
+  gap: var(--sc-space-1);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border-left: 2px solid var(--sc-color-accent);
+  border-radius: 0 var(--sc-radius-md) var(--sc-radius-md) 0;
+}
+
+.sc-answer-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  font-weight: var(--sc-weight-bold);
+}
+
+.sc-answer-note {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  white-space: pre-wrap;
+}
+
+.sc-answer-form,
+.sc-address-form {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+/* Whom a waiting decision is for, said anew (ADR-0096): the field with a word under it and the
+   two buttons, where the way to answer stood. */
+.sc-address-form > .sc-field,
+.sc-address-form > .sc-form-error {
+  margin: 0;
+}
+
+.sc-options-list {
+  display: grid;
+  gap: var(--sc-space-2);
+}
+
+.sc-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-3);
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border-color: var(--sc-color-border-strong);
+  border-radius: var(--sc-radius-md);
+  cursor: pointer;
+  transition:
+    border-color var(--sc-transition),
+    background var(--sc-transition);
+}
+
+.sc-option:hover {
+  background: var(--sc-color-sheet-hover);
+}
+
+.sc-option-chosen {
+  border-color: var(--sc-color-accent);
+  background: var(--sc-color-accent-subtle);
+}
+
+.sc-option input {
+  margin: 0;
+  accent-color: var(--sc-color-accent);
+}
+
+/* The last choice is the person's own words: the radio, its label, and the line they write on. */
+.sc-option-own {
+  flex-wrap: wrap;
+}
+
+.sc-option-own .sc-input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: 2rem;
+}
+
+.sc-decision-files {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-decision-picture {
+  display: grid;
+  gap: var(--sc-space-1);
+  justify-items: start;
+}
+
+/* A decision as a record: its context, its answer, and what followed. */
+
+.sc-decision-section {
+  margin-top: var(--sc-space-3);
+}
+
+.sc-decision-label {
+  margin: 0 0 var(--sc-space-1);
+}
+
+.sc-outcome-form {
+  display: grid;
+  gap: var(--sc-space-2);
+}
+
+/* Who asked and who answers (ADR-0042): the two people side by side, an arrow from the one to
+   the other, so that the asker and the decider are never read as one. */
+.sc-decision-for {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  white-space: nowrap;
+}
+
+.sc-decision-arrow {
+  color: var(--sc-color-text-faint);
+  font-weight: var(--sc-weight-medium);
+}
+
+/* The record of the decisions: a row each, what was asked on the left and what was answered on
+   the right, each with who and when under it; one column where the window is narrow. */
+.sc-decision-record {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-decision-record-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sc-space-3) var(--sc-space-6);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  font-size: var(--sc-text-sm);
+}
+
+@media (min-width: 40rem) {
+  .sc-decision-record-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.sc-decision-record-asked,
+.sc-decision-record-answer {
+  display: grid;
+  align-content: start;
+  gap: var(--sc-space-1);
+  min-width: 0;
+}
+
+.sc-decision-record-question {
+  font-weight: var(--sc-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.sc-decision-record-question a {
+  color: var(--sc-color-text);
+  text-decoration: none;
+}
+
+.sc-decision-record-question a:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-decision-record-question .sc-card-number {
+  margin-left: var(--sc-space-2);
+}
+
+/* The answer a decision took, marked in green before its words. */
+.sc-decision-record-chosen::before {
+  content: "";
+  position: absolute;
+  top: calc(0.8em - 0.25rem);
+  left: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-success);
+}
+
+.sc-decision-record-chosen {
+  position: relative;
+  padding-left: var(--sc-space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+/* The word given with the answer: a few lines of it here, the whole on the decision's page. */
+.sc-decision-record-note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  color: var(--sc-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.sc-decision-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}
+
+@media (max-width: 40rem) {
+  .sc-decision {
+    padding: var(--sc-space-4);
+    border-radius: var(--sc-radius-lg);
+  }
+}
+
+@media (max-width: 40rem) {
+  .sc-decision {
+    padding: var(--sc-space-4);
+    border-radius: var(--sc-radius-lg);
+  }
+}

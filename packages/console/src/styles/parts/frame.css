@@ -1,0 +1,45 @@
+/* A plugin's frame, in a box the console draws: the width of the page, as tall as the frame
+   says; until the plugin's page has drawn, a spinner stands in the box, over a frame not shown. */
+
+.sc-plugin-frame-box {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 2.5rem;
+}
+
+/* A page pads itself by a step, for the shadows of what is in it, which the frame would cut. The
+   frame stands that step outside the page's column, so that the page's first words line up with
+   the tabs above it, and with every other page's. */
+.sc-plugin-frame-box-page {
+  width: calc(100% + 2 * var(--sc-space-4));
+  margin: calc(var(--sc-space-4) * -1);
+}
+
+.sc-plugin-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: var(--sc-radius-lg);
+  background: transparent;
+  transition: opacity var(--sc-transition);
+}
+
+.sc-plugin-frame-loading .sc-plugin-frame {
+  opacity: 0;
+}
+
+.sc-plugin-frame-wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* What stands in for a frame that has nothing to show. */
+.sc-plugin-frame-unavailable {
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}

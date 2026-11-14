@@ -506,7 +506,7 @@ export function MemberList(props: MemberListProps) {
       )}
       {props.onAdd !== undefined && props.lookup !== undefined && props.open !== true && (
         <form
-          className="sc-form sc-member-form sc-member-lookup"
+          className="sc-form sc-member-form"
           aria-label={members.addByLoginAria}
           onSubmit={(event) => {
             event.preventDefault();
@@ -581,7 +581,7 @@ export function PackTokenForm(props: PackTokenFormProps) {
   const ready = typed.length >= 8 && !/\s/.test(typed);
   return (
     <form
-      className="sc-form sc-pack-token-form"
+      className="sc-form"
       aria-label={pack.pasteAria}
       onSubmit={(event: FormEvent) => {
         event.preventDefault();

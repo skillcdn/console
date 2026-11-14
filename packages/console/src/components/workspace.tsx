@@ -252,7 +252,7 @@ export function WorkspaceSettingsForm(props: WorkspaceSettingsFormProps) {
   return (
     <form className="sc-form sc-settings-form" aria-label={settings.aria} onSubmit={submit}>
       <div className="sc-settings-row">
-        <div className="sc-settings-words">
+        <div>
           <label className="sc-settings-label" htmlFor={ids.people}>
             {settings.peopleVisibility}
           </label>
@@ -274,7 +274,7 @@ export function WorkspaceSettingsForm(props: WorkspaceSettingsFormProps) {
         </div>
       </div>
       <div className="sc-settings-row">
-        <div className="sc-settings-words">
+        <div>
           <label className="sc-settings-label" htmlFor={ids.week}>
             {settings.weekStart}
           </label>
@@ -296,7 +296,7 @@ export function WorkspaceSettingsForm(props: WorkspaceSettingsFormProps) {
         </div>
       </div>
       <div className="sc-settings-row">
-        <div className="sc-settings-words">
+        <div>
           <label className="sc-settings-label" htmlFor={ids.zone}>
             {settings.timeZone}
           </label>
@@ -336,7 +336,7 @@ export function WorkspaceSettingsForm(props: WorkspaceSettingsFormProps) {
         </div>
       </div>
       <div className="sc-settings-row">
-        <div className="sc-settings-words">
+        <div>
           <label className="sc-settings-label" htmlFor={ids.language}>
             {settings.language}
           </label>
@@ -592,7 +592,7 @@ export function WorkspaceServicesForm(props: WorkspaceServicesFormProps) {
         const account = service === null ? undefined : serviceAccountOf(service, names);
         const problem = problemOf(role);
         return (
-          <fieldset key={role} className="sc-fieldset sc-service-fields">
+          <fieldset key={role}>
             <legend className="sc-field-label">{words.roles[role]}</legend>
             <span className="sc-field-hint">{words.roleHints[role]}</span>
             <label className="sc-field">

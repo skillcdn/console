@@ -1,0 +1,99 @@
+/* Buttons */
+
+.sc-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sc-space-2);
+  min-height: var(--sc-control-size);
+  padding: 0 var(--sc-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--sc-radius-md);
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    background var(--sc-transition),
+    border-color var(--sc-transition),
+    box-shadow var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-button:disabled,
+.sc-button[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sc-button-sm {
+  min-height: 2rem;
+  padding: 0 var(--sc-space-3);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-button-primary {
+  background: var(--sc-color-accent-solid);
+  color: var(--sc-color-accent-contrast);
+  box-shadow: var(--sc-glow);
+}
+
+.sc-button-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sc-color-accent-solid) 90%, var(--sc-color-shade));
+  color: var(--sc-color-accent-contrast);
+  box-shadow: var(--sc-glow);
+}
+
+.sc-button-secondary {
+  background: var(--sc-color-bg-raised);
+  border-color: var(--sc-color-border);
+  color: var(--sc-color-text);
+}
+
+.sc-button-secondary:hover:not(:disabled) {
+  border-color: var(--sc-color-border-strong);
+  background: var(--sc-color-bg-raised);
+  color: var(--sc-color-text);
+}
+
+.sc-button-ghost {
+  background: transparent;
+  color: var(--sc-color-text-muted);
+}
+
+.sc-button-ghost:hover:not(:disabled) {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
+.sc-button-danger {
+  background: transparent;
+  border-color: var(--sc-color-border-strong);
+  color: var(--sc-color-danger);
+}
+
+.sc-button-danger:hover:not(:disabled) {
+  background: var(--sc-color-danger-subtle);
+  border-color: var(--sc-color-danger);
+}
+
+.sc-copyable .sc-button {
+  position: absolute;
+  top: var(--sc-space-2);
+  right: var(--sc-space-2);
+}
+
+@media (max-width: 40rem) {
+  .sc-copyable .sc-button {
+    position: static;
+  }
+}
+
+@media (max-width: 40rem) {
+  /* A head with one way alone gives it the whole width too. */
+  .sc-page-head > .sc-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

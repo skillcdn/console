@@ -1,0 +1,212 @@
+/* Sources: components/plugin-settings.tsx, components/plugin-frame.tsx */
+
+.sc-radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-4);
+}
+
+/* The form that enables a plugin: its parts one under the other, a hairline between. */
+.sc-plugin-enable {
+  gap: 0;
+}
+
+.sc-plugin-group {
+  display: grid;
+  gap: var(--sc-space-2);
+  padding-block: var(--sc-space-4);
+  border-top: var(--sc-hairline);
+}
+
+.sc-plugin-group:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sc-plugin-group:last-child {
+  padding-bottom: 0;
+}
+
+.sc-plugin-group-title {
+  margin: 0;
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-plugin-group > .sc-settings-hint {
+  margin-top: calc(-1 * var(--sc-space-1));
+}
+
+/* The fields of the board project to make: as wide as a form is comfortable, no wider. */
+.sc-plugin-fields {
+  display: grid;
+  gap: var(--sc-space-3);
+  max-width: 32rem;
+}
+
+/* A list to tick: each row a sheet with its box, a name and a word under the name. */
+.sc-plugin-ticks {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-plugin-tick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sc-space-3);
+  align-items: start;
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  cursor: pointer;
+}
+
+.sc-plugin-tick input {
+  margin-top: 0.25em;
+}
+
+/* One the plugin requires: on, and not the person's to change, so it does not read as a control. */
+.sc-plugin-tick-locked {
+  background: transparent;
+  cursor: default;
+}
+
+/* What a plugin asks, in two lists: what it requires, and what it can go without. */
+.sc-plugin-capabilities {
+  display: grid;
+  gap: var(--sc-space-2);
+}
+
+.sc-plugin-capabilities + .sc-plugin-capabilities {
+  margin-top: var(--sc-space-3);
+}
+
+.sc-plugin-capabilities-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  margin: 0;
+}
+
+.sc-plugin-capabilities-name {
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-bold);
+}
+
+.sc-plugin-capabilities-head .sc-settings-hint {
+  margin: 0;
+}
+
+/* What it can go without, on the page of a plugin that is on: under what it requires, each a box. */
+.sc-plugin-optional {
+  display: grid;
+  gap: var(--sc-space-1);
+  margin-top: var(--sc-space-3);
+}
+
+.sc-plugin-tick-words {
+  display: grid;
+  gap: 2px;
+}
+
+.sc-plugin-tick-name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-plugin-tick-under {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+/* The capabilities an enabled plugin holds, one a line; its commands as words side by side. */
+.sc-plugin-held {
+  display: grid;
+  gap: var(--sc-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-plugin-codes {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+}
+
+/* A field with its buttons on one line: a secret to set, the key to type before a purge. */
+.sc-plugin-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  width: 100%;
+}
+
+.sc-plugin-line-input {
+  flex: 1 1 8rem;
+  width: auto;
+}
+
+/* The roles: one a row, its name and what it is for beside who holds it and the way to grant it. */
+.sc-plugin-roles {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-plugin-role {
+  display: grid;
+  grid-template-columns: minmax(10rem, 16rem) minmax(0, 1fr);
+  gap: var(--sc-space-2) var(--sc-space-5);
+  padding: var(--sc-space-4) 0;
+  border-top: var(--sc-hairline);
+}
+
+.sc-plugin-role:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sc-plugin-role:last-child {
+  padding-bottom: 0;
+}
+
+.sc-plugin-role-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-plugin-role-key {
+  color: var(--sc-color-text-muted);
+  font-weight: normal;
+}
+
+.sc-plugin-grant {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin-top: var(--sc-space-3);
+}
+
+.sc-plugin-problems {
+  margin: 0;
+  padding-left: var(--sc-space-5);
+}
+
+@media (max-width: 40rem) {
+  .sc-plugin-role {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

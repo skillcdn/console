@@ -88,7 +88,7 @@ export function DecidersField(props: DecidersFieldProps) {
     [people, value],
   );
   return (
-    <fieldset className="sc-field sc-workers-field">
+    <fieldset className="sc-field">
       <legend className="sc-field-label">{form.decider}</legend>
       <div className="sc-chips">
         {value.map((person) => (

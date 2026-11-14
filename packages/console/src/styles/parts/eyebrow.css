@@ -1,0 +1,9 @@
+/* The small capitals over a group: a menu's heading, a field's label, a fact's name, a day of the
+   feed, a table's head. `.sc-eyebrow` is the class for a label of your own. */
+.sc-eyebrow {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: var(--sc-tracking-wide);
+  text-transform: uppercase;
+}

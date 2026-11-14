@@ -1,0 +1,90 @@
+/* Chips: things named among others in a row, a person, a team, an item of a list, a holder of
+   a role, each as low as a line of text and round at its ends, so that a row of them stays light
+   beside the fields of a form; the way to take one out in its end where it can be, a person's
+   face in its start. `Chip` writes one, and every row of things a person adds to and takes from
+   is made of them; the way to add one more stands at the end of the row as one more chip, a
+   picker with `sc-picker-add`. */
+.sc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-width: 0;
+}
+
+.sc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  max-width: 100%;
+  min-height: 1.75rem;
+  padding: 0 var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-sheet);
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+  line-height: var(--sc-leading-snug);
+  white-space: nowrap;
+}
+
+/* What a chip names, cut short where the row has no room for it whole. */
+.sc-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A person's face in the chip's rounded start, and the way out in its end, a hair inside. */
+.sc-chip:has(.sc-avatar) {
+  padding-inline-start: 0.1875rem;
+}
+
+.sc-chip:has(> .sc-chip-remove) {
+  padding-inline-end: 0.1875rem;
+}
+
+.sc-chip-remove {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sc-radius-full);
+  background: transparent;
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-md);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--sc-transition),
+    color var(--sc-transition),
+    opacity var(--sc-transition);
+}
+
+.sc-chip-remove:hover:not(:disabled) {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
+.sc-chip-remove:focus-visible {
+  outline: var(--sc-focus-ring);
+}
+
+.sc-chip-remove:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sc-person-fact dd > .sc-chips {
+  padding-block: 0.125rem;
+}
+
+/* A list of items typed one by one: the field and its button on one line, the items as chips above. */
+.sc-chip-input {
+  display: flex;
+  gap: var(--sc-space-2);
+  width: 100%;
+}

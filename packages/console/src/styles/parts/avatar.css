@@ -1,0 +1,82 @@
+/* People */
+
+.sc-avatar {
+  flex: none;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-avatar-initial {
+  display: inline-grid;
+  place-items: center;
+  color: var(--sc-color-text-muted);
+  font-size: 0.6em;
+  font-weight: var(--sc-weight-bold);
+  line-height: 1;
+}
+
+.sc-avatar-xs {
+  width: 0.875rem;
+  height: 0.875rem;
+  font-size: 0.5rem;
+}
+
+.sc-avatar-sm {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.sc-avatar-md {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.sc-avatar-lg {
+  width: 4rem;
+  height: 4rem;
+}
+
+.sc-avatar-xl {
+  width: 6rem;
+  height: 6rem;
+  font-size: 2.25rem;
+}
+
+/* An agent account's picture is a soft square where a person's is round (ADR-0097): told apart
+   at a glance, at the size of a chip as on a page of its own. Its corners are rounded by a fifth
+   of its side, as the set's tile is drawn. */
+.sc-avatar-drawn {
+  border-radius: 20%;
+}
+
+/* The picture in the menu's label sits in the control with a little room around it. */
+.sc-menu-summary .sc-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.sc-chip .sc-avatar-sm {
+  width: 1.375rem;
+  height: 1.375rem;
+}
+
+.sc-person-card-head .sc-avatar {
+  width: 3rem;
+  height: 3rem;
+  font-size: var(--sc-text-lg);
+}
+
+/* Who has a task, before its title on a project's calendar; a bar has no gap of its own. */
+.sc-calendar-bar .sc-avatar {
+  margin-right: var(--sc-space-1);
+}
+
+@media (max-width: 40rem) {
+  .sc-calendar-bar .sc-avatar,
+  .sc-calendar-task .sc-avatar {
+    display: none;
+  }
+}

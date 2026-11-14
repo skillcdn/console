@@ -1,0 +1,61 @@
+.sc-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-width: 0;
+  font-size: var(--sc-text-sm);
+  white-space: nowrap;
+}
+
+.sc-crumb-separator {
+  color: var(--sc-color-border-strong);
+}
+
+.sc-crumb-link {
+  overflow: hidden;
+  max-width: 14rem;
+  color: var(--sc-color-text-muted);
+  font-weight: var(--sc-weight-medium);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  transition: color var(--sc-transition);
+}
+
+.sc-crumb-link:hover {
+  color: var(--sc-color-text);
+}
+
+/* The last crumb is where the page is. */
+.sc-crumb:last-of-type .sc-crumb-link {
+  color: var(--sc-color-text);
+}
+
+.sc-doc-crumbs {
+  margin-bottom: var(--sc-space-3);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-doc-crumbs a {
+  color: var(--sc-color-text-muted);
+  text-decoration: none;
+}
+
+.sc-doc-crumbs a:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-doc-crumbs .sc-crumb-separator {
+  margin-inline: var(--sc-space-2);
+}
+
+@media (max-width: 40rem) {
+  .sc-crumb-link {
+    max-width: 8rem;
+  }
+
+  /* A narrow bar holds the lockup and where the page is; the crumbs above that give way. */
+  .sc-crumb:not(:last-of-type) {
+    display: none;
+  }
+}

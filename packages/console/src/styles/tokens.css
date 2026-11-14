@@ -1,0 +1,289 @@
+:root {
+  color-scheme: light;
+
+  /* Surfaces: the page's own pale ground, the step into it, and white above it. */
+  --sc-color-bg: #f7f8fc;
+  --sc-color-bg-inset: #edf0f6;
+  --sc-color-bg-raised: #ffffff;
+  --sc-color-border: #e4e8ef;
+  --sc-color-border-strong: #7d899e;
+
+  /* Text: the site's own ink on white. */
+  --sc-color-text: #14141a;
+  --sc-color-text-muted: #4b5563;
+  --sc-color-text-faint: #666c7c;
+  /* Black: what a colour is mixed towards where it darkens under the pointer, and the solid
+     of a mask that fades an edge out. Never a fill or a text colour of its own. */
+  --sc-color-shade: #000;
+
+  /* The one accent: the blue that text and lines are drawn in, and the deeper blue a surface
+     is filled with so that a white label reads on it. Under the pointer each is mixed a little
+     towards black where it is drawn. */
+  --sc-color-accent: #2c5bc4;
+  --sc-color-accent-solid: #3b6fd4;
+  --sc-color-accent-contrast: #ffffff;
+  --sc-color-accent-subtle: #dbe6ff;
+  /* The point: the only warm colour, for what should be looked at first, never for a control. */
+  --sc-color-point: #c2410c;
+  --sc-color-point-subtle: #fff1e6;
+
+  /* Status. */
+  --sc-color-success: #146b44;
+  --sc-color-success-subtle: #d4efe1;
+  /* Warning: an amber, its words at 5:1 or better on its own fill and on the page. */
+  --sc-color-warning: #a64b07;
+  --sc-color-warning-subtle: #fef3c7;
+  /* The line round a warning: a clear amber, where the words' own brown on the pale fill reads as an outline. */
+  --sc-color-warning-line: #e9a23b;
+  --sc-color-danger: #b0273a;
+  --sc-color-danger-subtle: #fadadf;
+  /* For the plugins' pages (ADR-0054): a state that informs, one neither good nor bad, a palette for figures, tabular numerals. */
+  --sc-color-info: #1d4ed8;
+  --sc-color-info-subtle: #dbe6ff;
+  --sc-color-neutral: #4b5563;
+  --sc-color-neutral-subtle: #e7eaf0;
+  --sc-series-1: #2c5bc4;
+  --sc-series-2: #c2410c;
+  --sc-series-3: #146b44;
+  --sc-series-4: #8f6100;
+  --sc-series-5: #7c3aed;
+  --sc-series-6: #0e7490;
+  --sc-numeric: "tnum" 1, "lnum" 1;
+
+  /* The ground: a pale field, one gradient from the top. The default UI provides the field's
+     face (the shell); a custom console may paint its own. */
+  --sc-field-gradient: linear-gradient(160deg, #e3e9f7 0%, #eef1f9 42%, #f9fafd 100%);
+
+  /* Glass: what a pane over the field is made of. A wide blur with the colour behind pushed, a
+     white veil, a bright edge, and a soft stand-off from the field. */
+  --sc-glass-backdrop: blur(20px) saturate(1.6);
+  --sc-color-glass: #ffffff99;
+  --sc-color-glass-hover: #ffffffbf;
+  /* The rim: a hair of white along a pane's edge, its border. */
+  --sc-color-glass-edge: #ffffff;
+  /* The light that falls down a pane's face, from its top edge. */
+  --sc-glass-highlight: #ffffffb3;
+  --sc-glass-surface:
+    linear-gradient(170deg, var(--sc-glass-highlight), transparent 38%) padding-box,
+    linear-gradient(var(--sc-color-glass), var(--sc-color-glass)) padding-box;
+  --sc-glass-surface-hover:
+    linear-gradient(170deg, var(--sc-glass-highlight), transparent 38%) padding-box,
+    linear-gradient(var(--sc-color-glass-hover), var(--sc-color-glass-hover)) padding-box;
+  --sc-glass-sheen: inset 0 1px 0 #ffffff;
+  --sc-glass-lift: 0 0.5rem 1.5rem #1f268714, 0 1px 2px #1f26870f;
+  /* A surface inside a pane: no blur of its own, white with a little of the pane let through. */
+  --sc-color-sheet: color-mix(in srgb, var(--sc-color-bg-raised) 82%, transparent);
+  --sc-color-sheet-hover: color-mix(in srgb, var(--sc-color-bg-raised) 96%, transparent);
+
+  /* A lit thing casts the accent's own colour downward, in layers that fall off the way
+     brightness does. */
+  --sc-glow:
+    0 0.125rem 0.5rem -0.25rem color-mix(in srgb, var(--sc-color-accent-solid) 40%, transparent),
+    0 0.5rem 1.25rem -0.5rem color-mix(in srgb, var(--sc-color-accent-solid) 22%, transparent),
+    0 1.25rem 3rem -1rem color-mix(in srgb, var(--sc-color-accent-solid) 11%, transparent);
+  --sc-shadow-stage: 0 1.25rem 3.5rem #1a2b552e;
+  /* What a menu casts, open over the page: close under it, and soft. */
+  --sc-shadow-menu: 0 0.75rem 2rem -0.5rem #1a2b5533, 0 0.125rem 0.375rem #1a2b5514;
+  /* What a sheet inside a pane casts: a hair of shade under its lower edge. */
+  --sc-shadow-sheet: 0 1px 2px #1f26870f;
+
+  /* Type. The Korean face comes first where the page provides it; the Latin stays with the
+     system's faces. */
+  --sc-font-sans:
+    "Pretendard Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Apple SD Gothic Neo",
+    "Malgun Gothic", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
+  --sc-font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", "D2Coding",
+    monospace;
+
+  --sc-text-xs: 0.8125rem;
+  --sc-text-sm: 0.9375rem;
+  --sc-text-md: 1rem;
+  --sc-text-lg: 1.125rem;
+  --sc-text-xl: 1.375rem;
+  --sc-text-2xl: 1.75rem;
+  --sc-leading-tight: 1.2;
+  --sc-leading-normal: 1.6;
+  --sc-leading-code: 1.7;
+  --sc-leading-snug: 1.45;
+  --sc-tracking-tight: -0.02em;
+  --sc-tracking-wide: 0.04em;
+  --sc-tracking-code: 0.12em;
+  --sc-weight-normal: 400;
+  --sc-weight-medium: 500;
+  --sc-weight-bold: 650;
+  /* Every face leaves more room above a line than below it, so a one-line label centred in a
+     box lands low; a box that centres a label takes this off the top and gives it to the
+     bottom. Not for anything that can wrap. */
+  --sc-label-lift: 0.067em;
+
+  /* Space: a 4px grid. */
+  --sc-space-1: 0.25rem;
+  --sc-space-2: 0.5rem;
+  --sc-space-3: 0.75rem;
+  --sc-space-4: 1rem;
+  --sc-space-5: 1.5rem;
+  --sc-space-6: 2rem;
+  --sc-space-7: 3rem;
+  --sc-space-8: 4.5rem;
+
+  /* Shape. */
+  --sc-radius-sm: 4px;
+  --sc-radius-md: 8px;
+  --sc-radius-lg: 12px;
+  --sc-radius-xl: 20px;
+  --sc-radius-full: 999px;
+  --sc-border: 1px solid var(--sc-color-border);
+  --sc-hairline: 1px solid color-mix(in srgb, var(--sc-color-border) 70%, transparent);
+  --sc-border-strong: 1px solid var(--sc-color-border-strong);
+
+  /* Layout. The gutter at the sides of the header, the tabs and every page grows with the
+     window, from a step of the grid on a laptop to a wide margin on a large screen, so that a
+     page on a wide screen does not run to its very edges; a phone narrows it further below. */
+  --sc-gutter: clamp(var(--sc-space-7), 5vw, 10rem);
+  --sc-width-prose: 46rem;
+  --sc-width-aside: 18rem;
+  --sc-column-width: 13.5rem;
+  --sc-header-height: 3.75rem;
+  /* The lockup: the symbol's size, and the wordmark's height and the room between them as
+     fractions of it, the fractions those of the brand's lockup file (the wordmark 73.77 tall
+     on a symbol of 100, 31.98 between them). */
+  --sc-brand-size: 1.375rem;
+  --sc-brand-size-compact: 1.25rem;
+  --sc-brand-wordmark-ratio: 0.7377;
+  --sc-brand-gap-ratio: 0.3198;
+  --sc-control-size: 2.5rem;
+  --sc-focus-ring: 2px solid var(--sc-color-accent);
+  /* A scrollbar's thumb: a light grey, there when it is needed and quiet otherwise. */
+  --sc-scrollbar-thumb: color-mix(in srgb, var(--sc-color-border-strong) 45%, transparent);
+  /* A select's chevron: a thin stroke in a grey that reads on a light field and a dark one. */
+  --sc-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235a6371' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --sc-transition: 120ms ease-out;
+}
+
+/* A page in Korean (the pages say their language on <html>): Hangul fills more of its box than
+   Latin capitals and sits higher in it, so a label is lifted less, and the tracking is off. */
+:root:lang(ko) {
+  --sc-label-lift: -0.083em;
+  --sc-tracking-tight: 0;
+  --sc-tracking-wide: 0;
+}
+
+/* The schedule, the roadmap and the categories (ADR-0019). */
+
+/* The colours a category may be shown in: names, painted here and nowhere else. Each is a
+   light fill with its words dark in the same hue, and a mark, a clear mid-tone of the hue, for
+   the dots, flags and bars where the colour stands alone; the eight hues spread around the
+   wheel so that no two are taken for each other at a glance. A console that sets only the line
+   and the fill gets its line where the mark would be. */
+.sc-category-gray {
+  --sc-category-line: #4a5468;
+  --sc-category-fill: #e0e4eb;
+  --sc-category-mark: #7b8597;
+}
+
+.sc-category-blue {
+  --sc-category-line: #1d4fcb;
+  --sc-category-fill: #d2e0ff;
+  --sc-category-mark: #2f6ae8;
+}
+
+.sc-category-green {
+  --sc-category-line: #176d26;
+  --sc-category-fill: #cdf0cc;
+  --sc-category-mark: #22a04a;
+}
+
+.sc-category-orange {
+  --sc-category-line: #b83c00;
+  --sc-category-fill: #ffe6d1;
+  --sc-category-mark: #f0731a;
+}
+
+.sc-category-pink {
+  --sc-category-line: #b2176a;
+  --sc-category-fill: #fdd2e5;
+  --sc-category-mark: #e63d94;
+}
+
+.sc-category-purple {
+  --sc-category-line: #6434c2;
+  --sc-category-fill: #e6d8fc;
+  --sc-category-mark: #8457e6;
+}
+
+.sc-category-teal {
+  --sc-category-line: #08667a;
+  --sc-category-fill: #c6edf4;
+  --sc-category-mark: #0f9bb0;
+}
+
+.sc-category-yellow {
+  --sc-category-line: #44403c;
+  --sc-category-fill: #fbe9b2;
+  --sc-category-mark: #e6b42c;
+}
+
+/* A badge's palette by its kind and its tone, painted here and nowhere else: the fill, the
+   words and, for a due day, the line. The rules of parts/badge.css read them. */
+.sc-badge-neutral {
+  --sc-badge-fill: #dfe3eb;
+  --sc-badge-ink: #3f4756;
+}
+
+.sc-badge.sc-badge-kind-priority {
+  --sc-badge-fill: #e1e6ee;
+  --sc-badge-ink: #3a4558;
+}
+
+.sc-badge.sc-badge-kind-priority.sc-badge-point {
+  --sc-badge-fill: #ffd4a8;
+  --sc-badge-ink: #7a3300;
+}
+
+.sc-badge.sc-badge-kind-priority.sc-badge-danger {
+  --sc-badge-fill: #fdbcc3;
+  --sc-badge-ink: #7d0e1d;
+}
+
+.sc-badge.sc-badge-kind-due {
+  --sc-badge-line: #a3acba;
+  --sc-badge-fill: #f4f6f9;
+  --sc-badge-ink: #4b5563;
+}
+
+.sc-badge.sc-badge-kind-due.sc-badge-accent {
+  --sc-badge-line: #6f93e8;
+  --sc-badge-fill: #f0f5ff;
+  --sc-badge-ink: #1d4ed8;
+}
+
+.sc-badge.sc-badge-kind-due.sc-badge-success {
+  --sc-badge-line: #5fb488;
+  --sc-badge-fill: #effaf4;
+  --sc-badge-ink: #146b44;
+}
+
+.sc-badge.sc-badge-kind-due.sc-badge-warning {
+  --sc-badge-line: #e0b100;
+  --sc-badge-fill: #fffae6;
+  --sc-badge-ink: #8a6500;
+}
+
+.sc-badge.sc-badge-kind-due.sc-badge-point {
+  --sc-badge-line: #f59e3c;
+  --sc-badge-fill: #fff4ea;
+  --sc-badge-ink: #b45309;
+}
+
+.sc-badge.sc-badge-kind-due.sc-badge-due-today {
+  --sc-badge-line: #f26b4a;
+  --sc-badge-fill: #fff1ec;
+  --sc-badge-ink: #c2330f;
+}
+
+.sc-badge.sc-badge-kind-due.sc-badge-danger {
+  --sc-badge-line: #d33a47;
+  --sc-badge-fill: #fff0f1;
+  --sc-badge-ink: #c0262f;
+}

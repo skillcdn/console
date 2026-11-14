@@ -1,0 +1,21 @@
+.sc-empty {
+  padding: var(--sc-space-7) var(--sc-space-5);
+  border: 1px dashed var(--sc-color-border);
+  border-radius: var(--sc-radius-lg);
+  text-align: center;
+}
+
+.sc-empty-title {
+  font-weight: var(--sc-weight-bold);
+}
+
+.sc-empty-body {
+  max-width: 34rem;
+  margin: var(--sc-space-2) auto 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-empty-action {
+  margin-top: var(--sc-space-4);
+}

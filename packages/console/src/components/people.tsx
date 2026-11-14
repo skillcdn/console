@@ -441,9 +441,9 @@ export function PeopleList(props: PeopleListProps) {
     );
   };
   return (
-    <div className="sc-people-page">
+    <div>
       {organization !== undefined && (
-        <p className="sc-people-organization sc-muted">
+        <p className="sc-muted">
           {people.organization(organization.name)}{" "}
           {organization.syncedAt === null ? (
             people.organizationNotRead

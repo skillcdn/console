@@ -1,0 +1,712 @@
+/* Sources: components/home.tsx */
+
+.sc-tile-pane,
+.sc-home-bar {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--sc-color-glass-edge);
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
+}
+
+/* The front page (ADR-0061): one grid of square cells, each as wide as the page gives it, a
+   tile's place and shape numbers on its style. A tile stands where a transform puts it, so that
+   it glides to a new place and the frame in it stays loaded. */
+
+.sc-home {
+  container-type: inline-size;
+}
+
+.sc-home-grid {
+  --sc-home-columns: 8;
+  --sc-home-rows: 1;
+  --sc-home-gap: var(--sc-space-4);
+  --sc-home-cell: calc(
+    (100cqi - (var(--sc-home-columns) - 1) * var(--sc-home-gap)) /
+    var(--sc-home-columns)
+  );
+  --sc-home-step: calc(var(--sc-home-cell) + var(--sc-home-gap));
+  position: relative;
+  height: calc(var(--sc-home-rows) * var(--sc-home-step) - var(--sc-home-gap));
+  row-gap: var(--sc-home-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-home-grid[data-columns="4"] {
+  --sc-home-gap: var(--sc-space-3);
+}
+
+.sc-tile {
+  container: sc-tile / size;
+  --sc-tile-x: 0;
+  --sc-tile-y: 0;
+  --sc-tile-w: 1;
+  --sc-tile-h: 1;
+  --sc-tile-left: 0px;
+  --sc-tile-top: 0px;
+  --sc-tile-wait: 0ms;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(var(--sc-tile-w) * var(--sc-home-step) - var(--sc-home-gap));
+  height: calc(var(--sc-tile-h) * var(--sc-home-step) - var(--sc-home-gap));
+  /* The property of its own and not `transform`, which the `scale` of a tile in hand would multiply. */
+  translate: calc(var(--sc-tile-x) * var(--sc-home-step))
+    calc(var(--sc-tile-y) * var(--sc-home-step));
+}
+
+.sc-tile-pane {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--sc-radius-xl);
+  transition:
+    border-color var(--sc-transition),
+    background var(--sc-transition),
+    box-shadow var(--sc-transition);
+}
+
+/* A project as an icon: its mark and its name in the middle of the cell, what waits in the corner.
+   The mark and the room around it follow the cell. What still does not fit stands whole or not at
+   all: its row goes to a second column, past the room the tile cuts off, so that no line of words
+   is ever cut across. */
+.sc-tile-project {
+  --sc-tile-mark: clamp(1.75rem, 47cqh, 3.25rem);
+  display: flex;
+  flex-flow: column wrap;
+  gap: clamp(0.125rem, 4cqh, 0.5rem) var(--sc-space-7);
+  align-content: flex-start;
+  justify-content: center;
+  padding: clamp(0.25rem, 8cqh, 0.75rem);
+  overflow: hidden;
+  color: var(--sc-color-text);
+  text-align: center;
+  text-decoration: none;
+}
+
+.sc-tile-project > :not(.sc-tile-count) {
+  flex: none;
+  width: 100%;
+}
+
+.sc-tile-mark {
+  display: flex;
+  justify-content: center;
+}
+
+a.sc-tile-project:hover,
+a.sc-tile-project:focus-visible,
+a.sc-tile-glance:hover,
+a.sc-tile-glance:focus-visible {
+  border-color: var(--sc-color-accent);
+  background: var(--sc-glass-surface-hover);
+  color: var(--sc-color-text);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift), var(--sc-glow);
+}
+
+.sc-tile-project .sc-mark {
+  width: var(--sc-tile-mark);
+  height: var(--sc-tile-mark);
+  font-size: calc(var(--sc-tile-mark) * 0.42);
+}
+
+.sc-tile-name {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+  line-height: var(--sc-leading-snug);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* What waits, in the corner: the count a tab shows, where it stands on a tile. */
+.sc-tile-count {
+  position: absolute;
+  top: var(--sc-space-2);
+  right: var(--sc-space-2);
+}
+
+/* On a low cell the name keeps to one line, on the lowest in smaller words. */
+@container sc-tile (height < 7.75rem) {
+  .sc-tile-project:not(.sc-tile-project-card) .sc-tile-name {
+    -webkit-line-clamp: 1;
+  }
+}
+
+@container sc-tile (height < 5.5rem) {
+  .sc-tile-project:not(.sc-tile-project-card) {
+    border-radius: var(--sc-radius-lg);
+  }
+
+  .sc-tile-project:not(.sc-tile-project-card) .sc-tile-name {
+    font-size: var(--sc-text-xs);
+    line-height: var(--sc-leading-tight);
+  }
+}
+
+/* A project as a card, read from the corner: its name, what it is at a glance, and as much of its
+   description as the card has room for, the rows lost from the last up. */
+.sc-tile-project-card {
+  --sc-tile-mark: clamp(2.25rem, 22cqh, 3.25rem);
+  justify-content: flex-start;
+  padding: clamp(0.75rem, 8cqh, 1.25rem);
+  text-align: start;
+}
+
+.sc-tile-project-card .sc-tile-mark {
+  justify-content: flex-start;
+}
+
+.sc-tile-project-card .sc-tile-name {
+  font-size: var(--sc-text-lg);
+  font-weight: var(--sc-weight-bold);
+}
+
+.sc-tile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  align-items: center;
+}
+
+.sc-tile-about {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+@container sc-tile (height < 15rem) {
+  .sc-tile-project-card .sc-tile-name {
+    -webkit-line-clamp: 1;
+  }
+
+  .sc-tile-about {
+    -webkit-line-clamp: 2;
+  }
+}
+
+@container sc-tile (height < 13rem) {
+  .sc-tile-about {
+    -webkit-line-clamp: 1;
+  }
+}
+
+/* A project at a glance (ADR-0105): its name and three figures at the head; under them, or beside
+   them on a wide tile, its tasks in progress and its goals ahead, each list under its label. A
+   hairline across the tile parts the head from the lists and the lists from each other, and one
+   inside a list parts its rows. The page keeps as many rows as the room holds, each whole, by the
+   heights the tile's style gives (--sc-glance-*, home.tsx), so that nothing is cut and no room is
+   left over. */
+.sc-tile-glance {
+  --sc-glance-pad-x: clamp(1rem, 4cqw, 1.5rem);
+  --sc-glance-pad-y: clamp(0.875rem, 5cqh, 1.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-space-3);
+  padding: var(--sc-glance-pad-y) var(--sc-glance-pad-x);
+  overflow: hidden;
+  color: var(--sc-color-text);
+  text-decoration: none;
+}
+
+.sc-glance-lead {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-3) var(--sc-space-5);
+  min-width: 0;
+}
+
+.sc-glance-who {
+  display: flex;
+  flex: 1 1 11rem;
+  align-items: center;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+.sc-glance-name {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.sc-tile-glance .sc-tile-name {
+  display: block;
+  overflow: hidden;
+  font-size: var(--sc-text-lg);
+  font-weight: var(--sc-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-glance-key {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Three figures side by side, each over its name, the decisions waiting in the colour of a count. */
+.sc-glance-facts {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(3, auto);
+  gap: var(--sc-space-5);
+  margin: 0;
+}
+
+.sc-glance-fact {
+  display: grid;
+  gap: 0.125rem;
+  justify-items: start;
+}
+
+.sc-glance-fact dt {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  white-space: nowrap;
+}
+
+.sc-glance-fact dd {
+  order: -1;
+  margin: 0;
+  font-size: var(--sc-text-xl);
+  font-weight: var(--sc-weight-bold);
+  font-feature-settings: var(--sc-numeric);
+  line-height: var(--sc-leading-tight);
+}
+
+.sc-glance-fact-waiting dd {
+  color: var(--sc-color-point);
+}
+
+/* The lists, one under the other, under a hairline across the tile; the line is there while a list is. */
+.sc-glance-body {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  margin-inline: calc(-1 * var(--sc-glance-pad-x));
+  padding: var(--sc-space-3) var(--sc-glance-pad-x) 0;
+  overflow: hidden;
+  border-top: var(--sc-hairline);
+}
+
+.sc-glance-body:empty {
+  border-top-color: transparent;
+}
+
+.sc-glance-section {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sc-glance-body > .sc-glance-section + .sc-glance-section,
+.sc-glance-column > .sc-glance-section + .sc-glance-section {
+  margin: calc(var(--sc-glance-between) / 2) calc(-1 * var(--sc-glance-pad-x)) 0;
+  padding: calc(var(--sc-glance-between) / 2 - 1px) var(--sc-glance-pad-x) 0;
+  border-top: var(--sc-hairline);
+}
+
+.sc-glance-heading {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--sc-glance-heading);
+  margin: 0;
+}
+
+.sc-glance-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-glance-row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sc-space-2);
+  height: var(--sc-glance-task);
+  min-width: 0;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-glance-row + .sc-glance-row {
+  border-top: var(--sc-hairline);
+}
+
+.sc-glance-row-main {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-glance-none {
+  color: var(--sc-color-text-faint);
+}
+
+/* A goal in two lines: its title, its day and how many of its tasks are done, then its bar across. */
+.sc-glance-goal {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--sc-space-1);
+  height: var(--sc-glance-goal);
+}
+
+.sc-glance-goal-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+.sc-glance-figure,
+.sc-glance-day {
+  flex: none;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  font-feature-settings: var(--sc-numeric);
+}
+
+.sc-glance-day {
+  color: var(--sc-color-text-faint);
+}
+
+.sc-glance-more {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--sc-glance-more);
+  margin: 0;
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+}
+
+/* Wide: the head a column of its own, the name at the top and the figures at the foot, and each
+   list a column beside it, a hairline down between them. */
+.sc-tile-glance-wide {
+  display: grid;
+  grid-template-columns: minmax(0, clamp(12rem, 24cqw, 16rem)) minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 0;
+}
+
+.sc-tile-glance-wide .sc-glance-lead {
+  flex-flow: column nowrap;
+  align-items: stretch;
+  justify-content: space-between;
+  padding-inline-end: var(--sc-glance-pad-x);
+}
+
+.sc-tile-glance-wide .sc-glance-who {
+  flex: none;
+}
+
+/* On a wide tile the head's column has room under the name: what the project is, as much as fits. */
+.sc-glance-about {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin-block: var(--sc-space-3) auto;
+}
+
+.sc-glance-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding-inline: var(--sc-glance-pad-x);
+  overflow: hidden;
+  border-inline-start: var(--sc-hairline);
+}
+
+.sc-glance-column:last-child {
+  padding-inline-end: 0;
+}
+
+/* A widget: its name, and its frame filling the cells its size gives it. */
+.sc-tile-widget {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  overflow: hidden;
+}
+
+.sc-tile-title {
+  margin: 0 0 var(--sc-space-2);
+  overflow: hidden;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-tile-widget .sc-plugin-frame-box {
+  height: 100%;
+  min-height: 0;
+}
+
+/* While the page is arranged: the cells show as dots, every tile is a thing to take hold of, and
+   what is in a frame stays out of the pointer's way. The bar stays in reach, just under the header
+   and above the tiles that pass beneath it. */
+.sc-home-bar {
+  position: sticky;
+  top: calc(var(--sc-header-height) + 2.75rem + var(--sc-space-3));
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2) var(--sc-space-4);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sc-space-4);
+  padding: var(--sc-space-2) var(--sc-space-2) var(--sc-space-2) var(--sc-space-4);
+  border-radius: var(--sc-radius-lg);
+}
+
+.sc-home-hint {
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-home-bar-actions {
+  display: flex;
+  gap: var(--sc-space-2);
+  align-items: center;
+}
+
+.sc-home-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  align-items: center;
+  margin-bottom: var(--sc-space-4);
+}
+
+.sc-home-add {
+  padding: var(--sc-space-1) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-sheet);
+  color: var(--sc-color-text);
+  font: inherit;
+  font-size: var(--sc-text-sm);
+  cursor: pointer;
+}
+
+.sc-home-add:hover {
+  border-color: var(--sc-color-accent);
+}
+
+.sc-home-editing .sc-home-grid {
+  background-image: radial-gradient(circle, var(--sc-color-text-faint) 1px, transparent 1.5px);
+  background-position: calc(var(--sc-home-cell) / 2) calc(var(--sc-home-cell) / 2);
+  background-size: var(--sc-home-step) var(--sc-home-step);
+}
+
+/* A tile moves with a little give, overshooting its cell and settling on it, and those in the way
+   start one after another, each as the wait in its style says. One put down keeps its place above
+   the others until it has landed. */
+.sc-home-editing .sc-tile {
+  z-index: 1;
+  cursor: grab;
+  transition:
+    translate 360ms cubic-bezier(0.25, 1.35, 0.4, 1) var(--sc-tile-wait),
+    scale 160ms ease-out,
+    z-index 0s linear 360ms;
+  user-select: none;
+}
+
+.sc-home-editing .sc-tile:focus-visible {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
+}
+
+.sc-home-editing .sc-tile:hover .sc-tile-pane {
+  border-color: var(--sc-color-accent);
+}
+
+.sc-home-editing .sc-plugin-frame {
+  pointer-events: none;
+}
+
+/* A finger resting on a tile is neither selecting its words nor asking for the page's menu. */
+@media (pointer: coarse) {
+  .sc-home-editing .sc-tile {
+    -webkit-touch-callout: none;
+  }
+}
+
+/* The tile in hand: lifted off the page, and under the pointer with no delay. */
+.sc-home-editing .sc-tile-held {
+  z-index: 10;
+  translate: var(--sc-tile-left) var(--sc-tile-top);
+  scale: 1.04;
+  transition: scale 160ms ease-out;
+}
+
+.sc-tile-held .sc-tile-pane {
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift), var(--sc-glow);
+}
+
+.sc-home-held,
+.sc-home-held .sc-tile,
+.sc-home-held .sc-tile * {
+  cursor: grabbing;
+}
+
+/* Where it would land: the tile itself, faint, on a pane of the accent's glass, beneath those on
+   their way out of it. */
+.sc-home-editing .sc-tile-slot {
+  z-index: 0;
+  animation: sc-tile-slot-in 160ms ease-out;
+  pointer-events: none;
+}
+
+.sc-tile-slot .sc-tile-pane {
+  border-color: color-mix(in srgb, var(--sc-color-accent-solid) 45%, transparent);
+  background: color-mix(in srgb, var(--sc-color-accent-subtle) 50%, transparent);
+  box-shadow: none;
+}
+
+.sc-tile-slot .sc-tile-pane > * {
+  opacity: 0.4;
+}
+
+.sc-tile-slot .sc-tile-count {
+  display: none;
+}
+
+@keyframes sc-tile-slot-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The ways on a tile while the page is arranged: off the page at its corner, the sizes across. */
+.sc-tile-remove {
+  position: absolute;
+  top: calc(var(--sc-space-2) * -1);
+  left: calc(var(--sc-space-2) * -1);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-bg-raised);
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sc-tile-remove:hover {
+  border-color: var(--sc-color-accent);
+}
+
+/* The sizes stay within their tile, folding onto a second row where a cell is narrower than they
+   are, as a project's five are on an icon: what stands beside the tile, and its own way off the
+   page, stay in reach. */
+.sc-tile-sizes {
+  position: absolute;
+  top: var(--sc-space-1);
+  right: var(--sc-space-1);
+  z-index: 1;
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 1px;
+  min-inline-size: 0;
+  max-width: calc(100% - var(--sc-space-1) * 2);
+  margin: 0;
+  padding: 1px;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-raised);
+}
+
+.sc-tile-size {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 3px;
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: transparent;
+  color: var(--sc-color-text-muted);
+  cursor: pointer;
+}
+
+.sc-tile-size:hover {
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-tile-size-on {
+  background: var(--sc-color-accent-subtle);
+  color: var(--sc-color-accent);
+}
+
+/* Under the sizes, a widget's name ends short of them; on small cells a project stands lower. */
+.sc-home-editing .sc-tile-title {
+  padding-inline-end: 4.5rem;
+}
+
+.sc-home-editing .sc-home-grid[data-columns="4"] .sc-tile-size,
+.sc-home-editing .sc-home-grid[data-columns="6"] .sc-tile-size {
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 2px;
+}
+
+.sc-home-editing .sc-home-grid[data-columns="4"] .sc-tile-project:not(.sc-tile-project-card),
+.sc-home-editing .sc-home-grid[data-columns="6"] .sc-tile-project:not(.sc-tile-project-card) {
+  justify-content: flex-end;
+}
+
+/* A glance's figures stand where the sizes do: while the page is arranged, it starts under them. */
+.sc-home-editing .sc-tile-glance {
+  padding-top: calc(var(--sc-glance-pad-y) + var(--sc-space-6));
+}
+
+/* The size's shape in small: the cells it takes, a few pixels each. */
+.sc-tile-size-glyph {
+  display: block;
+  width: calc(var(--sc-tile-w) * 2px + 4px);
+  height: calc(var(--sc-tile-h) * 2px + 4px);
+  border: 1.5px solid currentcolor;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-home-editing .sc-tile,
+  .sc-home-editing .sc-tile-held {
+    transition: none;
+  }
+
+  .sc-home-editing .sc-tile-slot {
+    animation: none;
+  }
+}

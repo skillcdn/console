@@ -1,0 +1,268 @@
+/* Sources: components/documents.tsx, docs-page.tsx, components/rules.tsx */
+
+.sc-folder > *,
+.sc-docs > * {
+  min-width: 0;
+}
+
+.sc-doc-row {
+  border: var(--sc-border);
+  background: var(--sc-color-sheet);
+  box-shadow: var(--sc-shadow-sheet);
+}
+
+.sc-doc-meta .sc-feed-agent {
+  margin-inline-start: 0;
+}
+
+/* Documents: a folder's pages, one page with its versions, its links both ways and its files. */
+
+.sc-doc {
+  display: grid;
+  gap: var(--sc-space-5);
+}
+
+/* On a page the crumbs sit close to the title. */
+.sc-doc > .sc-doc-crumbs {
+  margin-bottom: calc(-1 * var(--sc-space-3));
+}
+
+.sc-doc-search {
+  display: flex;
+  gap: var(--sc-space-2);
+  margin-bottom: var(--sc-space-4);
+}
+
+.sc-doc-search .sc-input {
+  flex: 1;
+  max-width: 32rem;
+}
+
+.sc-folder {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-folders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-folder-link {
+  display: inline-block;
+  padding: var(--sc-space-1) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-sheet);
+  color: var(--sc-color-text);
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-sm);
+  text-decoration: none;
+  transition:
+    border-color var(--sc-transition),
+    color var(--sc-transition);
+}
+
+.sc-folder-link:hover {
+  border-color: var(--sc-color-accent);
+  color: var(--sc-color-accent);
+}
+
+.sc-docs {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A page in a list reads on two lines: its title, with a mark if it is archived, and under it
+   where it lives, its version, who wrote it last and when, each a step apart. */
+.sc-doc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border-radius: var(--sc-radius-lg);
+  transition: border-color var(--sc-transition);
+}
+
+.sc-doc-row:hover {
+  border-color: var(--sc-color-border-strong);
+}
+
+.sc-doc-title {
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-bold);
+  line-height: var(--sc-leading-snug);
+  text-decoration: none;
+}
+
+.sc-doc-title:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-doc-meta {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-doc-meta .sc-person-login {
+  font-weight: var(--sc-weight-normal);
+}
+
+.sc-doc-path {
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-xs);
+  color: var(--sc-color-text-faint);
+}
+
+.sc-doc-editor {
+  min-height: 24rem;
+}
+
+.sc-doc-notice {
+  margin-bottom: var(--sc-space-4);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  color: var(--sc-color-text-muted);
+}
+
+.sc-doc-archived .sc-prose {
+  opacity: 0.55;
+}
+
+/* The pictures for a page, under its body: the way to add one, and what becomes of it. */
+.sc-doc-form-pictures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+/* The attach form: a button to choose the file with the chosen file's name beside it, the
+   name to call it under that, and the attach button across the bottom, all one height. */
+.sc-doc-attach {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin-top: var(--sc-space-3);
+}
+
+.sc-doc-attach-file {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+.sc-doc-attach-file > .sc-button {
+  flex: none;
+}
+
+.sc-doc-attach-chosen {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--sc-text-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sc-doc-attach > .sc-button {
+  width: 100%;
+}
+
+.sc-versions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-version {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--sc-space-3);
+  row-gap: var(--sc-space-1);
+  align-items: baseline;
+  padding-block: var(--sc-space-2);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-version + .sc-version {
+  border-top: var(--sc-hairline);
+}
+
+.sc-version-number {
+  min-width: 2rem;
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-version-title {
+  font-weight: var(--sc-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.sc-version-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  grid-column: 2;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-version-meta .sc-person-login {
+  font-weight: var(--sc-weight-normal);
+}
+
+.sc-version-meta .sc-feed-agent {
+  margin-inline-start: 0;
+}
+
+.sc-task-aside .sc-version + .sc-version {
+  margin-top: var(--sc-space-1);
+}
+
+/* The rules (ADR-0023): the facts of the page they are written on stand above the text. */
+.sc-rules-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin: 0 0 var(--sc-space-3);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+/* The ways to change the rules stand off the text, as a form's actions do. */
+.sc-rules-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin-top: var(--sc-space-4);
+}
+
+/* The rules folded under where they come from, where the page is about something else. */
+.sc-rules-fold > summary {
+  cursor: pointer;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-rules-fold[open] > summary {
+  margin-bottom: var(--sc-space-3);
+}

@@ -1,0 +1,63 @@
+/* Tasks as rows, where the columns are not the point. */
+.sc-task-rows {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sc-space-1) var(--sc-space-3);
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-task-row-title {
+  grid-column: 1;
+  min-width: 0;
+  color: var(--sc-color-text);
+  font-weight: var(--sc-weight-medium);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.sc-task-row-title:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-task-row-project {
+  grid-column: 1;
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-task-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sc-space-1);
+  margin-left: auto;
+}
+
+@media (max-width: 40rem) {
+  .sc-task-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sc-task-row-meta {
+    grid-row: auto;
+    grid-column: 1;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}

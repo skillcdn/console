@@ -1,0 +1,38 @@
+.sc-chosen-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--sc-text-sm);
+}
+
+.sc-chosen-file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  padding: var(--sc-space-1) var(--sc-space-2);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+}
+
+.sc-file-choice {
+  position: relative;
+  cursor: pointer;
+}
+
+.sc-file-choice:has(:focus-visible) {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
+}
+
+.sc-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+}

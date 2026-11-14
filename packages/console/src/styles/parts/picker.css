@@ -1,0 +1,185 @@
+.sc-picker-clear {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sc-radius-full);
+  background: transparent;
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-md);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--sc-transition),
+    color var(--sc-transition),
+    opacity var(--sc-transition);
+}
+
+.sc-picker-clear:hover:not(:disabled) {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
+.sc-picker-clear:focus-visible {
+  outline: var(--sc-focus-ring);
+}
+
+.sc-picker-clear:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* A picker: the field that searches a listing, its page of results under it, and the choice in its place. */
+.sc-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.sc-picker-chosen {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-height: var(--sc-control-size);
+  padding: var(--sc-space-1) var(--sc-space-1) var(--sc-space-1) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-raised);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-picker-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-picker-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + var(--sc-space-1));
+  right: 0;
+  left: 0;
+  max-height: 18rem;
+  margin: 0;
+  padding: var(--sc-space-1);
+  overflow-y: auto;
+  list-style: none;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-inset);
+  box-shadow: var(--sc-shadow-stage);
+  font-size: var(--sc-text-sm);
+}
+
+/* Where the window has no room below the field, and more above, the list stands above it. */
+.sc-picker-list-above {
+  top: auto;
+  bottom: calc(100% + var(--sc-space-1));
+}
+
+.sc-picker-option {
+  padding: var(--sc-space-2);
+  overflow: hidden;
+  border-radius: var(--sc-radius-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sc-picker-option-active {
+  background: var(--sc-color-bg-raised);
+}
+
+.sc-picker-note {
+  padding: var(--sc-space-2);
+}
+
+/* A picker in the board's filters, in the form that adds a member, or among chips without being
+   the way to add to them: wide enough for a name, never the whole row. */
+.sc-chips .sc-picker:not(.sc-picker-add),
+.sc-filters .sc-picker,
+.sc-member-form .sc-picker {
+  flex: 0 1 14rem;
+  min-width: 11rem;
+}
+
+.sc-picker-quiet.sc-picker-chosen {
+  min-height: 2rem;
+  padding-block: 0;
+  border-color: transparent;
+  background-color: transparent;
+}
+
+.sc-picker-quiet.sc-picker-chosen {
+  padding-inline: var(--sc-space-2) 0.1875rem;
+  transition:
+    border-color var(--sc-transition),
+    background var(--sc-transition);
+}
+
+.sc-picker-quiet.sc-picker-chosen:hover,
+.sc-picker-quiet.sc-picker-chosen:focus-within {
+  border-color: var(--sc-color-border);
+  background-color: var(--sc-color-sheet);
+}
+
+@media (hover: hover) {
+  .sc-picker-quiet.sc-picker-chosen:not(:hover):not(:focus-within) .sc-picker-clear {
+    opacity: 0;
+  }
+}
+
+/* A picker that adds one more to a row of chips: a chip itself, its line dashed, as wide as its
+   words until it is typed in, and its list as wide as a name needs. */
+.sc-picker-add {
+  flex: none;
+}
+
+.sc-picker-add > .sc-picker-list {
+  right: auto;
+  width: max-content;
+  min-width: 100%;
+  max-width: min(22rem, calc(100vw - 2rem));
+}
+
+/* A person to choose from: the name, and a second line under it, what they do or their login. */
+.sc-person-option {
+  align-items: center;
+}
+
+.sc-person-option-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sc-person-option-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  min-width: 0;
+}
+
+.sc-person-option-note {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-person-fact dd > .sc-picker-quiet {
+  width: calc(100% + var(--sc-space-2));
+  max-width: none;
+  margin-inline-start: calc(var(--sc-space-2) * -1);
+}
+
+/* A person or a project chosen in a setting: a field as wide as the others. */
+.sc-settings-control > .sc-picker:not(.sc-picker-add) {
+  justify-self: stretch;
+}

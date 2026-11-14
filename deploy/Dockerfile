@@ -54,6 +54,7 @@ COPY --from=build --chown=node:node /repo/apps/console/README.md ./packs/skillcd
 COPY --from=build --chown=node:node /repo/deploy/README.md /repo/deploy/Dockerfile /repo/deploy/compose.yaml /repo/deploy/compose.dev.yaml /repo/deploy/install.sh /repo/deploy/bundle.sh ./packs/skillcdn/console/deploy/
 COPY --from=build --chown=node:node /repo/examples/agent-desk/AGENTS.md ./packs/skillcdn/console/examples/agent-desk/
 COPY --from=build --chown=node:node /repo/packages/console/README.md ./packs/skillcdn/console/packages/console/
+COPY --from=build --chown=node:node /repo/packages/console/src/styles/README.md ./packs/skillcdn/console/packages/console/src/styles/
 # What the image is distributed under travels with it.
 COPY --from=build --chown=node:node /repo/LICENSE.md ./
 ENV WEB_ROOT=/app/web \

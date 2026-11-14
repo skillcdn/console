@@ -1,0 +1,174 @@
+/* The pages of a plugin: the header's tabs going on a row lower, on the same gutters, the line
+   under them where the page begins. The line is a shadow, so that the current tab's underline lies
+   on it, as the header's does on its own line, in a row that scrolls sideways. */
+.sc-page-tabs {
+  display: flex;
+  flex: none;
+  gap: var(--sc-space-5);
+  margin: calc(var(--sc-main-top) * -1) calc(var(--sc-main-side) * -1) var(--sc-space-5);
+  padding: var(--sc-space-1) var(--sc-main-side) 0;
+  background: color-mix(in srgb, var(--sc-color-bg) 45%, transparent);
+  box-shadow: inset 0 -1px 0 var(--sc-color-border);
+  overflow: auto hidden;
+  scrollbar-width: none;
+}
+
+.sc-task-aside .sc-section-title {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: var(--sc-tracking-wide);
+  text-transform: uppercase;
+}
+
+/* A page that takes the whole window takes the header with it, so that the lockup, the tabs and
+   the page start on one line, as they do on every other page. */
+.sc-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sc-space-3);
+  margin-bottom: var(--sc-space-5);
+  padding-bottom: var(--sc-space-4);
+  border-bottom: var(--sc-hairline);
+}
+
+.sc-page-title {
+  font-size: var(--sc-text-2xl);
+  letter-spacing: var(--sc-tracking-tight);
+}
+
+/* The ways a page offers at its head, side by side. */
+.sc-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+/* A page's name with a word about it beside: on one line where the window is wide, so that the
+   head stays low over the board; under the name where it is not. */
+.sc-page-heading {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+  column-gap: var(--sc-space-4);
+  row-gap: var(--sc-space-1);
+}
+
+.sc-page-lead {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+@media (min-width: 60rem) {
+  .sc-page-lead {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.sc-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin-bottom: var(--sc-space-3);
+  font-size: var(--sc-text-lg);
+}
+
+/* After the name of a section a line runs to the end: the section starts here. */
+.sc-section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  margin-inline-start: var(--sc-space-2);
+  background: var(--sc-color-border);
+}
+
+.sc-form-part > .sc-section-title {
+  margin: 0;
+}
+
+/* A part's title with something to do beside it: the title's line runs up to it. */
+.sc-form-part > .sc-section-head {
+  align-items: center;
+  margin: 0;
+}
+
+.sc-form-part > .sc-section-head > .sc-section-title {
+  flex: 1 1 auto;
+}
+
+.sc-people-group > .sc-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin-bottom: var(--sc-space-3);
+}
+
+.sc-task-aside .sc-section-title {
+  margin-bottom: var(--sc-space-1);
+}
+
+@media (max-width: 40rem) {
+  .sc-page-tabs {
+    gap: var(--sc-space-4);
+  }
+
+  .sc-page-title {
+    font-size: var(--sc-text-xl);
+  }
+}
+
+/* A section's title with what stands beside it: a way to where the thing is kept. */
+.sc-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sc-space-2) var(--sc-space-4);
+  margin-bottom: var(--sc-space-3);
+}
+
+.sc-section-head .sc-section-title {
+  margin-bottom: 0;
+}
+
+/* A phone's pages as one design. */
+@media (max-width: 40rem) {
+  /* Every page's head: the name, a word about it under the name, and the ways the page offers
+     as a row of equal buttons under those, so that no head differs from another. */
+  .sc-page-head {
+    display: grid;
+    justify-content: stretch;
+    gap: var(--sc-space-3);
+    margin-bottom: var(--sc-space-5);
+  }
+
+  .sc-page-heading {
+    display: grid;
+    row-gap: var(--sc-space-1);
+  }
+
+  .sc-page-lead {
+    flex: none;
+  }
+
+  .sc-page-actions {
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+
+  .sc-page-actions > * {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 0;
+  }
+}

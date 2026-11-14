@@ -1,0 +1,68 @@
+/* Sources: components/work.tsx */
+
+/* The decisions waiting on a person's plate: a row each. */
+.sc-decision-log {
+  display: grid;
+  gap: var(--sc-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-decision-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sc-space-1) var(--sc-space-3);
+  padding: var(--sc-space-2) var(--sc-space-3);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  font-size: var(--sc-text-sm);
+}
+
+@media (min-width: 40rem) {
+  .sc-decision-row {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+    align-items: center;
+  }
+}
+
+.sc-decision-row-question {
+  overflow-wrap: anywhere;
+}
+
+.sc-decision-row-question a {
+  color: var(--sc-color-text);
+  text-decoration: none;
+}
+
+.sc-decision-row-question a:hover {
+  color: var(--sc-color-accent);
+}
+
+.sc-decision-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  color: var(--sc-color-text-muted);
+}
+
+/* What is on a person's plate: the week across the page, and the lists under it as wide as the
+   week, two side by side where each still has a reading width, one under the other below that.
+   Every list is as wide as the others, so that their rows line up whatever their number. */
+.sc-work {
+  display: grid;
+  gap: var(--sc-space-6);
+}
+
+.sc-work-lists {
+  --sc-work-gap: var(--sc-space-7);
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(100%, max(24rem, calc((100% - var(--sc-work-gap)) / 2))), 1fr)
+    );
+  align-items: start;
+  gap: var(--sc-space-6) var(--sc-work-gap);
+}

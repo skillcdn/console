@@ -81,7 +81,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -b tsconfig.build.json && node -e \"fs.mkdirSync('dist',{recursive:true});fs.copyFileSync('src/styles/console.css','dist/console.css')\"",
+    "build": "tsc -b tsconfig.build.json && node ../../scripts/styles.mjs build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\"",

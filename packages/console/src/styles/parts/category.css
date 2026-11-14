@@ -1,0 +1,8 @@
+.sc-category-swatch {
+  display: inline-block;
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-category-mark, var(--sc-category-line, var(--sc-color-text-faint)));
+}

@@ -1,0 +1,19 @@
+/* The button under a list shown a page at a time. */
+.sc-show-more {
+  margin-top: var(--sc-space-3);
+}
+
+/* The way between the pages of the record: the step before, what is shown of how many, the step after. */
+.sc-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-3);
+  margin-top: var(--sc-space-3);
+}
+
+.sc-pager-range {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}

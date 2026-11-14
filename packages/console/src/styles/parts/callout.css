@@ -1,0 +1,41 @@
+/* Callouts, empty states, spinner */
+
+.sc-callout {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sc-space-4);
+  margin-bottom: var(--sc-space-4);
+  padding: var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  font-size: var(--sc-text-sm);
+}
+
+/* The line a clear amber: one of the warning's words on its pale amber reads as a brown outline. */
+.sc-callout-warning {
+  border-color: var(--sc-color-warning-line);
+  background: var(--sc-color-warning-subtle);
+}
+
+.sc-callout-danger {
+  border-color: var(--sc-color-danger);
+  background: var(--sc-color-danger-subtle);
+}
+
+.sc-callout-title {
+  font-weight: var(--sc-weight-bold);
+}
+
+.sc-callout-body {
+  color: var(--sc-color-text-muted);
+}
+
+.sc-callout-title + .sc-callout-body {
+  margin-top: var(--sc-space-1);
+}
+
+.sc-callout-body p + p {
+  margin-top: var(--sc-space-2);
+}

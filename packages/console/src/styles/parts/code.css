@@ -1,0 +1,48 @@
+.sc-code {
+  overflow-x: auto;
+  padding: var(--sc-space-3) var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-bg-raised);
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-sm);
+  line-height: var(--sc-leading-code);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* A text to copy as it is, with the way to copy it in its corner. */
+.sc-copyable {
+  position: relative;
+}
+
+.sc-copyable .sc-code {
+  padding-right: 5rem;
+}
+
+.sc-code-input {
+  max-width: 12rem;
+  font-family: var(--sc-font-mono);
+  font-size: var(--sc-text-lg);
+  letter-spacing: var(--sc-tracking-code);
+  text-transform: uppercase;
+}
+
+.sc-code-shown {
+  font-size: var(--sc-text-md);
+  letter-spacing: var(--sc-tracking-code);
+}
+
+@media (max-width: 40rem) {
+  /* A text to copy keeps the whole width here; the button that copies it sits below it. */
+  .sc-copyable {
+    display: grid;
+    justify-items: end;
+    gap: var(--sc-space-2);
+  }
+
+  .sc-copyable .sc-code {
+    width: 100%;
+    padding-right: var(--sc-space-4);
+  }
+}

@@ -21,7 +21,7 @@ export function ConnectCodeForm(props: ConnectCodeFormProps) {
   const code = normalizeConnectCode(text);
   return (
     <form
-      className="sc-form sc-connect-code"
+      className="sc-form"
       aria-label={words.codeAria}
       onSubmit={(event) => {
         event.preventDefault();
@@ -75,7 +75,7 @@ export function ConnectApproval(props: ConnectApprovalProps) {
     // The command asks to be the account itself (ADR-0084): there is no agent to name and no
     // token to date, only whether whoever is signed in here is who sits at that command.
     return (
-      <div className="sc-approval">
+      <div>
         <Callout tone="warning" title={words.asSelf.title}>
           <p>
             {words.asks.callsItself} <strong>{request.agent}</strong>
@@ -107,7 +107,7 @@ export function ConnectApproval(props: ConnectApprovalProps) {
     );
   }
   return (
-    <div className="sc-approval">
+    <div>
       <Callout tone="warning" title={words.asks.title}>
         <p>
           {words.asks.callsItself} <strong>{request.agent}</strong>

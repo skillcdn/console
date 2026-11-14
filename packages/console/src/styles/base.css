@@ -1,0 +1,130 @@
+/* Reset: only what the pages need. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* The room for a scrollbar is kept on every page, so that a page that scrolls and one that does
+     not put the header and the page at the same place. */
+  scrollbar-gutter: stable;
+  scrollbar-color: var(--sc-scrollbar-thumb) transparent;
+  scroll-padding-top: calc(var(--sc-header-height) + var(--sc-space-6));
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--sc-color-bg);
+  color: var(--sc-color-text);
+  font-family: var(--sc-font-sans);
+  font-size: var(--sc-text-md);
+  line-height: var(--sc-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Korean breaks between any two syllables by default; keeping words whole reads much better. */
+:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+dl,
+dd,
+figure,
+pre {
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: var(--sc-leading-tight);
+  font-weight: var(--sc-weight-bold);
+  letter-spacing: var(--sc-tracking-tight);
+  text-wrap: balance;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: var(--sc-color-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  color: color-mix(in srgb, var(--sc-color-accent) 85%, var(--sc-color-shade));
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--sc-font-mono);
+  font-size: 0.92em;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: var(--sc-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--sc-radius-sm);
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--sc-color-accent-solid) 25%, transparent);
+  color: var(--sc-color-accent-contrast);
+}
+
+/* A plugin's frame document, which the console serves marked with data-console: it paints no
+   background and is as tall as its content, so that the box the console draws shows through and
+   the frame shrinks as well as grows; no room is kept for a scrollbar it never shows. */
+
+html[data-console] {
+  scrollbar-gutter: auto;
+  scroll-padding-top: 0;
+}
+
+html[data-console] body {
+  min-height: 0;
+  background: transparent;
+}

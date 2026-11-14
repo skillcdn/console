@@ -1,0 +1,90 @@
+/* Sources: components/people.tsx, components/projects.tsx */
+
+.sc-team-card {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--sc-color-glass-edge);
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
+}
+
+.sc-listing-form .sc-field-row,
+.sc-team-form .sc-field-row {
+  align-items: end;
+}
+
+/* The teams (ADR-0073): a card each in a grid, as the people are; the name and how many at the
+   head, who is in it as chips with the way to add one at the end, the way to delete it at the
+   foot. The name, for an administrator, is a quiet field in the name's own words. */
+.sc-teams {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: var(--sc-space-4);
+}
+
+.sc-team-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-space-3);
+  min-width: 0;
+  padding: var(--sc-space-4) var(--sc-space-5);
+  border-radius: var(--sc-radius-xl);
+}
+
+.sc-team-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-width: 0;
+}
+
+/* The team's name, and under it its key, what it is called by (ADR-0074). */
+.sc-team-title {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.sc-team-name {
+  min-width: 0;
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-bold);
+  line-height: var(--sc-leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.sc-team-name.sc-input-quiet {
+  margin-inline-start: calc(var(--sc-space-2) * -1);
+  color: var(--sc-color-text);
+}
+
+.sc-team-members {
+  padding-top: var(--sc-space-3);
+  border-top: var(--sc-hairline);
+}
+
+.sc-team-ways {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  margin-inline: calc(var(--sc-space-2) * -1);
+}
+
+.sc-team-key {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-members {
+  display: grid;
+  gap: var(--sc-space-4);
+}
+
+/* What a member is in the project, and their office in the organization beside it, small. */
+.sc-member-role {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  font-size: var(--sc-text-sm);
+}

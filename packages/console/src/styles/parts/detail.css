@@ -1,0 +1,110 @@
+/* A block that lays its children out as a grid lets each of them shrink to the room there is,
+   so that what is wider than the window, a table or a long address, scrolls within its own box
+   instead of widening the page. */
+.sc-task-main > *,
+.sc-task-aside > *,
+.sc-task-section > * {
+  min-width: 0;
+}
+
+.sc-task-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sc-space-5);
+  align-items: start;
+}
+
+.sc-task-main {
+  display: grid;
+  gap: var(--sc-space-5);
+  min-width: 0;
+  max-width: var(--sc-width-prose);
+}
+
+.sc-task-aside {
+  display: grid;
+  gap: var(--sc-space-4);
+  min-width: 0;
+  font-size: var(--sc-text-sm);
+}
+
+@media (min-width: 64rem) {
+  .sc-task-body {
+    grid-template-columns: minmax(0, 1fr) var(--sc-width-aside);
+    gap: var(--sc-space-7);
+  }
+
+  .sc-task-aside {
+    position: sticky;
+    top: calc(var(--sc-header-height) + 2.75rem + var(--sc-space-5));
+  }
+}
+
+.sc-task-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sc-space-3) var(--sc-space-5);
+  padding-bottom: var(--sc-space-4);
+  border-bottom: var(--sc-hairline);
+}
+
+.sc-task-title {
+  font-size: var(--sc-text-2xl);
+  letter-spacing: var(--sc-tracking-tight);
+  overflow-wrap: anywhere;
+}
+
+.sc-task-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1);
+}
+
+.sc-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--sc-space-2);
+}
+
+.sc-task-header > .sc-task-actions {
+  flex: none;
+}
+
+.sc-task-section {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-task-aside .sc-task-section {
+  gap: var(--sc-space-1);
+}
+
+@media (max-width: 40rem) {
+  .sc-task-title {
+    font-size: var(--sc-text-xl);
+  }
+}
+
+@media (max-width: 40rem) {
+  /* A task's head: the parent on one line, the title, the badges, then the ways as a row of
+     equal buttons. */
+  .sc-task-header {
+    display: grid;
+    justify-content: stretch;
+    gap: var(--sc-space-3);
+  }
+
+  .sc-task-actions {
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .sc-task-actions > * {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 0;
+  }
+}

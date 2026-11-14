@@ -1,0 +1,547 @@
+.sc-calendar-grid th {
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  letter-spacing: var(--sc-tracking-wide);
+  text-transform: uppercase;
+}
+
+.sc-calendar-dot {
+  display: inline-block;
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-category-mark, var(--sc-category-line, var(--sc-color-text-faint)));
+}
+
+/* The calendar: the month as a table, a cell a day, the tasks due in it one line each. */
+.sc-calendar {
+  display: grid;
+  gap: var(--sc-space-3);
+}
+
+.sc-calendar-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-2);
+}
+
+.sc-calendar-month {
+  font-size: var(--sc-text-lg);
+}
+
+.sc-calendar-nav {
+  display: flex;
+  gap: var(--sc-space-1);
+}
+
+.sc-calendar-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0.25rem;
+  table-layout: fixed;
+}
+
+.sc-calendar-grid th {
+  padding: var(--sc-space-1);
+  text-align: left;
+}
+
+.sc-calendar-cell {
+  height: 7rem;
+  padding: var(--sc-space-1) var(--sc-space-2);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-md);
+  background: var(--sc-color-sheet);
+  vertical-align: top;
+}
+
+.sc-calendar-cell-outside {
+  background: transparent;
+  color: var(--sc-color-text-faint);
+}
+
+.sc-calendar-cell-today {
+  border-color: var(--sc-color-accent);
+}
+
+.sc-calendar-day {
+  display: block;
+  margin-bottom: var(--sc-space-1);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+}
+
+.sc-calendar-cell-today .sc-calendar-day {
+  color: var(--sc-color-accent);
+}
+
+.sc-calendar-more {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  padding: 1px var(--sc-space-1);
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: transparent;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  line-height: var(--sc-leading-snug);
+  text-align: start;
+}
+
+.sc-calendar-more:hover {
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text);
+}
+
+.sc-calendar-task {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  margin-top: 2px;
+  padding: 1px var(--sc-space-1);
+  border-radius: var(--sc-radius-sm);
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-xs);
+  line-height: var(--sc-leading-snug);
+  text-decoration: none;
+}
+
+.sc-calendar-task:hover {
+  background: var(--sc-color-sheet-hover);
+  color: var(--sc-color-text);
+}
+
+.sc-calendar-task-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-calendar-over {
+  color: var(--sc-color-text-faint);
+  text-decoration: line-through;
+}
+
+.sc-calendar-late {
+  color: var(--sc-color-danger);
+}
+
+/* A task planned across days lies across them: a bar in a lane of its own, in its category's
+   colour, reaching over the gap between the cells so that it reads as one. */
+.sc-calendar-lane,
+.sc-calendar-bar {
+  display: flex;
+  align-items: center;
+  height: 1.125rem;
+  margin-top: 2px;
+}
+
+.sc-calendar-bar {
+  margin-inline: calc(-1 * var(--sc-space-2) - 0.125rem - 1px);
+  padding-inline: var(--sc-space-2);
+  border-block: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
+  background: var(--sc-category-fill);
+  color: var(--sc-category-line);
+  font-size: var(--sc-text-xs);
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* The task under the pointer is lit a little by its colour, in every piece of its bar and in
+   every week it crosses, never one piece alone; by its colour and not by a filter, which would
+   light the card within it too. */
+.sc-calendar-bar-pointed {
+  background: color-mix(in srgb, var(--sc-category-fill), var(--sc-category-line) 14%);
+}
+
+.sc-calendar-bar-begins {
+  margin-left: 0;
+  border-left: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
+  border-start-start-radius: var(--sc-radius-full);
+  border-end-start-radius: var(--sc-radius-full);
+}
+
+.sc-calendar-bar-ends {
+  margin-right: 0;
+  border-right: 1px solid
+    color-mix(in srgb, var(--sc-category-mark, var(--sc-category-line)) 60%, transparent);
+  border-start-end-radius: var(--sc-radius-full);
+  border-end-end-radius: var(--sc-radius-full);
+}
+
+/* The title of a bar with more days in the week runs along the bar as far as its days reach,
+   less the room of its end, instead of stopping at the first day's edge: above every piece,
+   the one under the pointer included, and under the cards and the header, which the page scrolls
+   beneath; the pointer goes through it to the piece of the day beneath. The days are the first
+   piece's own custom property. */
+.sc-calendar-task-title-spanning {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  max-width: calc(var(--sc-span, 1) * 100% - 2.25rem);
+  pointer-events: none;
+}
+
+.sc-calendar-bar.sc-calendar-late {
+  border-color: color-mix(in srgb, var(--sc-color-danger) 70%, transparent);
+  color: var(--sc-color-danger);
+}
+
+/* A bar of a task that is over: paler in its own colour, not see-through, so that every piece
+   of it is one shade whatever lies under it, and the card of the task under the pointer,
+   which lies within the piece, stays solid. */
+.sc-calendar-bar.sc-calendar-over {
+  border-color: color-mix(
+    in srgb,
+    var(--sc-category-mark, var(--sc-category-line)) 30%,
+    transparent
+  );
+  background: color-mix(in srgb, var(--sc-category-fill) 50%, var(--sc-color-bg-raised));
+  color: color-mix(in srgb, var(--sc-category-line) 55%, var(--sc-color-bg-raised));
+}
+
+.sc-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sc-space-1) var(--sc-space-4);
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-calendar-legend div {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+}
+
+.sc-calendar-legend dt {
+  display: flex;
+  align-items: center;
+}
+
+.sc-calendar-legend dd {
+  margin: 0;
+}
+
+/* Under the month: what is late and who has what on the left, one under the other, and what
+   has no day yet, the long list, down the right; one column where the window is narrow. */
+.sc-calendar-below {
+  display: grid;
+  align-items: start;
+  gap: var(--sc-space-5);
+  margin-top: var(--sc-space-5);
+}
+
+@media (min-width: 64rem) {
+  .sc-calendar-below {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .sc-calendar-below > :last-child {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+
+/* The task under the pointer in full: a card within its item with its title and the facts its page
+   lists, above or below the item, whichever side has more room, and moved left where it would
+   leave the window; the calendar measures that as the pointer arrives, since only the browser
+   knows where the item is. The card lies out of the accessible tree and takes no pointer. */
+.sc-calendar-task,
+.sc-calendar-bar {
+  position: relative;
+}
+
+@media (max-width: 40rem) {
+  /* A phone's calendar has room for a dot per task and no more; the lists below say the rest. */
+  .sc-calendar-grid {
+    border-spacing: 2px;
+  }
+
+  .sc-calendar-cell {
+    height: 3.25rem;
+    padding: 2px var(--sc-space-1);
+  }
+
+  .sc-calendar-task {
+    display: inline-flex;
+    margin: 1px 2px 0 0;
+    padding: 0;
+  }
+
+  .sc-calendar-task-title {
+    display: none;
+  }
+
+  .sc-calendar-lane,
+  .sc-calendar-bar {
+    height: 4px;
+    padding: 0;
+    border: 0;
+  }
+}
+
+/* A goal marks its target day on the month: a flag before its title, in the colour of its category. */
+.sc-calendar-goal {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  margin-top: 2px;
+  color: var(--sc-category-line, var(--sc-color-text));
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  line-height: var(--sc-leading-tight);
+  text-decoration: none;
+}
+
+.sc-calendar-goal:hover {
+  color: var(--sc-color-accent);
+}
+
+/* The row a day keeps for a goal another day of its week has, so that the bars under the goals
+   lie level across the week: as tall as a goal, and nothing to see. */
+.sc-calendar-goal-held {
+  visibility: hidden;
+}
+
+.sc-calendar-flag {
+  display: inline-block;
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  transform: rotate(45deg);
+  background: var(--sc-category-mark, var(--sc-category-line, var(--sc-color-text-faint)));
+}
+
+@media (max-width: 40rem) {
+  /* A bar on the month reaches over the gap between the cells, which is narrower here. */
+  .sc-calendar-bar {
+    margin-inline: calc(-1 * var(--sc-space-1) - 2px - 1px);
+  }
+
+  .sc-calendar-bar-begins {
+    margin-left: 0;
+  }
+
+  .sc-calendar-bar-ends {
+    margin-right: 0;
+  }
+
+  /* "N more" on a day keeps to one line, small enough for the cell. */
+  .sc-calendar-more {
+    padding-inline: 0;
+    font-size: 0.65rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* A bar reaching past the week stops at the edge of the month. */
+  .sc-calendar-grid {
+    clip-path: inset(0);
+  }
+}
+
+@media (max-width: 40rem) {
+  /* The calendar's legend, tighter; what is under the month, further apart. */
+  .sc-calendar-legend {
+    gap: var(--sc-space-1) var(--sc-space-3);
+  }
+
+  .sc-calendar-below {
+    gap: var(--sc-space-6);
+  }
+}
+
+/* A phone's month: a dot per task per day. */
+@media (max-width: 40rem) {
+  .sc-calendar-cell {
+    height: auto;
+    min-height: 3.25rem;
+    padding: 2px var(--sc-space-1) var(--sc-space-1);
+    /* The rows of dots as tall as the dots, not as tall as a line of text. */
+    line-height: 0;
+  }
+
+  .sc-calendar-day,
+  .sc-calendar-more {
+    line-height: var(--sc-leading-snug);
+  }
+
+  .sc-calendar-lane,
+  .sc-calendar-goal-held {
+    display: none;
+  }
+
+  /* A task planned across days: a dot on each of its days, in its category's colour, the
+     late one in the danger colour; nothing of the bar remains. */
+  .sc-calendar-bar,
+  .sc-calendar-bar-begins,
+  .sc-calendar-bar-ends {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin: 2px 3px 0 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--sc-radius-full);
+    background: var(--sc-category-mark, var(--sc-category-line));
+    vertical-align: top;
+  }
+
+  .sc-calendar-bar.sc-calendar-late {
+    background: var(--sc-color-danger);
+  }
+
+  /* A task on its day: the same dot. */
+  .sc-calendar-task {
+    margin: 2px 3px 0 0;
+    vertical-align: top;
+  }
+
+  .sc-calendar-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+
+  .sc-calendar-more {
+    margin-top: 2px;
+    text-align: left;
+  }
+}
+
+/* A day's number is a button: pressed, the day's tasks are listed under the month. */
+.sc-calendar-day[type="button"] {
+  width: auto;
+  margin-inline-start: calc(-1 * var(--sc-space-1));
+  padding: 0 var(--sc-space-1);
+  border: 0;
+  border-radius: var(--sc-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  line-height: var(--sc-leading-snug);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sc-calendar-day[type="button"]:hover {
+  background: var(--sc-color-sheet-hover);
+}
+
+.sc-calendar-day[aria-pressed="true"] {
+  background: var(--sc-color-accent);
+  color: var(--sc-color-accent-contrast);
+}
+
+.sc-calendar-cell-picked {
+  border-color: var(--sc-color-accent);
+  background: color-mix(in srgb, var(--sc-color-accent) 6%, var(--sc-color-sheet));
+}
+
+/* The tasks of the picked day, under the month: a pane with the day over the rows. */
+.sc-calendar-day-list {
+  display: grid;
+  gap: var(--sc-space-3);
+  margin-top: var(--sc-space-4);
+  padding: var(--sc-space-4);
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-lg);
+  background: var(--sc-color-sheet);
+}
+
+.sc-calendar-day-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sc-space-2);
+}
+
+.sc-calendar-day-list-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  margin: 0;
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-bold);
+}
+
+/* How many a day holds: said on a phone, where the day shows three dots and no more. */
+.sc-calendar-count {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  /* The number covers the whole day, so that a finger anywhere on it lists the day's tasks;
+     the dots and the count under it are a picture, not targets. */
+  .sc-calendar-cell {
+    position: relative;
+    padding-top: 1.375rem;
+  }
+
+  .sc-calendar-day[type="button"] {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    width: auto;
+    margin: 0;
+    padding: 2px var(--sc-space-1);
+    border-radius: var(--sc-radius-md);
+  }
+
+  /* No pointer rests on a phone; a finger that tapped must not leave a sheet over the dots. */
+  .sc-calendar-day[type="button"]:hover {
+    background: transparent;
+  }
+
+  .sc-calendar-day[aria-pressed="true"] {
+    background: transparent;
+    color: var(--sc-color-accent);
+    font-weight: var(--sc-weight-bold);
+  }
+
+  .sc-calendar-cell > a,
+  .sc-calendar-cell > .sc-calendar-more {
+    pointer-events: none;
+  }
+
+  .sc-calendar-cell > a:nth-of-type(n + 4),
+  .sc-calendar-cell > .sc-calendar-more {
+    display: none;
+  }
+
+  .sc-calendar-count {
+    display: block;
+    width: fit-content;
+    min-width: 1rem;
+    margin-top: 3px;
+    padding: 0 4px;
+    border-radius: var(--sc-radius-full);
+    background: color-mix(in srgb, var(--sc-color-text-muted) 14%, transparent);
+    color: var(--sc-color-text-muted);
+    font-size: 0.625rem;
+    font-weight: var(--sc-weight-medium);
+    line-height: 1rem;
+    text-align: center;
+  }
+
+  .sc-calendar-day-list {
+    margin-top: var(--sc-space-3);
+  }
+}

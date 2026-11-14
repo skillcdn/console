@@ -1,0 +1,251 @@
+.sc-person-card {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--sc-color-glass-edge);
+  background: var(--sc-glass-surface);
+  backdrop-filter: var(--sc-glass-backdrop);
+  box-shadow: var(--sc-glass-sheen), var(--sc-glass-lift);
+}
+
+.sc-person-row {
+  border: var(--sc-border);
+  background: var(--sc-color-sheet);
+  box-shadow: var(--sc-shadow-sheet);
+}
+
+.sc-person {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+  vertical-align: middle;
+}
+
+.sc-person-login {
+  font-weight: var(--sc-weight-medium);
+}
+
+/* In the menu's label a long name gives way before the header runs out of room. */
+.sc-menu-summary .sc-person-login {
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-chip-label:has(> .sc-person) {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+}
+
+.sc-chip-label > .sc-person {
+  min-width: 0;
+}
+
+.sc-chip-label .sc-person-login {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--sc-weight-normal);
+  text-overflow: ellipsis;
+}
+
+/* People: everyone of the board as cards in a grid. The person at the head, their account and
+   where it came from under the name; what they are as rows of one shape, so that the cards read
+   alike down a column; the ways to their work at the foot. */
+
+.sc-people {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: var(--sc-space-4);
+}
+
+.sc-person-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-space-4);
+  min-width: 0;
+  padding: var(--sc-space-5);
+  border-radius: var(--sc-radius-xl);
+}
+
+.sc-person-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-space-3);
+  min-width: 0;
+}
+
+.sc-person-card-who {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.sc-person-card-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sc-space-1) var(--sc-space-2);
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-md);
+  font-weight: var(--sc-weight-bold);
+  line-height: var(--sc-leading-snug);
+  overflow-wrap: anywhere;
+}
+
+.sc-person-card-name .sc-person-you {
+  margin: 0;
+  font-weight: var(--sc-weight-normal);
+}
+
+/* A member's name where it leads to a page of theirs: the name's own type, underlined under the pointer. */
+.sc-person-card-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.sc-person-card-link:hover {
+  color: var(--sc-color-accent);
+  text-decoration: underline;
+}
+
+/* An account that is out reads quieter than the ones in. */
+.sc-person-card-out {
+  opacity: 0.7;
+}
+
+/* What the member does, in a line under the name (ADR-0084). */
+.sc-person-card-title {
+  color: var(--sc-color-text);
+  font-size: var(--sc-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.sc-person-card-note {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+  overflow-wrap: anywhere;
+}
+
+/* A person's facts: a column of names and a column of values, every value starting on one line
+   down the card, so that the cards read alike. A fact changed in place is a quiet field whose
+   words stand where a value's words stand, its box drawn out into the gap while the pointer or
+   the focus is on it. */
+.sc-person-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--sc-space-1) var(--sc-space-4);
+  margin: 0;
+  padding-top: var(--sc-space-3);
+  border-top: var(--sc-hairline);
+}
+
+.sc-person-fact {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: start;
+}
+
+/* A fact's name stands on the first line of its value, however many lines the value takes. */
+.sc-person-fact dt,
+.sc-person-fact dd {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+}
+
+.sc-person-fact dt {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+.sc-person-fact dd {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--sc-text-sm);
+}
+
+/* Whom a person manages: their faces side by side, and how many. */
+.sc-person-reports {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-2);
+}
+
+.sc-person-email {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The ways to a person's work at the foot of the card, the way out across from them. */
+.sc-person-card-ways {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-1);
+  margin-top: auto;
+  margin-inline: calc(var(--sc-space-2) * -1);
+}
+
+.sc-person-card-ways button {
+  margin-inline-start: auto;
+}
+
+.sc-person-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2) var(--sc-space-3);
+  padding: var(--sc-space-4);
+  border-radius: var(--sc-radius-lg);
+}
+
+.sc-person-row > .sc-person {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* That this person is the reader: beside the name on the first line. */
+.sc-person-you {
+  margin-inline-start: calc(var(--sc-space-1) - var(--sc-space-3));
+  color: var(--sc-color-text-faint);
+  font-size: var(--sc-text-xs);
+}
+
+.sc-person-name {
+  flex: 1 1 100%;
+  min-width: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+}
+
+/* What let a person in, when they were deactivated, when a login was let in: beside the name, smaller. */
+.sc-person-note {
+  font-size: var(--sc-text-xs);
+}
+
+/* Those let in and not signed in yet, and those deactivated: sections below everyone in. */
+.sc-people-section {
+  margin-top: var(--sc-space-6);
+}
+
+.sc-person-row-out .sc-person {
+  opacity: 0.55;
+}
+
+/* The two views of the people's page, the people and the teams: the page's view switch, with how
+   many each holds beside its name. */
+.sc-people-views {
+  margin-bottom: var(--sc-space-5);
+}
+
+/* The members in groups, the people and then the agent accounts, each under its heading. */
+.sc-people-group + .sc-people-group {
+  margin-top: var(--sc-space-6);
+}
+
+@media (max-width: 40rem) {
+  .sc-menu-summary .sc-person-login {
+    display: none;
+  }
+}

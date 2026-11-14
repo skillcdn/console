@@ -90,7 +90,7 @@ export function SignIn(props: SignInProps) {
                   onClick={take(provider.key)}
                 >
                   <ProviderMark provider={provider.key} />
-                  <span className="sc-sign-in-button-label">
+                  <span>
                     {going ? words.going(provider.label) : words.signInWith(provider.label)}
                   </span>
                   {going && (

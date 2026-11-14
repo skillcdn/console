@@ -133,7 +133,7 @@ export function AgentAccountList(props: AgentAccountListProps) {
   }
   const reasons: Readonly<Record<string, string>> = states.reasons;
   return (
-    <ul className="sc-people sc-agent-accounts" aria-label={accounts.list}>
+    <ul className="sc-people" aria-label={accounts.list}>
       {props.agents.map((agent) => {
         const { person, manager } = agent;
         const name = personName(person);
@@ -148,7 +148,6 @@ export function AgentAccountList(props: AgentAccountListProps) {
             key={person.id}
             className={cx(
               "sc-person-card",
-              "sc-agent-card",
               props.href !== undefined && "sc-agent-card-linked",
               out && "sc-person-card-out",
             )}
@@ -442,7 +441,7 @@ export function AgentAccountForm(props: AgentAccountFormProps) {
     typedLogin === undefined && named !== undefined && named.host === host && handle.length > 0;
   const hostWords = host === undefined ? undefined : form.loginAt[host];
   return (
-    <form className="sc-form sc-agent-form" aria-label={form.aria} onSubmit={submit}>
+    <form className="sc-form" aria-label={form.aria} onSubmit={submit}>
       <section className="sc-form-part" aria-label={form.who}>
         {/* The way to roll the proposals again stands with the part's title, over all of them. */}
         <div className="sc-section-head">

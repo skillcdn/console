@@ -108,7 +108,7 @@
       // capitals over a group) names descendants of several components; a component's own rule,
       // lower in specificity, then follows it by design. The rule would have the stylesheet
       // reordered for selectors that never meet on one element; elsewhere it stays on.
-      "includes": ["packages/console/src/styles/console.css"],
+      "includes": ["packages/console/src/styles/**/*.css"],
       "linter": {
         "rules": {
           "style": {

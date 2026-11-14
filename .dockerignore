@@ -49,3 +49,4 @@ docs
 !deploy/README.md
 !examples/agent-desk/AGENTS.md
 !packages/console/README.md
+!packages/console/src/styles/README.md

@@ -877,7 +877,7 @@ export function TalkWorking(props: {
         <span />
         <span />
       </span>
-      <span className="sc-talk-working-what">
+      <span>
         {working.at === "tool"
           ? working.tool === undefined
             ? words.working
@@ -1605,7 +1605,7 @@ export function AgentElsewhereList(props: {
   const words = useWords().agents.page.settings.elsewhere;
   const held = Object.entries(props.accounts ?? {});
   return (
-    <div className="sc-agent-elsewhere">
+    <div>
       {held.length === 0 ? (
         <p className="sc-field-hint">{words.empty}</p>
       ) : (
@@ -1647,7 +1647,7 @@ export function AgentSecretList(props: AgentSecretListProps) {
     setValue("");
   };
   return (
-    <div className="sc-agent-secrets">
+    <div>
       {props.secrets.length === 0 ? (
         <p className="sc-field-hint">{words.empty}</p>
       ) : (

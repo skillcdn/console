@@ -1,0 +1,227 @@
+/* Badges: a pill on the grid, its label lifted to the middle of it. */
+
+/* A badge is a small pill: a hair of room above and below its word, a little more at its sides,
+   so that a row of them on a card stays low. */
+.sc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-space-1);
+  padding-inline: calc(var(--sc-space-1) * 1.5);
+  padding-block: calc(var(--sc-space-1) / 2 - var(--sc-label-lift))
+    calc(var(--sc-space-1) / 2 + var(--sc-label-lift));
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  font-size: var(--sc-text-xs);
+  font-weight: var(--sc-weight-medium);
+  line-height: var(--sc-leading-snug);
+  white-space: nowrap;
+}
+
+/* Where the browser can fit a line box to the glyphs, a badge's words are centred on their
+   cap height and baseline, whatever script they are in; the lift above is for where it cannot. */
+@supports (text-box: trim-both cap alphabetic) {
+  .sc-badge {
+    padding-block: var(--sc-space-1) calc(var(--sc-space-1) - 1px);
+    line-height: 1;
+    text-box: trim-both cap alphabetic;
+  }
+}
+
+/*
+ * The tones of a badge, each a meaning: neutral for what merely is; accent (blue) for what is at
+ * work; success (green) for what is done; warning (amber) for what wants attention soon; point
+ * (orange) for what presses now, or is someone's; danger (red) for what is late or has failed.
+ * Each is a soft fill with its words in the same hue and no line around it, the categories
+ * alike, so that every badge on a page is one kind of pill; the fills are deep enough to stand
+ * off the sheet on their own.
+ */
+.sc-badge-neutral {
+  border-color: transparent;
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+}
+
+.sc-badge-accent {
+  background: var(--sc-color-accent-subtle);
+  border-color: transparent;
+  color: var(--sc-color-accent);
+}
+
+/* The point: a count, or that a thing is someone's; the one filled warm pill on a page. */
+.sc-badge-point {
+  background: var(--sc-color-point-subtle);
+  border-color: transparent;
+  color: var(--sc-color-point);
+}
+
+.sc-badge-success {
+  background: var(--sc-color-success-subtle);
+  border-color: transparent;
+  color: var(--sc-color-success);
+}
+
+/* A pale amber with amber words: dark words on a yellow fill read as a muddy brown. Its line, as a
+   plain badge's, is drawn with the kinds below. */
+.sc-badge-warning {
+  background: var(--sc-color-warning-subtle);
+  border-color: transparent;
+  color: var(--sc-color-warning);
+}
+
+.sc-badge-danger {
+  background: var(--sc-color-danger-subtle);
+  border-color: transparent;
+  color: var(--sc-color-danger);
+}
+
+/* What a member is where it is no person: two letters after the name, small and quiet, in a
+   frame of their own so that they are not read as part of the name. */
+.sc-kind-mark {
+  flex: none;
+  padding: 0 0.3em;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: var(--sc-radius-sm);
+  color: var(--sc-color-text-muted);
+  font-size: 0.6875rem;
+  font-weight: var(--sc-weight-bold);
+  letter-spacing: var(--sc-tracking-wide);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+/* After a name in a chip, the mark stands closer to the name than the name to the picture. */
+.sc-person > .sc-kind-mark {
+  margin-inline-start: calc(-1 * var(--sc-space-1));
+}
+
+/* What a person is, or the way to change it: the last line, a step under the account. */
+.sc-person-row > .sc-badge {
+  margin-top: var(--sc-space-1);
+}
+
+.sc-badge-category {
+  border-color: transparent;
+  background: var(--sc-category-fill);
+  color: var(--sc-category-line);
+}
+
+/* A badge's kind in how it is filled, so that a plain badge, a category, a state, a priority
+   and a due day beside each other are kinds and not five of one thing; the pill is the shape
+   of them all and nothing stands before the words, but the dot of one at work this moment:
+   - a plain badge (a role, a count, public or private): a soft fill with a line of its hue, a
+     warning's a clear amber, since one mixed from its words reads as brown on its pale amber;
+   - a category and a state: a soft fill, no line;
+   - a priority: a soft fill with dark words of its hue, low a grey, high an orange, urgent a red;
+   - a due day: a line, a very light fill and bold words, all in the hue of how near the day
+     is. */
+.sc-badge:not(.sc-badge-category) {
+  border-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+
+/* The same clear amber as a warning callout's line. */
+.sc-badge.sc-badge-warning {
+  border-color: var(--sc-color-warning-line);
+}
+
+.sc-badge.sc-badge-kind-state {
+  border-color: transparent;
+}
+
+.sc-badge.sc-badge-kind-priority {
+  border-color: transparent;
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+}
+
+.sc-badge.sc-badge-kind-priority.sc-badge-point {
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+}
+
+.sc-badge.sc-badge-kind-priority.sc-badge-danger {
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+}
+
+/* A due day: one line weight for every one; the line, a very light fill and the words are
+   all in the hue of how near the day is. */
+.sc-badge.sc-badge-kind-due {
+  border: 1.5px solid var(--sc-badge-line);
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+  font-weight: var(--sc-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-badge.sc-badge-kind-due.sc-badge-accent {
+  border-color: var(--sc-badge-line);
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+}
+
+.sc-badge.sc-badge-kind-due.sc-badge-success {
+  border-color: var(--sc-badge-line);
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+}
+
+/* Within the week. */
+.sc-badge.sc-badge-kind-due.sc-badge-warning {
+  border-color: var(--sc-badge-line);
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+}
+
+/* Tomorrow. */
+.sc-badge.sc-badge-kind-due.sc-badge-point {
+  border-color: var(--sc-badge-line);
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+}
+
+/* Today. */
+.sc-badge.sc-badge-kind-due.sc-badge-due-today {
+  border-color: var(--sc-badge-line);
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+}
+
+/* Late. */
+.sc-badge.sc-badge-kind-due.sc-badge-danger {
+  border-color: var(--sc-badge-line);
+  background: var(--sc-badge-fill);
+  color: var(--sc-badge-ink);
+}
+
+.sc-badge-kind-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A badge of what is at work this moment: a dot of the badge's hue before its words, the one
+   thing that stands there, and a ring that spreads slowly from it. The dot stands still for
+   whoever asked their device for less motion. */
+.sc-badge-live::before {
+  flex: none;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: var(--sc-radius-full);
+  background: currentcolor;
+  content: "";
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sc-badge-live::before {
+    animation: sc-badge-live 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+}
+
+@keyframes sc-badge-live {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentcolor 45%, transparent);
+  }
+
+  70%,
+  100% {
+    box-shadow: 0 0 0 0.375rem color-mix(in srgb, currentcolor 0%, transparent);
+  }
+}

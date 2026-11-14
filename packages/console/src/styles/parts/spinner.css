@@ -1,0 +1,29 @@
+.sc-spinner {
+  display: inline-flex;
+}
+
+.sc-spinner-ring {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--sc-color-border-strong);
+  border-top-color: var(--sc-color-accent);
+  border-radius: var(--sc-radius-full);
+}
+
+/* The ring turns whatever the motion preference: it says that the page still waits, and a ring
+   that stands still reads as a page that stopped. Where motion is to be reduced it turns slowly. */
+.sc-spinner-ring {
+  animation: sc-spin 700ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-spinner-ring {
+    animation-duration: 1.6s;
+  }
+}
+
+@keyframes sc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

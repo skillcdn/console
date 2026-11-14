@@ -4,10 +4,12 @@ import { describe, expect, it } from "vitest";
 // The stylesheet is part of the package's surface: a custom console re-skins it through the
 // tokens, so a rule that reads a token nobody defines, or spells out a value a token holds,
 // is a place where re-skinning silently stops working.
-const css = readFileSync(new URL("./console.css", import.meta.url), "utf8").replace(
-  /\/\*[\s\S]*?\*\//g,
-  "",
-);
+// console.css names the files in the order they are read; the build joins them (ADR-0106), and
+// so does this, to read the stylesheet as a console loads it.
+const read = (name: string): string => readFileSync(new URL(name, import.meta.url), "utf8");
+const css = read("./console.css")
+  .replace(/@import "(\.\/[\w/-]+\.css)";/g, (_line, name: string) => read(name))
+  .replace(/\/\*[\s\S]*?\*\//g, "");
 
 // Set by the components on an element's style, not in the stylesheet: a glance's heights are
 // the ones its rows are fitted by (`GLANCE_REM`, ADR-0105).
@@ -25,6 +27,12 @@ describe("console.css", () => {
     const rule = css.match(/select\.sc-input\s*\{([^}]*)\}/)?.[1] ?? "";
     expect(rule).toContain("appearance: none");
     expect(rule).toMatch(/background-position:[^;]*right var\(--sc-space-3\) center/);
+  });
+
+  it("is every file its manifest names, joined", () => {
+    expect(css).not.toContain("@import");
+    expect(css).toMatch(/\.sc-button\s*\{/);
+    expect(css).toMatch(/\.sc-tile\s*\{/);
   });
 
   it("is light by default (ADR-0040)", () => {

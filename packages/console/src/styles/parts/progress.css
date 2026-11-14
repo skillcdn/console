@@ -1,0 +1,25 @@
+.sc-progress {
+  display: grid;
+  gap: var(--sc-space-1);
+}
+
+.sc-progress-bar {
+  display: flex;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-bg-inset);
+}
+
+.sc-progress-done {
+  background: var(--sc-color-success);
+}
+
+.sc-progress-working {
+  background: var(--sc-color-accent);
+}
+
+.sc-progress-words {
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-xs);
+}

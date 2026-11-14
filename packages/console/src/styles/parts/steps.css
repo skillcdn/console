@@ -1,0 +1,68 @@
+/* Steps done in order: a number each, what the step is and what it takes. One that is done reads
+   quieter and says so; the next one to do stands out by its number. */
+.sc-steps {
+  display: grid;
+  gap: var(--sc-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sc-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sc-space-3);
+  align-items: start;
+}
+
+.sc-step-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: var(--sc-border);
+  border-radius: var(--sc-radius-full);
+  background: var(--sc-color-bg-inset);
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  font-weight: var(--sc-weight-bold);
+  line-height: 1;
+}
+
+.sc-step-next .sc-step-mark {
+  border-color: var(--sc-color-accent);
+  background: var(--sc-color-accent);
+  color: var(--sc-color-accent-contrast);
+}
+
+.sc-step-done .sc-step-mark {
+  border-color: transparent;
+  background: var(--sc-color-success-subtle);
+  color: var(--sc-color-success);
+}
+
+.sc-step-what {
+  display: grid;
+  gap: var(--sc-space-2);
+  min-width: 0;
+}
+
+.sc-step-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sc-space-2);
+  min-height: 1.75rem;
+  font-weight: var(--sc-weight-bold);
+}
+
+.sc-step-body {
+  margin: 0;
+  color: var(--sc-color-text-muted);
+  font-size: var(--sc-text-sm);
+  line-height: var(--sc-leading-normal);
+}
+
+.sc-step-next .sc-step-body {
+  color: var(--sc-color-text);
+}

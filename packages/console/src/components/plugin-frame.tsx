@@ -470,7 +470,7 @@ export function PluginFrame(props: PluginFrameProps) {
     <div
       className={cx(
         "sc-plugin-frame-box",
-        isWidget ? "sc-plugin-frame-box-widget" : "sc-plugin-frame-box-page",
+        !isWidget && "sc-plugin-frame-box-page",
         drawing && "sc-plugin-frame-loading",
       )}
       style={isWidget ? undefined : { height: `${height}px` }}
