@@ -34,6 +34,12 @@ describe("the console's own rules", () => {
       "console task <number>",
       "console docs",
       "console ask",
+      // What a decision's record is kept with: the answer given elsewhere, and what followed.
+      "console answer",
+      "console decision <id> --outcome",
+      "console take <number>",
+      "console task new",
+      "console work",
       "working-the-board",
       "console skill <path>",
       "SKILLCDN.md",
