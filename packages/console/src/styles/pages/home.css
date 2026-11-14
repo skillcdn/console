@@ -436,6 +436,12 @@ a.sc-tile-glance:focus-visible {
   border-inline-start: var(--sc-hairline);
 }
 
+/* A column with nothing in it, while the board is read or where none was given, draws no line
+   down an empty tile. */
+.sc-glance-column:empty {
+  border-inline-start-color: transparent;
+}
+
 .sc-glance-column:last-child {
   padding-inline-end: 0;
 }
