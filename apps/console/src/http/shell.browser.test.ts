@@ -122,6 +122,25 @@ describe("the header over the pages", () => {
     await context.close();
   });
 
+  it("names the tab after the page it shows, and lets go of a name a plugin's page gave it when the person goes on", async () => {
+    const context = await browser.newContext({ locale: "en-US" });
+    const page = await context.newPage();
+    await page.goto(console_.signInUrl(BROWSER_ADMIN));
+    await page.locator(".sc-header").waitFor();
+    await expect.poll(() => page.title()).toMatch(/^Projects · /);
+    await page.locator('a[href="/work"]:visible').first().click();
+    await expect.poll(() => page.title()).toMatch(/^My work · /);
+
+    // The example plugin's page names the tab itself, by the frame's `title`.
+    await page.goto(`${console_.origin}/plugins/hello/greetings`);
+    await expect.poll(() => page.title(), { timeout: 15_000 }).toBe("Greetings");
+    // On to a page of the same workspace, by its tab: nothing the console's own title is made
+    // of has changed but the page, and the name the plugin gave must end with its page.
+    await page.locator('a[href="/work"]:visible').first().click();
+    await expect.poll(() => page.title()).toMatch(/^My work · /);
+    await context.close();
+  });
+
   it("stands in front of everything on a page as it scrolls, at both ends of the widths", async () => {
     const context = await browser.newContext({ locale: "en-US" });
     const page = await context.newPage();
