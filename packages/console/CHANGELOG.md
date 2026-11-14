@@ -1,5 +1,23 @@
 # @skillcdn/console
 
+## 0.5.1
+
+### Patch Changes
+
+- [`edf21c4`](https://github.com/skillcdn/console/commit/edf21c434ccefcd41f36057275c1965a0920d160) Thanks [@samo-lucid](https://github.com/samo-lucid)! - On the front page of someone who has arranged nothing, a widget that leads with no widget beside it, the only one at the top or any lead on a phone or a tablet, is drawn at the size it is told, on that size's cells, where it took the page's width and four rows: a widget that comes in `small` and `medium` alone on a wide page was a box eight cells by four with a `medium` in it. The projects follow it in the columns it leaves, then across the page below it, and arranging the page starts from the same cells (ADR-0110).
+
+- [`7699776`](https://github.com/skillcdn/console/commit/769977679441527a8a8795eb951bc81207f70045) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A project on the front page of someone who has arranged nothing is an icon on one cell again. The composed page stretched each project to the end of its row, so that with no widget on the page, a plugin turned off or failed, seven projects across twelve columns each took a cell and five sevenths, and one project alone a bar across the page. The projects now stand in rows as long as their column has cells, the last row ending short, and arranging starts from the same cells (ADR-0108).
+
+- [`f8fd0b6`](https://github.com/skillcdn/console/commit/f8fd0b66fc568533fbc86755bb786df99e1f8464) Thanks [@samo-lucid](https://github.com/samo-lucid)! - A plugin's `secret` setting may keep one value per key (ADR-0111), for a token per installation of a service: one per workspace an app is installed in, say. Declare it with `keyed: { max }` (1 to 1,000 keys). A key is letters, digits, `_` and `-`, up to 64, and no secret.
+  
+  - **Sealing:** `ctx.fetch`'s `seal` takes `key`, a path into the same answer (`$.team.id`) or the key itself. Two outcomes are new, and in both the value is withheld: `no_key` (the answer holds no key there) and `too_many` (a new key past `max`).
+  - **Placing:** `secret: { name, key, as }` puts one key's value into a request.
+  - **`ctx.secrets`:** `has` and `status` take a key. New: `keys(name)`, `forget(name, key)`, and `move(name, key)`, which puts the value kept from before the setting was keyed under a key, for an upgrade.
+  - **For an administrator:** the settings page, `console plugin <key> settings`, `PUT` and `DELETE /api/v1/plugins/<key>/secrets/<name>/keys/<key>`, and `console plugin <key> secret <name> --key <key>` list a keyed secret's keys and set or remove one at a time.
+  - **Records and tests:** `plugin.configured` names the key as `under`. `createTestContext` takes a keyed secret's values by key.
+
+- [`8b33d28`](https://github.com/skillcdn/console/commit/8b33d28749e1d13c4faf6195828fcdde4841eaa7) Thanks [@samo-lucid](https://github.com/samo-lucid)! - While the front page is arranged, "Reset to default" puts it back as it is composed for someone who has arranged nothing: every width unarranged, every tile taken off back on the page. Done keeps it, as a `home` of `{ hidden: [], layouts: {} }`; Cancel lets it go. The button cannot be pressed where the page already stands so (ADR-0109). Both packs carry the new word, `home.reset`; a pack of a console's own adds it.
+
 ## 0.5.0
 
 ### Minor Changes
