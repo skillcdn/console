@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-A member has a title (ADR-0084): a line that says what they do (`Release engineer`), a person's as an agent account's. `PATCH /api/v1/people/<id>` takes `title`, from an administrator, and of an agent account from its supervisors too; `console person title <login> "<title>"|none` writes one, and `console people` prints it after the name, with an agent account's handle and standing. The People page shows it under the name and lets whoever may write it in place, marks an agent account with a badge and says "invited" until its first sign-in; the member's page says it under their name; the pickers of people show it as a second line, the login where none is said (`PersonOption`, and `renderOption` on `Picker`). A plugin reads `title`, `kind` and `handle` with the people, and its hooks receive `person.updated` as they do the other people events. For whoever builds a console: `supervisedBy`, `PersonOption`, `PeopleListProps.onChangeTitle` and `mayChangeTitle`.

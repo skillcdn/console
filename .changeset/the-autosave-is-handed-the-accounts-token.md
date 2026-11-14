@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-The autosave of `console runner` pushes with the account's own token. The push at the end of a session is handed the token the account's store keeps as `git.token`, where it keeps one and the workspace names a git host: answered by a credential helper in the environment of that one command, on no command line and in no file. An account that kept its token in the store alone, as its desk tells it to, ended every session with "committed and not pushed". The helper, here and for the clone `console agent setup` makes, is named for the remote's own origin, so that a redirect or a repository at another host is answered nothing of the token. The autosave stages nothing under the desk's `work/`, by name, whatever the desk's `.gitignore` says: what a supervisor sent stays on the machine. The lines setup prints for a person to start the runner by hand quote the desk and the login where they hold anything a shell reads as more than a word. `RunnerOptions.git` is handed `{ token }` for a step that reaches the git host, and `GIT_TOKEN_SECRET` names the secret.

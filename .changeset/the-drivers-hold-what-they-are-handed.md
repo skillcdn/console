@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-What a driver and a service of `console runner` are handed is held to what reads it. The `claude` driver puts a model, a level of effort and the conversation it resumes on the product's command line only where each is a plain word, as `codex` does: a value that begins as an option is left out and never read as one. A model or a level of effort set in a running session of an agent that speaks the Agent Client Protocol is waited for five seconds and no longer: an agent that answers nothing while it works no longer holds every signal behind the choice, a `stop` among them, and the choice is taken by the next session. The `systemd-user` unit says a dollar sign twice in its command line alone, where the system reads one as a variable, and once in the desk's directory and in `PATH`, where it wrote two and the unit did not start in a directory with a dollar sign in its name. A text a driver cut that ends inside a value of the account's secret store has that beginning taken out too, four characters of it or more. `DriverHost` takes `timing`, for a test to shorten the wait.
