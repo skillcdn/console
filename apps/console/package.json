@@ -14,6 +14,7 @@
     "test": "vitest run --passWithNoTests",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "dev:plugins": "tsx src/testing/preview-console.ts",
+    "dev:live": "tsx src/testing/preview-console.ts --live",
     "generate": "drizzle-kit generate",
     "dev": "node --watch --env-file-if-exists=../../.env --enable-source-maps dist/main.js api",
     "dev:web": "vite --config web/vite.config.ts",

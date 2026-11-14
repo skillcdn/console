@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   builtPluginAt,
   keptSignInFailure,
+  oneOriginRedirect,
   PREVIEW_DATABASE,
   parsePreviewArguments,
 } from "./preview-plugins.js";
@@ -37,7 +38,13 @@ describe("what dev:plugins is told", () => {
   });
 
   it("takes a port once and a plugin's directory as often as given, and refuses the rest", () => {
-    const bare = { port: undefined, pluginDirs: [], publicUrl: undefined, keep: false };
+    const bare = {
+      port: undefined,
+      pluginDirs: [],
+      publicUrl: undefined,
+      keep: false,
+      live: false,
+    };
     expect(parsePreviewArguments([])).toEqual(bare);
     expect(
       parsePreviewArguments(["--plugin", "../plugins/hr", "--port", "11201", "--plugin", "x"]),
@@ -78,6 +85,71 @@ describe("what dev:plugins is told", () => {
       pluginDirs: ["x"],
     });
     expect(() => parsePreviewArguments(["--plugin", "--"])).toThrow(/--plugin takes/);
+  });
+
+  it("serves the pages from their sources when told, on this machine and at a port", () => {
+    expect(parsePreviewArguments(["--live"])).toMatchObject({ live: true, port: undefined });
+    expect(parsePreviewArguments(["--live", "--port", "11270", "--keep"])).toMatchObject({
+      live: true,
+      port: 11270,
+      keep: true,
+    });
+    // A development server is for this machine alone, and a browser is told where it is.
+    expect(() =>
+      parsePreviewArguments(["--live", "--public-url", "https://preview.example.com"]),
+    ).toThrow(/--live serves the pages from their sources on this machine alone/);
+    expect(() => parsePreviewArguments(["--port", "0", "--live"])).toThrow(/--live takes the port/);
+    expect(parsePreviewArguments(["--port", "0"])).toMatchObject({ port: 0, live: false });
+  });
+
+  it("sends a browser that came by another of the machine's names to the one origin", () => {
+    const own = "http://127.0.0.1:11200";
+    // The name a tool opens a local server by, and the loopback of the other family.
+    expect(oneOriginRedirect("localhost:11200", own, "/")).toBe(`${own}/`);
+    expect(oneOriginRedirect("localhost:11200", own, "/projects/ledger?mine=1")).toBe(
+      `${own}/projects/ledger?mine=1`,
+    );
+    expect(oneOriginRedirect("[::1]:11200", own, "/__fixture/sign-in/alice")).toBe(
+      `${own}/__fixture/sign-in/alice`,
+    );
+    expect(oneOriginRedirect("LOCALHOST:11200", own, "/")).toBe(`${own}/`);
+    // The port a console listens on behind the pages is not where it is opened.
+    expect(oneOriginRedirect("127.0.0.1:54021", own, "/work")).toBe(`${own}/work`);
+    expect(oneOriginRedirect("localhost", own, "/")).toBe(`${own}/`);
+    // By its own origin, a request is answered where it came.
+    expect(oneOriginRedirect("127.0.0.1:11200", own, "/")).toBeUndefined();
+    expect(oneOriginRedirect("localhost:11200", "http://localhost:11200", "/")).toBeUndefined();
+  });
+
+  it("leaves a request alone that names no name of this machine, or a console reached from outside", () => {
+    const own = "http://127.0.0.1:11200";
+    // A name of somewhere else is not this console's to correct: it is served as it came.
+    expect(oneOriginRedirect("console.example.com", own, "/")).toBeUndefined();
+    expect(oneOriginRedirect("localhost.example.com:11200", own, "/")).toBeUndefined();
+    expect(oneOriginRedirect("10.0.0.5:11200", own, "/")).toBeUndefined();
+    expect(oneOriginRedirect(undefined, own, "/")).toBeUndefined();
+    expect(oneOriginRedirect("", own, "/")).toBeUndefined();
+    expect(oneOriginRedirect("not a host", own, "/")).toBeUndefined();
+    expect(oneOriginRedirect("localhost:99999999", own, "/")).toBeUndefined();
+    // A name of this machine written before another host's is that host's.
+    expect(oneOriginRedirect("localhost:11200@elsewhere.example", own, "/")).toBeUndefined();
+    // Behind a tunnel, whoever comes on the machine itself is served where they came.
+    expect(
+      oneOriginRedirect("127.0.0.1:11200", "https://preview.example.com", "/"),
+    ).toBeUndefined();
+    expect(
+      oneOriginRedirect("localhost:11200", "https://preview.example.com", "/"),
+    ).toBeUndefined();
+  });
+
+  it("answers with an address of the console whatever the path says", () => {
+    const own = "http://127.0.0.1:11200";
+    // A path that would read as another host after a bare slash stays a path of this origin.
+    for (const path of ["//elsewhere.example/x", "/\\elsewhere.example", "elsewhere.example", ""]) {
+      const there = oneOriginRedirect("localhost:11200", own, path);
+      expect(there).toBeDefined();
+      expect(new URL(there ?? "").origin).toBe(own);
+    }
   });
 
   it("installs a built plugin by its package's name, and says why one cannot be", async () => {

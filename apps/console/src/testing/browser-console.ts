@@ -33,7 +33,7 @@ import {
   LEAVE_PLUGIN_DIR,
   writePluginsDir,
 } from "./plugins.js";
-import { keptSignInFailure, PREVIEW_DATABASE } from "./preview-plugins.js";
+import { keptSignInFailure, oneOriginRedirect, PREVIEW_DATABASE } from "./preview-plugins.js";
 
 // Test support: the console as a real browser meets it, listening on this machine with the
 // default UI, the example plugin enabled, two of the fixtures installed and not enabled, the
@@ -77,6 +77,9 @@ function wordOf(cookies: string | undefined): string | undefined {
   return undefined;
 }
 
+/** Where the fixture's sign-in lives on a console nobody reaches from outside. */
+export const FIXTURE_PATH = "/__fixture";
+
 /**
  * Where the fixture's sign-in lives: a browser begins signing in as one of the fixture's people
  * under `/sign-in`, and the fixture's host would send it back from `/authorize`, answered here.
@@ -84,7 +87,7 @@ function wordOf(cookies: string | undefined): string | undefined {
  * the sign-in page signs in as the administrator.
  */
 const fixturePrefix = (reachedFromOutside: boolean): string =>
-  reachedFromOutside ? `/__fixture/${randomBytes(12).toString("hex")}` : "/__fixture";
+  reachedFromOutside ? `${FIXTURE_PATH}/${randomBytes(12).toString("hex")}` : FIXTURE_PATH;
 
 /** What `GET /api/v1/plugins/<key>` says of a plugin's state, as much as this needs. */
 const pluginStateSchema = z.object({ state: z.string() });
@@ -109,6 +112,14 @@ export interface BrowserConsoleOptions {
    * service sending the browser back.
    */
   readonly publicUrl?: string | undefined;
+  /**
+   * The address its pages are served at on this machine by a server in front of it, which sends
+   * it everything but the pages (`pnpm dev`, live-pages.ts): its PUBLIC_URL then, as a public
+   * address is, since signing in, a session's cookie, a write and a plugin's frame all go by the
+   * origin the browser is on. Nobody reaches it from outside, so the fixture's paths carry no
+   * secret. Not with `publicUrl`.
+   */
+  readonly pagesAt?: string | undefined;
   /**
    * Keep the database when this ends, and start from it when it is there (the one named
    * {@link PREVIEW_DATABASE}), for what cannot be made twice: a token rotated at first use.
@@ -154,7 +165,10 @@ async function freePort(): Promise<number> {
 export async function startBrowserConsole(options: BrowserConsoleOptions): Promise<BrowserConsole> {
   const port = options.port ?? (await freePort());
   const origin = `http://127.0.0.1:${port}`;
-  const publicUrl = options.publicUrl ?? origin;
+  if (options.publicUrl !== undefined && options.pagesAt !== undefined) {
+    throw new Error("a console reached from outside serves its own pages: publicUrl or pagesAt");
+  }
+  const publicUrl = options.publicUrl ?? options.pagesAt ?? origin;
   const fixture = fixturePrefix(options.publicUrl !== undefined);
   const web = await loadWebRoot(WEB_DIST).catch((error: unknown) => {
     throw new Error("the default UI is not built: run `pnpm build` first", { cause: error });
@@ -244,6 +258,9 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
       origin: publicUrl,
       web,
       version: APP_VERSION,
+      // The feed is woken as a deployment's is, so that what one browser does shows in another
+      // at once, and not at the feed's next look of its own.
+      live: true,
     });
     const signIn = async (person: string): Promise<string> => {
       try {
@@ -283,6 +300,17 @@ export async function startBrowserConsole(options: BrowserConsoleOptions): Promi
     // sent to the answer's address, which names the run's secret, and is answered nothing there
     // without the word; and the answer goes back to the console's callback, nowhere else.
     const outer = new Hono<AppEnv>();
+    // By whichever of this machine's names a browser came, `localhost` above all, it goes on at
+    // the console's one origin, where signing in and a plugin's frame work (oneOriginRedirect).
+    outer.use("*", async (c, next) => {
+      const url = new URL(c.req.url);
+      const there = oneOriginRedirect(
+        c.req.header("host"),
+        publicUrl,
+        `${url.pathname}${url.search}`,
+      );
+      return there === undefined ? next() : c.redirect(there, 307);
+    });
     const begun = new Map<string, { readonly person: string; readonly until: number }>();
     const callback = `${publicUrl}${AUTH_ROUTES.callback(provider.key)}`;
     const wordCookie = (value: string, maxAge: number): string =>

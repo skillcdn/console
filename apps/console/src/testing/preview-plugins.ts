@@ -1,11 +1,13 @@
 import { readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-// What `pnpm dev:plugins` is told on the command line: the port, the built plugins of other
-// checkouts to install beside the fixtures, each a directory laid out as the image lays a plugin
-// out (its package.json, its console-plugin.json, its dist/), so that a plugin's pages are looked
-// at here without a provider; the address the console is reached at from outside, through a
-// tunnel, for a plugin that receives requests; and whether the database is kept. Not compiled.
+// What `pnpm dev:plugins` and `pnpm dev` are told on the command line: the port, the built
+// plugins of other checkouts to install beside the fixtures, each a directory laid out as the
+// image lays a plugin out (its package.json, its console-plugin.json, its dist/), so that a
+// plugin's pages are looked at here without a provider; the address the console is reached at
+// from outside, through a tunnel, for a plugin that receives requests; whether the database is
+// kept; and whether the pages are served from their sources, changing as those do (`pnpm dev`).
+// And the one name a console on this machine answers by. Not compiled.
 
 export interface PreviewArguments {
   /** `--port <n>`; none for the default. */
@@ -16,6 +18,8 @@ export interface PreviewArguments {
   readonly publicUrl: string | undefined;
   /** `--keep`: the database is kept when the console ends, and started from when it is there. */
   readonly keep: boolean;
+  /** `--live`: the pages are served from their sources and change as those do (`pnpm dev`). */
+  readonly live: boolean;
 }
 
 /** An origin as `--public-url` takes it: http or https, a host, nothing after it. */
@@ -52,6 +56,7 @@ export function parsePreviewArguments(argv: readonly string[]): PreviewArguments
   let port: number | undefined;
   let publicUrl: string | undefined;
   let keep = false;
+  let live = false;
   const pluginDirs: string[] = [];
   for (let at = 0; at < argv.length; at += 1) {
     const flag = argv[at];
@@ -77,13 +82,59 @@ export function parsePreviewArguments(argv: readonly string[]): PreviewArguments
       at += 1;
     } else if (flag === "--keep") {
       keep = true;
+    } else if (flag === "--live") {
+      live = true;
     } else {
       throw new Error(
-        `${String(flag)} is not understood: --port <n>, --plugin <dir>, --public-url <origin>, --keep`,
+        `${String(flag)} is not understood: --port <n>, --plugin <dir>, --public-url <origin>, --keep, --live`,
       );
     }
   }
-  return { port, pluginDirs, publicUrl, keep };
+  if (live && publicUrl !== undefined) {
+    // The pages' sources are served by a development server, which is for this machine alone.
+    throw new Error(
+      "--live serves the pages from their sources on this machine alone: not with --public-url, which pnpm dev:plugins takes",
+    );
+  }
+  if (live && port === 0) {
+    throw new Error("--live takes the port the pages are opened at, not 0");
+  }
+  return { port, pluginDirs, publicUrl, keep, live };
+}
+
+/** The names a browser on this machine reaches it by. */
+const LOOPBACK_NAMES: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * Where a request that reached a console on this machine by another of the machine's names is
+ * sent: the same path at the console's one origin, or nowhere when it came by that origin
+ * already. A console is one origin (`PUBLIC_URL`): the provider sends a browser back there, a
+ * session's cookie belongs to that host, a write is taken from that origin alone, and a
+ * plugin's frame is served for that origin to show (`frame-ancestors`), so under `localhost`,
+ * which a tool opens a local server by unless told otherwise, nobody signs in and every frame
+ * stays empty. A console reached from outside, through a tunnel, is left as it is: whoever
+ * comes there comes by its public address.
+ */
+export function oneOriginRedirect(
+  host: string | undefined,
+  origin: string,
+  path: string,
+): string | undefined {
+  const own = new URL(origin);
+  if (!LOOPBACK_NAMES.has(own.hostname) || host === undefined) {
+    return undefined;
+  }
+  let named: URL;
+  try {
+    named = new URL(`http://${host}`);
+  } catch {
+    return undefined;
+  }
+  if (!LOOPBACK_NAMES.has(named.hostname) || named.host === own.host) {
+    return undefined;
+  }
+  // The origin first, so that whatever the path says, the answer names this console.
+  return `${own.origin}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 const kindOf = async (path: string): Promise<"file" | "directory" | undefined> => {

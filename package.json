@@ -26,7 +26,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "check": "biome ci . && node scripts/check-text-safety.mjs && node scripts/check-licenses.mjs && node scripts/check-version-line.mjs && skillcdn check && node scripts/check-skills.mjs && node scripts/check-styles.mjs && turbo run build typecheck test && node scripts/check-rest-compat.mjs",
-    "dev": "turbo run dev",
+    "dev": "turbo run build && pnpm --filter @skillcdn/console-app run dev:live",
     "clean": "turbo run clean",
     "check:text": "node scripts/check-text-safety.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",

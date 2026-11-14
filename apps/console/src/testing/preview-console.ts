@@ -1,5 +1,6 @@
 import process from "node:process";
 import { BROWSER_ADMIN, startBrowserConsole } from "./browser-console.js";
+import { type LivePages, startLivePages } from "./live-pages.js";
 import { PREVIEW_BOARD_KEY, seedPreviewBoard } from "./preview-board.js";
 import { builtPluginAt, type PreviewArguments, parsePreviewArguments } from "./preview-plugins.js";
 
@@ -15,7 +16,9 @@ import { builtPluginAt, type PreviewArguments, parsePreviewArguments } from "./p
 // bob's front page shows it at one.
 // `pnpm dev:plugins`, which builds first; `--port <n>` for another port; `--public-url <origin>`
 // for the address a tunnel reaches it at, so that a plugin receiving requests from outside is
-// tried here. Not compiled.
+// tried here. `pnpm dev` is the same console with `--live`: the pages served from their sources
+// in front of it (live-pages.ts), changing as a component or the stylesheet does, for whoever
+// changes how the pages look. Not compiled.
 
 const DEFAULT_PORT = 11200;
 
@@ -41,10 +44,12 @@ for (const dir of wanted.pluginDirs) {
   }
 }
 
+const port = wanted.port ?? DEFAULT_PORT;
 let started: Awaited<ReturnType<typeof startBrowserConsole>>;
 try {
   started = await startBrowserConsole({
-    port: wanted.port ?? DEFAULT_PORT,
+    // Live, the port is the pages': the console listens behind them on one of its own.
+    ...(wanted.live ? { pagesAt: `http://127.0.0.1:${port}` } : { port }),
     databaseUrl: process.env.TEST_DATABASE_URL,
     env: process.env,
     plugins,
@@ -54,6 +59,7 @@ try {
 } catch (error) {
   started = stop(reasonOf(error));
 }
+let pages: LivePages | undefined;
 try {
   await seedPreviewBoard({
     harness: started.harness,
@@ -62,12 +68,20 @@ try {
     member: await started.harness.signIn("bob"),
     now: new Date(),
   });
+  if (wanted.live) {
+    pages = await startLivePages({ port, console: started.origin });
+  }
 } catch (error) {
   await started.close().catch(() => undefined);
   stop(reasonOf(error));
 }
 const lines = [
   `The console, with the example plugin enabled and the fixtures leave and gate installed: ${started.publicUrl}`,
+  ...(wanted.live
+    ? [
+        "  The pages are served from their sources and change as those do: a component, a rule of the stylesheet. What the server answers, and what a plugin's frame is styled with, is as it was built: start again after changing those.",
+      ]
+    : []),
   ...(wanted.publicUrl === undefined
     ? []
     : [
@@ -93,13 +107,16 @@ const end = (): void => {
     return;
   }
   ending = true;
-  void started.close().then(
-    () => process.exit(0),
-    (error: unknown) => {
-      process.stderr.write(`${String(error)}\n`);
-      process.exit(1);
-    },
-  );
+  void (pages?.close() ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => started.close())
+    .then(
+      () => process.exit(0),
+      (error: unknown) => {
+        process.stderr.write(`${String(error)}\n`);
+        process.exit(1);
+      },
+    );
 };
 process.on("SIGINT", end);
 process.on("SIGTERM", end);
