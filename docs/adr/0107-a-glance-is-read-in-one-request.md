@@ -31,3 +31,4 @@ A project at a glance was read in four pieces. Its figures came with the project
 - `ProjectTile`'s `glance` and `HomeGrid`'s `glances` take the answer as it is (`RestProjectGlance`, `ProjectGlance` on the page); `client.project(key).glance()` reads it. A custom console that passes none shows the head with the decisions the project knows of and a dash for the two figures it has not read.
 - `HomeGrid` tells `onGlance` the projects it shows at a glance whenever the set changes, an empty set included, and never because the function it was given is another one. What reads the glances is `createGlanceReader`, given the way to read one.
 - A plugin's read of the projects learns nothing of their boards' states.
+- A tile at a glance is one link. It is named by the project and its figures, not by every row in it; its lists have no headings of the page's outline, and a goal's bar is a picture of the figure beside it.

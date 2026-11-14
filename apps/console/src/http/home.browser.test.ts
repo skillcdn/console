@@ -319,6 +319,10 @@ describe("the front page in a browser (ADR-0061)", () => {
     ]);
     // One request for the one project at a glance, and none for the one shown as an icon.
     expect(asked).toEqual(["/api/v1/projects/glanced/glance"]);
+    // The name of the link is the project and its figures, not every row.
+    expect(await page.getAttribute(".sc-tile-glance", "aria-label")).toBe(
+      "GLANCED (glanced). In progress 2, in review 1, decisions waiting 0.",
+    );
 
     // Into the project, where its board changes, and back to the front page as a person goes.
     await page.click(".sc-tile-glance");

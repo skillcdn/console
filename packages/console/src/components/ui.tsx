@@ -486,7 +486,10 @@ export function DueBadge(props: {
 /** How far a goal is, read from its tasks: the done ones, the ones at work, and the rest. */
 export function ProgressBar(props: {
   readonly counts: RestTaskCounts;
-  /** False for the bar alone, where a row beside it says the figures: a glance's (ADR-0105). */
+  /**
+   * False for the bar alone, where a row beside it says the figures: a glance's (ADR-0105). It is
+   * then a picture of what the row says, and told to nobody a second time.
+   */
   readonly words?: boolean;
 }) {
   const words = useWords();
@@ -494,16 +497,19 @@ export function ProgressBar(props: {
   const total = counts.idea + counts.ready + counts.in_progress + counts.in_review + counts.done;
   const working = counts.in_progress + counts.in_review;
   const share = (count: number) => (total === 0 ? 0 : (count / total) * 100);
+  const said =
+    props.words === false
+      ? ({ "aria-hidden": true } as const)
+      : ({
+          role: "progressbar",
+          "aria-valuemin": 0,
+          "aria-valuemax": total,
+          "aria-valuenow": counts.done,
+          "aria-label": words.roadmap.progress(counts.done, total),
+        } as const);
   return (
     <div className="sc-progress">
-      <div
-        className="sc-progress-bar"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={total}
-        aria-valuenow={counts.done}
-        aria-label={words.roadmap.progress(counts.done, total)}
-      >
+      <div className="sc-progress-bar" {...said}>
         <span className="sc-progress-done" style={{ width: `${share(counts.done)}%` }} />
         <span className="sc-progress-working" style={{ width: `${share(working)}%` }} />
       </div>

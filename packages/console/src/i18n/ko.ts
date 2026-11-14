@@ -1346,6 +1346,10 @@ export const ko: Messages = {
       noTasks: "진행 중인 태스크가 없습니다",
       noGoals: "남은 목표가 없습니다",
       done: (done: number, total: number) => `${total}개 중 ${done}개 완료`,
+      named: (project: string, key: string, working: number, review: number, decisions: number) =>
+        `${project} (${key}). 진행 중 ${working}건, 검토 대기 ${review}건, 결정 대기 ${decisions}건.`,
+      namedAlone: (project: string, key: string, decisions: number) =>
+        `${project} (${key}). 결정 대기 ${decisions}건.`,
     },
   },
 

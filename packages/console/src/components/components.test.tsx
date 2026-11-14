@@ -3910,6 +3910,14 @@ describe("projects", () => {
     expect(reviewed.match(/3 more/g)).toHaveLength(1);
     expect(reviewed).toContain("Waiting for review");
     expect(reviewed).toContain("Read the copy");
+    // The tile is one link, named by the project and its figures and not by every row; nothing
+    // in it is a heading, and a goal's bar is a picture of the figure beside it.
+    expect(large).toContain(
+      'aria-label="The web &lt;app&gt; (web). In progress 5, in review 1, decisions waiting 2."',
+    );
+    expect(large).not.toContain("<h3");
+    expect(large).not.toContain('role="progressbar"');
+    expect(large).toContain('<div class="sc-progress-bar" aria-hidden="true">');
     // On a wide tile, the head is a column of its own with what the project is.
     const wide = at("wide");
     expect(wide).toContain("sc-tile-glance-wide");
@@ -3923,6 +3931,14 @@ describe("projects", () => {
     expect(unread).not.toContain("Tasks in progress");
     expect(unread).toContain("<dt>In progress</dt><dd>\u2013</dd>");
     expect(unread).toContain("<dt>Decisions</dt><dd>1</dd>");
+    expect(unread).toContain('aria-label="The web &lt;app&gt; (web). Decisions waiting 1."');
+    // Arranged, it is no link and has no name of its own: its words are read as they stand.
+    const arranged = home([web], {
+      editing: true,
+      home: { hidden: [], layouts: { 8: [{ tile, x: 0, y: 0, size: "large" }] } },
+      glances: { [web.id]: glance },
+    });
+    expect(arranged).not.toContain("In progress 5, in review 1");
   });
 
   it("opens nothing while the page is arranged, and gives each tile the way off it and its sizes", () => {

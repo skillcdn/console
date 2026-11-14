@@ -1427,6 +1427,12 @@ export const en = {
       noTasks: "Nothing in progress",
       noGoals: "No goal ahead",
       done: (done: number, total: number) => `${done} of ${total} done`,
+      /** What a tile at a glance is called for whoever cannot see it: the project and its three figures. */
+      named: (project: string, key: string, working: number, review: number, decisions: number) =>
+        `${project} (${key}). In progress ${working}, in review ${review}, decisions waiting ${decisions}.`,
+      /** The same before its board is read. */
+      namedAlone: (project: string, key: string, decisions: number) =>
+        `${project} (${key}). Decisions waiting ${decisions}.`,
     },
   },
 

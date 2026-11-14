@@ -218,7 +218,7 @@ function ProjectGlanceTile(props: {
   const taskSection =
     glance === undefined || taskRows === 0 ? null : (
       <section className="sc-glance-section">
-        <h3 className="sc-eyebrow sc-glance-heading">{glanceWords.tasks}</h3>
+        <p className="sc-eyebrow sc-glance-heading">{glanceWords.tasks}</p>
         <ul className="sc-glance-rows">
           {tasks.length === 0 ? (
             <li className="sc-glance-row sc-glance-none">{glanceWords.noTasks}</li>
@@ -232,7 +232,7 @@ function ProjectGlanceTile(props: {
   const reviewSection =
     glance === undefined || reviewRows === 0 ? null : (
       <section className="sc-glance-section">
-        <h3 className="sc-eyebrow sc-glance-heading">{glanceWords.reviewTasks}</h3>
+        <p className="sc-eyebrow sc-glance-heading">{glanceWords.reviewTasks}</p>
         <ul className="sc-glance-rows">{review.slice(0, reviewRows).map(taskRow)}</ul>
         {more(reviewRows, reviewList.total)}
       </section>
@@ -240,7 +240,7 @@ function ProjectGlanceTile(props: {
   const goalSection =
     glance === undefined || goalRows === 0 ? null : (
       <section className="sc-glance-section">
-        <h3 className="sc-eyebrow sc-glance-heading">{glanceWords.roadmap}</h3>
+        <p className="sc-eyebrow sc-glance-heading">{glanceWords.roadmap}</p>
         <ul className="sc-glance-rows">
           {goals.length === 0 ? (
             <li className="sc-glance-row sc-glance-none">{glanceWords.noGoals}</li>
@@ -321,9 +321,23 @@ const GLANCE_STYLE = {
 /** A project on the front page: its mark and its name as an icon; at a larger size, what it is too. */
 export function ProjectTile(props: ProjectTileProps) {
   const words = useWords().projects;
+  const glanceWords = useWords().home.glance;
   const { project, onOpen } = props;
   const card = props.size !== "icon";
   const glancing = isGlanceSize(props.size);
+  // A glance is one link with lists in it: said whole it would be every row, so it is given a
+  // name of its own, the project and its figures.
+  const name = !glancing
+    ? undefined
+    : props.glance === undefined
+      ? glanceWords.namedAlone(project.name, project.key, project.openDecisions)
+      : glanceWords.named(
+          project.name,
+          project.key,
+          props.glance.taskCounts.in_progress,
+          props.glance.taskCounts.in_review,
+          props.glance.openDecisions,
+        );
   const inside = glancing ? (
     <ProjectGlanceTile project={project} size={props.size} glance={props.glance} />
   ) : (
@@ -377,6 +391,7 @@ export function ProjectTile(props: ProjectTileProps) {
       className={className}
       style={style}
       href={props.href}
+      aria-label={name}
       onClick={(event) => {
         if (
           onOpen !== undefined &&
