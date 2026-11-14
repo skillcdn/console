@@ -179,6 +179,7 @@ import {
 } from "./router.js";
 import { projectPath } from "./routes.js";
 import { SetupPage } from "./setup-page.js";
+import { currentTab, tabTitle } from "./tab-title.js";
 import { errorWords, useAction } from "./use-action.js";
 
 // The composition of the default console: the pages assembled from the components, with the
@@ -3558,11 +3559,12 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
 
     useEffect(() => {
       if (typeof document !== "undefined") {
-        document.title = data.project === undefined ? title : `${data.project.name} · ${title}`;
         document.documentElement.lang = pack.tag;
       }
-    }, [title, data.project, pack.tag]);
+    }, [pack.tag]);
 
+    /** The tab the page shown is under, once the tabs are known. */
+    let here: string | undefined;
     let content: React.ReactNode;
     if (data.me === undefined) {
       content = (
@@ -3750,6 +3752,7 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
                 current: route.name === "settings",
               },
             ];
+      here = currentTab(nav);
       /** A page of the console's own at the address, or nothing there. */
       const customPageOf = (key: string, level: CustomPage["level"]): ReactNode => {
         const found = pages.find((candidate) => candidate.key === key && candidate.level === level);
@@ -3877,6 +3880,17 @@ export function createConsole(config: ConsoleConfig = {}): ConsoleApp {
         </components.Shell>
       );
     }
+    // The browser's tab is called after the page it shows. It is said again at every address,
+    // not only when the words change: a plugin's page may name the tab itself (the frame's
+    // `title`), and that name must not outlive the page.
+    const tab = tabTitle([here, data.project?.name, title]);
+    const address = `${location.pathname}${location.search}`;
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the address is why it is said again
+    useEffect(() => {
+      if (typeof document !== "undefined") {
+        document.title = tab;
+      }
+    }, [tab, address]);
     return (
       <LanguageContext.Provider value={pack}>
         <RemotePicturesContext.Provider value={pictureSrc}>
