@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-What an agent account's runner writes to the console is bounded by the hour: the events one session's transcript takes (60,000), the sessions an account begins (60), the wakes its runner raises itself (600), and the changes of its state the workspace's feed is told (20). A console refuses one more with `transcript.too_many`, `transcript.too_many_sessions` or `signal.too_many` (`429`, with `retry-after`), and keeps a change of state beyond the bound with the account, telling the feed how the account stands once the hour has room. The runner holds back what was refused and says so once: a session's events are kept and sent again after a minute, then after twice as long each time, a quarter of an hour at most (`HOLD_MS`, `MAX_HOLD_MS`); what a wake source raises is let go for as long; a session that could not be begun is tried again after the cool-down. The bounds are `MAX_TRANSCRIPT_EVENTS_PER_HOUR`, `MAX_AGENT_SESSIONS_PER_HOUR`, `MAX_RUNNER_WAKES_PER_HOUR` and `MAX_AGENT_STATE_CHANGES_PER_HOUR` of `@skillcdn/console/api`. Work meets none of them; a product that fails again and again does.

@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-The skill working-the-board (1.33) and the console's own rules say what runs of agents new to them were missing. A person's own open run is gone on with and never taken again, read with `console run <id>` and named with `--run <id>` where another of their agents or sign-ins began it. A task named to be taken is read once: `console runs --task <number> --open` says whether a run is open on it, and `console take` prints the task. When the console shows the person no such project, the agent says what they ask for: an owner to list them, or the directory bound anew. Work longer than a sitting reports before it is finished. A review's comment keeps what the person said apart from what the agent adds. An agent account does not wait for an answer and does not finish around a decision: the run that asked stays open and is gone on with when the answer wakes it. The rule that work given in chat goes on the board first is a rule for a project's work: what a member does in their own desk for themselves is on no board unless they put it there, so no task is written for it and nobody is asked whether to.

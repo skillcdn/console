@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-The deployment's secret can be replaced without losing what the console sealed (ADR-0127). The image of this version reads `AUTH_SECRET_PREVIOUS`, the secret the deployment had before: what it sealed is still opened (the pack tokens, the plugins' secrets, every value of an agent account's store, a sign-in in flight) and nothing is sealed with it. `migrate reseal`, a word of the `migrate` role run by hand once the new secret is rolled out, seals again under the current secret every value that only the one before opens, and ends with one line, `sealed again`, whose `left: 0` says that `AUTH_SECRET_PREVIOUS` can be taken out. Nobody is signed out by a rotation: sessions and tokens are kept as hashes. `deploy/README.md` "Rotating the secret" has the three steps, and the skill `deploying-a-console` does them for the reference deployment ("The console's own secret replaced"), where it said before that the secret was replaced only at the cost of entering everything again.

@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-The skill working-the-board (1.34) says what a second round of runs by agents new to it missed. Work of a project given in chat stands in the skill's opening, as what holds unless the board's rules say otherwise: the rules read, the work looked for on the board with `console tasks --search <words>`, the task taken where it is there, else written as one task with its category, its number told, then taken. On a project the console does not show, the agent tells the person the key, the console, what named it and the two things they can do, and binds the directory only to the key the person or the repository's agreement names, saying so. Before a task is closed on a person's verdict, what the run's summary named as left is said. A decision an earlier session asked and that still waits is told to the person at once, and not waited for at the terminal. A skill of the pack is found by search. A later take of a session carries `--rules <mark>`, the mark the rules were printed under, and the output of a take is never cut to skip the rules.

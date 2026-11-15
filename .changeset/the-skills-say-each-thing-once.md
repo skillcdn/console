@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-The skills working-the-board (1.32) and planning-the-board (1.6), which the package carries, are brought to what the command and the board now do, and say each thing once. New in them: how a task's state is read before it is taken, and that a failed run goes up for review while a run given up gives the task back; how a review's verdict is written when a person gives it to their agent (`console task edit <number> --state done`, or a comment and the task taken again); the right project checked with `console whoami`, which says what named it and ends with `project.not_found` where the console does not have it; a desk and a new folder naming no project, so that commands there say `--project <key>`; a task of a project several repositories share worked in its own repository; work found on the way written as a task of its own; and `console use` binding a checkout, on the page of setting up. Gone from them: what `console help <command>`, the board's rules and `SKILLCDN.md` own and they repeated, the exit codes and the filters of a listing among it. The example task is written `--state ready`, as the skill says every task is.

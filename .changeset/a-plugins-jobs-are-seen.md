@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-A plugin's jobs are seen (ADR-0128). `GET /api/v1/plugins/<key>` answers `jobs`, each job the plugin declares with how often it runs, its last run and outcome, its next time and since when it has failed; `console plugin <key>` prints a line for each, and the plugin's settings page a row of them. A job that failed twice running is among the plugin's `problems`, `the job <name> has failed since <moment>`, in `console plugins`, `console plugin <key>` and the settings pages, where the list marks a plugin that runs with a problem, until the job's next run goes well. `console plugin <key> events [--kind <kind>] [--limit <n>] [--offset <n>]` reads the plugin's events, newest first, the failures alone with `--kind plugin.failed`, for a plugin with no board project as for any; `GET /api/v1/plugins/<key>/events` takes `kind`, and the client's `plugin(key).events({ kind })`. The command reads a console of before 0.5.1 as it did: such a console names no jobs and none are printed, and it does not narrow events by kind, so the command keeps the kind asked for of the page it read and says so.

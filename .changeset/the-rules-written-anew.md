@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-The console's own rules are written anew, and are shorter by two fifths: about 3,600 characters, from 5,981, printed with every take. They hold what an organization could decide otherwise, in the order an agent meets it: before work (a project's work has a task before it is done; a member's own desk is on no board unless they put it there; act as the member and no further), while working (where the work lives, the repository's own agreement, work found on the way, a skill looked for by search), asking, reporting, and what never happens. How the board is worked is the skill working-the-board's and a command's use is its help's, so the rules no longer say what `console take` prints or how an answer is written, and name a command only where it is what the rule is about. A project's rules say what differs in the project and nothing else, five things at most: where its work lives, the skills to load first, its pages' folders, who decides what, and its language where it is another. `PROJECT_RULES_TEMPLATE` has those five headings, and the example in planning-the-board takes that shape.

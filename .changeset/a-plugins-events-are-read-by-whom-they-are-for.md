@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-Breaking: a plugin's events are answered to each reader as far as they are theirs to read. `GET /api/v1/plugins/<key>/events`, which `console plugin <key> events` and the client's `plugin(key).events()` read, answered every event of the plugin to anyone who knew of it: the events of a private project the reader is not in, and every `plugin.command` with who ran it and its arguments. An administrator reads every one, as before. Anyone else reads the events of a project they may see, as that project's own feed shows them, and of the events that belong to no project their own doing, a `plugin.command` they ran, and what the console says of the plugin with nobody in it, `plugin.failed` and `plugin.upgraded`; a token reads as its person. What a reader may not read takes no place in a page and is not counted in `more`. Where the console answers none, the command says `No event of <key> that you may read`, and no longer that the plugin has none. A member who read another person's commands or an administrator's acts through this route asks an administrator, or reads the feed of the project they are in.
