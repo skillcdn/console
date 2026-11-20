@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-A plugin's page no longer takes the mouse wheel from the console's page. Its frame is as tall as the page says, and the console's page is what scrolls, the sub-tabs with the page; but the height a page said was its body's `scrollHeight`, which a browser rounds to the nearest pixel, so a page 516.4 pixels tall got a frame of 516 and its document a fraction of a pixel to scroll. Firefox scrolls that fraction under the wheel and holds the wheel to it for a moment: over a plugin's page a turn of the wheel often moved nothing, or the page alone under its sub-tabs. A page's frame is now embedded with `scrolling="no"` and never scrolls itself, also while its height catches up with a page that grew, unless it stands at the most a frame grows to, 20,000 pixels; this holds for every plugin once the console is updated. `connect()` of `@skillcdn/console/plugin/web` now says the body's height as drawn, rounded up, so that a plugin built with this version has a frame never shorter than its page.

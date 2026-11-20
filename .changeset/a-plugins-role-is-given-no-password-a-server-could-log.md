@@ -1,7 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-The image gives a plugin's database role its password in the form the server keeps one. With `storage:sql`, the statement that makes or changes the role carried the password the console draws at every boot, and a PostgreSQL that logs its statements (`log_statement` of `ddl` or more) wrote it into the server's log. The statement now carries a SCRAM-SHA-256 verifier, a salt and two keys which alone sign nobody in, and the password stays in the console's memory. A server whose log held such a statement holds a password that was replaced at the console's next boot. A server set up to refuse a password given in that form refuses the role, and `storage:sql` says so as it says any refusal of the role.
-
-A statement of `ctx.sql` is one statement, and its connection goes back to the pool reset. A text that held several statements and no parameter once ran every one of them, a `begin` that left the pool's connection inside a transaction among them, and then failed with words about a list; the server now takes such a text for no statement and runs nothing of it (`plugin.invalid_args`). After a statement, and after a transaction, the connection is reset (`DISCARD ALL`): a timeout the plugin set for its session is the role's own again, and an advisory lock or a temporary table taken for the session is let go, where the pool handed the same connection to the next call with all of it still held. A plugin that relied on something of a session outlasting its statement, which the contract never promised, no longer finds it.
