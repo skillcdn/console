@@ -1,5 +1,17 @@
 # @skillcdn/console
 
+## 0.5.3
+
+### Patch Changes
+
+- [`46db21a`](https://github.com/skillcdn/console/commit/46db21a48551a44da1f4a55663c225ccdf4319e9) Thanks [@samo-lucid](https://github.com/samo-lucid)! - The desk an agent account is set up with no longer says "I never say I am a person", and neither does the skill `running-an-agent` ([ADR-0146](https://github.com/skillcdn/console/blob/main/docs/adr/0146-the-desks-template-spends-no-sentence-on-what-an-agent-does-by-itself.md)). An agent asked in earnest does not answer that it is a person without being told so, and the template is read at the start of every session: a sentence there is for what a session would not do otherwise. An organization that wants more said writes it in its rules.
+  
+  A desk written before keeps the sentence, and its account may take it out of `AGENTS.md`; nothing depends on it.
+
+- [`c00df27`](https://github.com/skillcdn/console/commit/c00df27e4b5d006a37f0c85a8f750b54fe3550f1) Thanks [@samo-lucid](https://github.com/samo-lucid)! - Breaking: the front page of someone who has arranged nothing stands as arranging shows it, and no size is chosen for them ([ADR-0147](https://github.com/skillcdn/console/blob/main/docs/adr/0147-the-page-nobody-arranged-stands-as-arranging-shows-it-and-no-size-is-chosen-for-a-person.md)). Until now that page was composed: the first widget half the page wide, boxes reaching fractions of a cell. "Edit layout" then moved every tile onto the grid, a widget made larger where that closed a row, and "Reset to default" followed by "Done" kept a page other than the one shown. Now every tile stands in the page's order, the widgets placed `home:top`, the projects, the widgets placed `home:bottom`, each at the size it starts at, at the first room from the top: a widget at its `defaultSize` where the grid fits it, a project an icon. The page looked at and the page being arranged are the same.
+  
+  No widget is made larger or smaller to lead the page or to close a row. A person who wants a widget larger picks the size, and a plugin whose widget should lead gives it a large `defaultSize`. "Close the gaps" moves each tile up into the room the others leave it, changes no size and moves no tile further down, so the page never grows longer; on a page nobody arranged it has nothing to move. A width nobody arranged, when another was, reads the order and the sizes kept there. A page a person kept stands as it was kept.
+
 ## 0.5.2
 
 ### Patch Changes

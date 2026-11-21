@@ -1,7 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-Breaking: the front page of someone who has arranged nothing stands as arranging shows it, and no size is chosen for them ([ADR-0147](https://github.com/skillcdn/console/blob/main/docs/adr/0147-the-page-nobody-arranged-stands-as-arranging-shows-it-and-no-size-is-chosen-for-a-person.md)). Until now that page was composed: the first widget half the page wide, boxes reaching fractions of a cell. "Edit layout" then moved every tile onto the grid, a widget made larger where that closed a row, and "Reset to default" followed by "Done" kept a page other than the one shown. Now every tile stands in the page's order, the widgets placed `home:top`, the projects, the widgets placed `home:bottom`, each at the size it starts at, at the first room from the top: a widget at its `defaultSize` where the grid fits it, a project an icon. The page looked at and the page being arranged are the same.
-
-No widget is made larger or smaller to lead the page or to close a row. A person who wants a widget larger picks the size, and a plugin whose widget should lead gives it a large `defaultSize`. "Close the gaps" moves each tile up into the room the others leave it, changes no size and moves no tile further down, so the page never grows longer; on a page nobody arranged it has nothing to move. A width nobody arranged, when another was, reads the order and the sizes kept there. A page a person kept stands as it was kept.
