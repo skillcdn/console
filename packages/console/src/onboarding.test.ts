@@ -45,6 +45,11 @@ describe("the onboarding task of an agent account", () => {
       "- **Join the messenger and set your profile.** Accept the invitation to `acme.slack.com` that came to `mira@acme.example`, the address you sign in with, and set your name, your title and your picture as any member does",
     );
     expect(own).not.toMatch(/you are an agent|AI agent|not a person/i);
+    // A member that is there at every hour is never shown as paused: its working hours are
+    // every hour, which only the messenger's own pages set.
+    expect(own).toContain(
+      "Set your working hours there too, to every day from 12:00 AM to midnight, under Availability in your preferences, in the browser: outside them the messenger pauses your notifications and shows you as paused.",
+    );
     // The browser tool of the one product the package knows, said where the agent is told to use one.
     expect(own).toContain(
       'For Claude Code that tool works in Google Chrome with the Claude in Chrome extension, and is turned on by "browser": "chrome" in runner.json.',
@@ -52,6 +57,17 @@ describe("the onboarding task of an agent account", () => {
     // The wake source is taken by the runner by itself, and where to see that it is.
     expect(own).toContain(
       'add "slack" to "wake" in runner.json. The runner takes the change by itself once your turn is over: console agent <handle> then says the source is connected.',
+    );
+    // It sends as the member it is: with its own member's token, kept beside the one that
+    // wakes it, and never through the server, which signs what it sends with a product's name.
+    expect(own).toContain(
+      "- **Read at the messenger, send there as yourself, and be woken by it.** Add the messenger's own MCP server to your product, to read there.",
+    );
+    expect(own).toContain(
+      "keep its app-level token in your store as slack.app_token and your member's own as slack.user_token",
+    );
+    expect(own).toContain(
+      "Send with your member's token as the skill says, a message as markdown_text, and never through the MCP server, which puts a line that names your product under what it sends.",
     );
     expect(own).toContain(
       "- **Put your picture on your profiles.** `console agent mira --avatar avatar.png` writes it as a file.",

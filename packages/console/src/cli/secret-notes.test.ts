@@ -8,6 +8,7 @@ import { secretNotes } from "./secret-notes.js";
 describe("what is said of a secret's value as it is kept", () => {
   it("says nothing of a value that looks like what its name holds", () => {
     expect(secretNotes("slack.app_token", `xapp-${"1-A0".repeat(6)}`)).toEqual([]);
+    expect(secretNotes("slack.user_token", `xoxp-${"1-A0".repeat(6)}`)).toEqual([]);
     expect(secretNotes("git.token", `ghp_${"a1B2".repeat(9)}`, "github")).toEqual([]);
     expect(secretNotes("git.token", `github_pat_${"a1B2".repeat(9)}`, "github")).toEqual([]);
     expect(secretNotes("git.token", `glpat-${"a1B2".repeat(5)}`, "gitlab")).toEqual([]);
@@ -27,6 +28,14 @@ describe("what is said of a secret's value as it is kept", () => {
     ]);
     expect(github.join("\n")).not.toContain(other);
     expect(secretNotes("slack.app_token", "xoxb-not-the-app-level-one")[0]).toContain(
+      "an app-level token of Slack begins with xapp-",
+    );
+    // One app hands an agent two tokens, each copied unseen: one kept under the other's name
+    // is said where it is kept, and not found out by the first message that is refused.
+    expect(secretNotes("slack.user_token", "xapp-the-app-level-one")).toEqual([
+      "The value does not look like what slack.user_token holds: a member's token of Slack begins with xoxp-. It is kept as it is; set it again if another value was pasted.",
+    ]);
+    expect(secretNotes("slack.app_token", "xoxp-the-member's-own")[0]).toContain(
       "an app-level token of Slack begins with xapp-",
     );
   });

@@ -4,7 +4,7 @@
 // or another value pasted in its place, is otherwise found out when a push fails. Nothing of the
 // value is said: what a note names is its shape.
 
-/** What a secret's name says of its value's shape, for the names the package itself reads. */
+/** What a secret's name says of its value's shape, for the names the package itself reads or has an agent keep. */
 const SHAPES: readonly {
   readonly name: string;
   /** The kind of git host the shape holds for, where it is one host's own. */
@@ -16,6 +16,14 @@ const SHAPES: readonly {
     name: "slack.app_token",
     shape: /^xapp-/,
     says: "an app-level token of Slack begins with xapp-",
+  },
+  {
+    // The same app's other token, which the agent sends with itself. The two are copied unseen,
+    // one after the other, and the package never reads this one: nothing else here would say
+    // that the wrong one was kept.
+    name: "slack.user_token",
+    shape: /^xoxp-/,
+    says: "a member's token of Slack begins with xoxp-",
   },
   {
     name: "git.token",

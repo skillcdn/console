@@ -270,11 +270,11 @@ const slack: ServiceProvider = {
   onboarding: ({ service, address }) => [
     {
       title: "Join the messenger and set your profile",
-      body: `Accept the invitation to ${slackPlace(service)} ${address === undefined ? "where one has reached you" : `that came to \`${address}\`, the address you sign in with`}, and set your name, your title and your picture as any member does (console agent <handle> --avatar <file> writes the file).`,
+      body: `Accept the invitation to ${slackPlace(service)} ${address === undefined ? "where one has reached you" : `that came to \`${address}\`, the address you sign in with`}, and set your name, your title and your picture as any member does (console agent <handle> --avatar <file> writes the file). Set your working hours there too, to every day from 12:00 AM to midnight, under Availability in your preferences, in the browser: outside them the messenger pauses your notifications and shows you as paused.`,
     },
     {
-      title: "Connect the messenger to your product, and be woken by it",
-      body: `Add the messenger's own MCP server to your product, and make the app that wakes you from the manifest your skill carries; keep its tokens in your store and add "slack" to "wake" in runner.json. The runner takes the change by itself once your turn is over: console agent <handle> then says the source is connected.`,
+      title: "Read at the messenger, send there as yourself, and be woken by it",
+      body: `Add the messenger's own MCP server to your product, to read there. Make an app of your own from the manifest your skill carries, which wakes you and is what you send with: keep its app-level token in your store as slack.app_token and your member's own as slack.user_token, and add "slack" to "wake" in runner.json. The runner takes the change by itself once your turn is over: console agent <handle> then says the source is connected. Send with your member's token as the skill says, a message as markdown_text, and never through the MCP server, which puts a line that names your product under what it sends.`,
     },
   ],
   asks: ({ service, names, address }) => [
