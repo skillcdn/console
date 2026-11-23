@@ -24,7 +24,7 @@ Handing a task over frees your session only where a message reaches you while th
 
 Your product runs on a subscription, and what it allows is counted in windows that reset: Claude Code counts a short one and the week. Every session signed in with it draws on the one allowance, your main session and each subagent alike. These are tips, yours to use as you judge.
 
-- **Look at it** before you hand several tasks out, and again while they run.
+- **Look at it when it matters:** before you start work that spends much of it, several subagents at once or a long task, and once more if that work runs long; not at every turn. A look is for your own judgment: speak of it to people only where it changes what they wait for, as when work stops until a reset.
 
   | Product | How |
   |---|---|
@@ -32,6 +32,6 @@ Your product runs on a subscription, and what it allows is counted in windows th
   | Codex | `/usage` and its status line, for a person at its terminal, as its documentation has them. No way was found for a run nobody attends |
   | Behind `acp` | The way of the product behind it |
 
-- **Count what already runs, and your own share.** A look says what is used so far, not what the work already running will use. Several subagents at once spend a window many times faster than one session, and once it is spent your main session answers nobody either. So start fewer at once, look again while they run, and stop handing out, or stop a subagent, while enough is left for the main session to talk until the reset.
+- **Count what already runs, and your own share.** A look says what is used so far, not what the work already running will use. Several subagents at once spend a window many times faster than one session, and once it is spent your main session answers nobody either. So start fewer at once, and stop handing out, or stop a subagent, while enough is left for the main session to talk until the reset.
 - **Use what a reset would take.** What is left of a window when it resets is gone. Near the short window's limit, pause and go on after its reset; the week's allowance is still there then, and is best used in the short windows that come before the week's own reset.
 - **Keep a wake before long work.** An allowance that runs out ends your turn, and nothing you meant to do next happens by itself. Before long work, keep a wake for the moment the window resets, or for when you mean to look again: `console agent wake me "<what to go on with>" --at <HH:MM> --key <name>`, or `--in <minutes>`, under a name of its own, so that no other wake you keep takes its place. It brings you back with what to go on with. Where all went well it costs one short turn, or you take it away first (`console agent wake me --cancel --key <name>`).
