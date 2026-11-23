@@ -14,6 +14,7 @@ import {
   type PersonDeskInput,
   personDeskFiles,
 } from "./desk.js";
+import { ownRunnerModules } from "./modules.js";
 
 // The desk's template (ADR-0088), and the example in the console's repository that is held
 // equal to what it writes for an invented account; and a person's (ADR-0115), with its example.
@@ -25,6 +26,12 @@ const STRUCTURE =
 /** Where they say the skill that shapes a desk is, and when it is not needed. */
 const SHAPED_BY =
   "is shaped as the skill keeping-a-desk says, which `console help desk` names with its place; one more entry in a shape that is here needs none of it.";
+
+/** The page of the skill running-an-agent an agent account's instructions name, by its place in the skill. */
+const SEVERAL_TASKS = "references/several-tasks.md";
+const RUNNING_AN_AGENT = fileURLToPath(
+  new URL("../../../../skills/running-an-agent/", import.meta.url),
+);
 
 const EXAMPLE = fileURLToPath(new URL("../../../../examples/agent-desk/", import.meta.url));
 const PERSON_EXAMPLE = fileURLToPath(new URL("../../../../examples/person-desk/", import.meta.url));
@@ -124,10 +131,15 @@ describe("the desk's template", () => {
       "I work as any member does: my profiles and what I sign carry my name and my role, and nothing else.\n",
     );
     expect(instructions).not.toMatch(/I am an AI agent|I say so when it matters|I am a person/);
-    // One main session that directs the work; a task may go to a subagent, where the product
-    // has them, which is a lead and not a rule.
+    // One main session that directs the work. With several tasks at hand it is kept free for
+    // people and the board, and each task goes to a subagent where the product has them: a
+    // session that works a long task itself answers people late, and fills with the task. A
+    // lead the agent judges by and not a rule (ADR-0085, point 3), which the sentence says.
     expect(instructions).toContain("I work in one main session and carry it on:");
-    expect(instructions).toContain("A task I may give to a subagent, where my product has them:");
+    expect(instructions).toContain(
+      "With several tasks at hand, I keep this session free for people and the board and, unless I judge otherwise, give each task to a subagent, where my product has them:",
+    );
+    expect(instructions).not.toContain("A task I may give to a subagent");
     // What lets a subagent begin a task at once (ADR-0115): what it is handed, a folder of its
     // own under work/, since two of them told to keep out of one another's way wrote two levels
     // above the desk, what it reads itself, and whose the run is.
@@ -143,6 +155,11 @@ describe("the desk's template", () => {
     );
     expect(instructions).toContain(
       "A task I hand over I do not take myself: a second take ends the first run.",
+    );
+    // The rest is a page a session reads when it needs it, named in one sentence: every session
+    // reads this file, and few of them have several tasks at hand (ADR-0146).
+    expect(instructions).toContain(
+      `How several tasks go under my product, with subagents or without, and tips for my allowance are in \`${SEVERAL_TASKS}\` of the skill running-an-agent, beside working-the-board.\n`,
     );
     expect(instructions).toContain(
       "This desk is bound to no project and stays so: a board command I run here names one, `--project <key>`, as a wake does when it names a task (`console task <number> --project <key>`), and `console use` is for a checkout.",
@@ -225,6 +242,32 @@ describe("the desk's template", () => {
     expect(readme).not.toContain("AI agent");
     expect(readme).toContain("- `records/`: what I keep, in the shape that fits it.");
     expect(readme).not.toContain("is the format");
+  });
+
+  it("names a page of the skill that is there, and that says of every driver what the driver says of itself", async () => {
+    // A desk keeps the sentence for good, so the page it names stays where it is.
+    const page = await readFile(join(RUNNING_AN_AGENT, SEVERAL_TASKS), "utf8");
+    expect(page.startsWith("# Several tasks at once\n")).toBe(true);
+    // Whether a task handed over frees the session is whether a message reaches it while a turn
+    // runs, which a driver declares (`steer`). The page says so of each driver the package
+    // ships, in a row of its own: a driver added, or one that learns to take a message in a
+    // turn, changes the page with it.
+    const modules = ownRunnerModules({ user: "mira" });
+    const rows = page.split("\n");
+    for (const name of modules.drivers.names()) {
+      const driver = modules.drivers.get(name)?.({
+        spawn: () => {
+          throw new Error("nothing is started to ask a driver what it declares");
+        },
+        cwd: ".",
+      });
+      const row = rows.find((line) => line.startsWith(`| \`${name}\` |`));
+      expect(row?.split(" | ")[1], name).toMatch(
+        driver?.can.steer === true
+          ? /^Is read when the tool calls under way finish/
+          : /^Waits for the turn to end/,
+      );
+    }
   });
 
   it("names no service the workspace does not, and a role it has no words for as it is called", () => {
