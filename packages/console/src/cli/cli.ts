@@ -5540,10 +5540,14 @@ const SETUP_FLAGS: OptionSpec = {
 
 type Me = Awaited<ReturnType<ConsoleClient["me"]>>;
 
-/** What a setup says it found of the agent's browser, by the name a new desk gives it. */
+/** The browsers a setup looks for where it is asked for one: every name of `runner.json` but the one for none. */
+const SETUP_BROWSERS = RUNNER_BROWSERS.filter((one) => one !== "none");
+
+/** What a setup says it found of the agent's browser, by the name a new desk gives it; nothing of none. */
 const BROWSER_FOUND: Readonly<Record<RunnerBrowser, string>> = {
-  headless: `Google Chrome and ${HEADLESS_TOOL.command}, which drives it with no window`,
-  chrome: "Google Chrome",
+  headless: `, Google Chrome and ${HEADLESS_TOOL.command}, which drives it with no window`,
+  chrome: ", Google Chrome",
+  none: "",
 };
 
 /** The end of what a program said, for a refusal to carry: one line, bounded. */
@@ -6104,10 +6108,10 @@ const agentSetup = async (args: readonly string[], io: CliIo): Promise<number> =
   }
   // The agent's browser (ADR-0149): a Chrome with no window where nobody says another.
   const named = text(values, "browser");
-  const browser = RUNNER_BROWSERS.find((one) => one === named);
+  const browser = SETUP_BROWSERS.find((one) => one === named);
   if (named !== undefined && browser === undefined) {
     throw misuse(
-      `Not a browser this command sets up: ${named}. It has: ${RUNNER_BROWSERS.join(", ")}.`,
+      `Not a browser this command sets up: ${named}. It has: ${SETUP_BROWSERS.join(", ")}; --no-browser is for none.`,
     );
   }
   if (named !== undefined && on(values, "no-browser")) {
@@ -6115,7 +6119,7 @@ const agentSetup = async (args: readonly string[], io: CliIo): Promise<number> =
   }
   const look = await lookAtMachine(machine, {
     driver,
-    browser: on(values, "no-browser") ? false : (browser ?? "headless"),
+    browser: on(values, "no-browser") ? "none" : (browser ?? "headless"),
   });
   if (look.missing.length > 0) {
     throw failed(
@@ -6123,7 +6127,7 @@ const agentSetup = async (args: readonly string[], io: CliIo): Promise<number> =
     );
   }
   io.stdout(
-    `The machine has what the setup needs: git${look.product === undefined ? "" : `, ${look.product}`}${look.browser === undefined ? "" : `, ${BROWSER_FOUND[look.browser]}`}.\n${look.notes.map((line) => `${line}\n`).join("")}`,
+    `The machine has what the setup needs: git${look.product === undefined ? "" : `, ${look.product}`}${look.browser === undefined ? "" : BROWSER_FOUND[look.browser]}.\n${look.notes.map((line) => `${line}\n`).join("")}`,
   );
   const client = await signInAsAccount(io, machine, url, setup);
   const me = await client.me();

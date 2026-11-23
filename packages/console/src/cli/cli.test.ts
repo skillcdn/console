@@ -6000,9 +6000,11 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     });
     expect(await runCli([...LINE, "--no-browser"], went.io)).toBe(EXIT.ok);
     expect(went.out()).toContain("The machine has what the setup needs: git, Claude Code.");
-    expect(
-      JSON.parse(without.files.get("/Users/mira/desk/runner.json") ?? "{}"),
-    ).not.toHaveProperty("browser");
+    // The desk says that it has none: a file that said nothing would mean the one with no
+    // window (ADR-0149).
+    expect(JSON.parse(without.files.get("/Users/mira/desk/runner.json") ?? "{}")).toMatchObject({
+      browser: "none",
+    });
 
     // The program that drives a Chrome with no window is not there: said with what installs
     // it, and with the product's own browser tool as the other way.
@@ -6041,9 +6043,10 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
       driver: "claude",
       browser: "chrome",
     });
-    // A browser is a name of the short list, and one is said or none.
+    // A browser is one of the two a setup looks for, and one is said or none.
     for (const words of [
       ["--browser", "firefox"],
+      ["--browser", "none"],
       ["--browser", "chrome", "--no-browser"],
     ]) {
       const refused = harness({

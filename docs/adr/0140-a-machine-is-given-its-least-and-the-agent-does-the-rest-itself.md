@@ -1,6 +1,6 @@
 # ADR-0140: A machine is given its least, and the agent does the rest itself
 
-- Status: Accepted; which browser a setup looks for and a new desk names (points 2 and 6) amended by [ADR-0149](0149-an-agents-browser-is-a-chrome-with-no-window-unless-its-desk-names-the-products-own.md)
+- Status: Accepted; which browser a setup looks for and a new desk names (points 2 and 6), and what a desk that names none is started with, amended by [ADR-0149](0149-an-agents-browser-is-a-chrome-with-no-window-unless-its-desk-names-the-products-own.md)
 - Date: 2026-11-20
 - Amends [ADR-0088](0088-an-agent-account-has-a-desk-and-is-set-up-from-an-invitation-by-signing-in-as-itself.md), point 5, in what the invitation's line says, what the command prints of the guide and what it does before and after the sign-in; and the sentence of [ADR-0094](0094-the-account-an-agent-signs-in-with-is-named-and-who-makes-it-is-the-organizations-to-say.md) by which the session at the machine may be handed what the account signs in with.
 

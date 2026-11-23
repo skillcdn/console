@@ -539,6 +539,8 @@ describe("the runner", () => {
       model: null,
       effort: null,
       resume: undefined,
+      // The browser of a desk that names none (ADR-0149).
+      browser: "headless",
       // What the driver cuts a text it shows a part of with, and keeps the end of one with: the
       // runner's, which take the secrets out first.
       cut: expect.any(Function),
@@ -2155,13 +2157,14 @@ describe("the runner", () => {
     console.signal({ text: "Begin." });
     const session = await sessionOf(product);
     expect(session.options).toMatchObject({ browser: "chrome" });
+    // A desk that names no browser is started with the one with no window (ADR-0149), and
+    // one that is to have none says so.
     const plain = setup();
     plain.console.signal({ text: "Begin." });
-    expect((await sessionOf(plain.product)).options.browser).toBeUndefined();
-    // A browser with no window is named the same way (ADR-0149).
-    const headless = setup({ config: { browser: "headless" } });
-    headless.console.signal({ text: "Begin." });
-    expect((await sessionOf(headless.product)).options).toMatchObject({ browser: "headless" });
+    expect((await sessionOf(plain.product)).options).toMatchObject({ browser: "headless" });
+    const none = setup({ config: { browser: "none" } });
+    none.console.signal({ text: "Begin." });
+    expect((await sessionOf(none.product)).options).toMatchObject({ browser: "none" });
   });
 
   it("ends for a runner.json that changed, between two turns, to be begun again with it (ADR-0144)", async () => {

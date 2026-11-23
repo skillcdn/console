@@ -46,16 +46,17 @@ describe("the onboarding task of an agent account", () => {
     );
     expect(own).not.toMatch(/you are an agent|AI agent|not a person/i);
     // The browsers a runner.json names, said where the agent is told to sign in at a page: the
-    // one with no window that a new desk names, and the product's own tool (ADR-0149).
+    // one with no window, which it has where the file names none, and the product's own tool
+    // (ADR-0149). Which of them it uses is its own to choose: the task says what each is, and
+    // sends it to neither.
     expect(own).toContain(
-      '"headless", which a new desk names, is a Google Chrome with no window and a profile of its own, driven with the tools of the server chrome-devtools',
+      '"headless", which is yours where the file names none, is a Google Chrome with no window and a profile of its own, driven with the tools of the server chrome-devtools',
     );
     expect(own).toContain(
       '"chrome" is, for Claude Code, its own browser tool in the Google Chrome of your OS account, which takes the Claude in Chrome extension there',
     );
-    expect(own).toContain(
-      'a browser with no window has none for them, so where a service goes on wanting a person, ask for "chrome" to be your browser instead.',
-    );
+    expect(own).toContain("Which of the two you use is yours to choose.");
+    expect(own).not.toMatch(/ask for "chrome"|has none for/);
     // The wake source is taken by the runner by itself, and where to see that it is.
     expect(own).toContain(
       'add "slack" to "wake" in runner.json. The runner takes the change by itself once your turn is over: console agent <handle> then says the source is connected.',

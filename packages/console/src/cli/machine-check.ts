@@ -57,7 +57,12 @@ export interface MachineLook {
   readonly driver: string | undefined;
   /** What the product is called and the version it says, where it answered. */
   readonly product: string | undefined;
-  /** The agent's browser, as a new desk names it: the one asked for, where the product is started with it and it is there. */
+  /**
+   * The agent's browser, as a new desk names it: the one asked for, where the product is
+   * started with it and it is there, and `none` where none was asked for. Nothing where the
+   * product is started with none, or none was found: the desk then names what a `runner.json`
+   * that says nothing means.
+   */
   readonly browser: RunnerBrowser | undefined;
   /** What is missing, a line each, with what installs it: the setup stops for any of these. */
   readonly missing: readonly string[];
@@ -148,11 +153,11 @@ function chromePlace(platform: string): string {
  * Looks at the machine: git, the product, its browser. `driver` names the product where whoever
  * runs the setup said one, and the first of the package's products that answers is taken where
  * they said none; `browser` is the browser asked for, `headless` where whoever runs the setup
- * said none, and `false` for an agent that signs in at no page.
+ * said none, and `none` for an agent that signs in at no page.
  */
 export async function lookAtMachine(
   machine: SetupMachine,
-  wanted: { readonly driver?: string | undefined; readonly browser: RunnerBrowser | false },
+  wanted: { readonly driver?: string | undefined; readonly browser: RunnerBrowser },
 ): Promise<MachineLook> {
   const missing: string[] = [];
   const notes: string[] = [];
@@ -187,8 +192,8 @@ export async function lookAtMachine(
     );
   }
 
-  let browser: RunnerBrowser | undefined;
-  if (found !== undefined && wanted.browser !== false) {
+  let browser: RunnerBrowser | undefined = wanted.browser === "none" ? "none" : undefined;
+  if (found !== undefined && wanted.browser !== "none") {
     const { name, browsers } = found.product;
     const tool = browsers?.chrome;
     if (wanted.browser === "headless" && browsers?.headless === true) {
@@ -223,7 +228,7 @@ export async function lookAtMachine(
       }
     } else {
       notes.push(
-        `No browser for ${name}: its driver starts it with none${browsers === undefined ? "" : ` of the kind ${wanted.browser}`}, and the desk names none.`,
+        `No browser for ${name}: its driver starts it with none${browsers === undefined ? "" : ` of the kind ${wanted.browser}`}, whatever the desk's runner.json names.`,
       );
     }
   }

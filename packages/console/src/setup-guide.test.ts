@@ -125,8 +125,8 @@ describe("the guide of an agent account's setup (ADR-0088)", () => {
     expect(machine?.steps[3]?.body).toContain("Do none of it for it.");
     expect(machine?.steps[3]?.body).toContain('`console agent wake me "<what changed>"`');
     // How it signs in elsewhere, at a page: in the browser its runner starts it with, where a
-    // sign-in stays (ADR-0149); a person signing in inside its session where it cannot, in a
-    // browser that has a window; nothing in a message.
+    // sign-in stays, of the two it chooses between itself (ADR-0149); a person signing in
+    // inside its session where it cannot; nothing in a message.
     expect(browser?.title).toBe("Signing in elsewhere, in a browser");
     expect(browser?.steps.map((step) => step.title)).toEqual([
       "Use the browser you are started with, and keep it",
@@ -135,11 +135,13 @@ describe("the guide of an agent account's setup (ADR-0088)", () => {
     ]);
     expect(browser?.steps[0]?.body).toContain('the browser your runner.json names as "browser"');
     expect(browser?.steps[0]?.body).toContain(BROWSER_OF_AN_AGENT);
-    expect(BROWSER_OF_AN_AGENT).toContain('"headless", which a new desk names');
+    expect(BROWSER_OF_AN_AGENT).toContain('"headless", which is yours where the file names none');
     expect(BROWSER_OF_AN_AGENT).toContain("the Claude in Chrome extension");
+    expect(BROWSER_OF_AN_AGENT).toContain("Which of the two you use is yours to choose.");
     expect(browser?.steps[1]?.body).toContain("over a remote desktop");
-    expect(browser?.steps[1]?.body).toContain(
-      'A browser with no window has none for them: where a service goes on wanting a person, ask for "chrome" to be your browser instead.',
+    // What a sign-in is like sends the agent to neither browser.
+    expect(browser?.steps.map((step) => step.body).join(" ")).not.toMatch(
+      /ask for "chrome"|has none for/,
     );
     expect(browser?.steps[1]?.body).toContain(
       "Nothing you sign in with is sent in a message, a task or a comment.",

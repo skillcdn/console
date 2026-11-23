@@ -306,9 +306,13 @@ describe("the claude driver", () => {
         },
       },
     });
-    // A desk that names the product's own tool, or none, is started with no server.
+    // A desk that names the product's own tool, or none, is started with no server, and one
+    // that names none with neither.
     expect(claudeArguments({ ...bare, browser: "chrome" }, "darwin")).not.toContain("--mcp-config");
-    expect(claudeArguments(bare, "darwin")).not.toContain("--mcp-config");
+    const none = claudeArguments({ ...bare, browser: "none" }, "darwin");
+    expect(none).not.toContain("--mcp-config");
+    expect(none).not.toContain("--chrome");
+    expect(none).toEqual(claudeArguments(bare, "darwin"));
     // The driver starts the product for the system its host says it is on.
     const fake = fakeChild();
     const spawned: (readonly string[])[] = [];

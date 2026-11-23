@@ -42,7 +42,7 @@ export function onboardingOf(input: OnboardingInput): {
     ...services.flatMap((one) => one.onboarding.map((step) => item(step.title, step.body))),
     item(
       "Sign in at a page in the browser you are started with",
-      `Use the browser your runner.json names as "browser": it keeps a profile, so a sign-in stays there from one session to the next. ${BROWSER_OF_AN_AGENT} Where a sign-in wants a person, a code sent to a phone or a picture to solve, ask for a person to sign in inside your session, over a remote desktop or at the machine, and say which service and which account; a browser with no window has none for them, so where a service goes on wanting a person, ask for "chrome" to be your browser instead. Nothing you sign in with goes into a message, a task or a comment.`,
+      `Use the browser your runner.json names as "browser": it keeps a profile, so a sign-in stays there from one session to the next. ${BROWSER_OF_AN_AGENT} Where a sign-in wants a person, a code sent to a phone or a picture to solve, ask for a person to sign in inside your session, over a remote desktop or at the machine, and say which service and which account; nothing you sign in with goes into a message, a task or a comment.`,
     ),
     item(
       "Put your picture on your profiles",

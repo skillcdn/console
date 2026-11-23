@@ -51,7 +51,7 @@ describe("the look at a machine before a setup", () => {
       missing: [],
     });
     expect(codex.notes[0]).toBe(
-      "No browser for Codex: its driver starts it with none, and the desk names none.",
+      "No browser for Codex: its driver starts it with none, whatever the desk's runner.json names.",
     );
     expect(linux.asked).toEqual(["git --version", "claude --version", "codex --version"]);
 
@@ -123,8 +123,11 @@ describe("the look at a machine before a setup", () => {
     expect(browserless.missing[0]).toContain(
       "Google Chrome: Claude Code's browser tool works in it",
     );
-    // An agent that signs in at no page is asked for none.
-    expect((await lookAtMachine(linux.machine, { browser: false })).missing).toEqual([]);
+    // An agent that signs in at no page is asked for none, and its desk names none.
+    expect(await lookAtMachine(linux.machine, { browser: "none" })).toMatchObject({
+      browser: "none",
+      missing: [],
+    });
     // A product the package has no driver's command for is not looked for.
     const other = await lookAtMachine(linux.machine, { driver: "acp", browser: "headless" });
     expect(other).toMatchObject({ driver: "acp", product: undefined, missing: [] });

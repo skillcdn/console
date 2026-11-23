@@ -8,5 +8,6 @@
     "env": {},
     "files": {}
   },
-  "autosave": true
+  "autosave": true,
+  "browser": "headless"
 }

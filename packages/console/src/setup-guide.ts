@@ -37,10 +37,11 @@ export function setupSentenceOf(command: string): string {
 
 /**
  * The browsers an agent's `runner.json` names (ADR-0149), as the agent is told of them where it
- * is told to sign in at pages; the setup looks for the one asked for on the machine.
+ * is told to sign in at pages: what each is, and that which of them it uses is its own to
+ * choose. The setup looks for the one asked for on the machine.
  */
 export const BROWSER_OF_AN_AGENT =
-  '"headless", which a new desk names, is a Google Chrome with no window and a profile of its own, driven with the tools of the server chrome-devtools: nothing is installed in it and nothing signed in for it. "chrome" is, for Claude Code, its own browser tool in the Google Chrome of your OS account, which takes the Claude in Chrome extension there, signed in with your subscription.';
+  '"headless", which is yours where the file names none, is a Google Chrome with no window and a profile of its own, driven with the tools of the server chrome-devtools: nothing is installed in it and nothing signed in for it. "chrome" is, for Claude Code, its own browser tool in the Google Chrome of your OS account, which takes the Claude in Chrome extension there, signed in with your subscription. Which of the two you use is yours to choose.';
 
 /** Whose part of a setup something is (ADR-0088): whoever prepares the machine, the agent, its manager. */
 export type SetupRole = "operator" | "agent" | "manager";
@@ -229,7 +230,7 @@ export function setupGuideOf(setup: RestAgentSetup, code: string): SetupGuide {
     },
     {
       title: "Where a sign-in wants a person",
-      body: 'A code sent to a phone, a picture to solve, a key to touch: ask for a person to sign in inside your session. They reach your OS account over a remote desktop, or sit at the machine, sign in as you in that same browser, and leave. A browser with no window has none for them: where a service goes on wanting a person, ask for "chrome" to be your browser instead. Ask as a decision on the board, or at the messenger where it is quick, and say which service and which account. Nothing you sign in with is sent in a message, a task or a comment.',
+      body: "A code sent to a phone, a picture to solve, a key to touch: ask for a person to sign in inside your session. They reach your OS account over a remote desktop, or sit at the machine, sign in as you in that same browser, and leave. Ask as a decision on the board, or at the messenger where it is quick, and say which service and which account. Nothing you sign in with is sent in a message, a task or a comment.",
     },
     {
       title: "Keep what you sign in with",
