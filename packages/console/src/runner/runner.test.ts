@@ -405,6 +405,10 @@ function setup(
     reconfigured?: () => Promise<"same" | "changed" | { readonly problem: string }>;
     /** The most bytes that wait to be sent before the oldest are let go. */
     outboxBytes?: number;
+    /** The clock the runner reads; the machine's own where left out. */
+    now?: () => number;
+    /** How often the runner's heartbeat timer fires; every forty milliseconds where left out. */
+    heartbeatMs?: number;
   } = {},
 ) {
   const console = fakeConsole();
@@ -437,7 +441,7 @@ function setup(
     installed: over.installed,
     updateCommand: over.updateCommand,
     reconfigured: over.reconfigured,
-    now: () => Date.now(),
+    now: over.now ?? (() => Date.now()),
     random: () => 0.5,
     time: () => "14:02",
     files: {
@@ -466,7 +470,7 @@ function setup(
       },
     },
     timing: {
-      heartbeatMs: 40,
+      heartbeatMs: over.heartbeatMs ?? 40,
       batchMs: 10,
       groupWindowMs: 25,
       coolDownMs: 200,
@@ -2303,6 +2307,87 @@ describe("the runner", () => {
     expect(session.sent).toHaveLength(2);
     runner.stop();
     await done;
+  });
+
+  it("tells its agent with the next message from when to when it did not run, once, and begins no turn for it", async () => {
+    // The clock the runner reads is the test's, which leaps as a machine's does over a sleep.
+    let ahead = 0;
+    const { console, product, log, runner, done } = setup({ now: () => Date.now() + ahead });
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    session.emit(
+      ...STARTED,
+      { type: "event", kind: "assistant", text: "Begun." },
+      { type: "turn_completed" },
+    );
+    // A runner that runs says nothing of the kind.
+    await sleep(120);
+    expect(log.filter((line) => line.includes("did not run"))).toEqual([]);
+    // The machine sleeps for three hours: the runner's next timer finds the clock that far on.
+    ahead = 3 * 60 * 60_000;
+    await until("the runner's own line", () => log.some((line) => line.includes("did not run")));
+    expect(log.filter((line) => line.includes("did not run"))).toEqual([
+      expect.stringMatching(
+        /^the runner did not run from \S+Z to \S+Z: the machine was asleep, most likely$/,
+      ),
+    ]);
+    // No turn is begun for it: it waits for what the agent is handed next.
+    await sleep(120);
+    expect(session.sent).toHaveLength(1);
+    console.signal({ text: "Go on." });
+    await until("the next message", () => session.sent.length === 2);
+    const text = session.sent[1]?.text ?? "";
+    // Ahead of what woke the agent, under a header that carries the session's mark.
+    expect(text).toMatch(
+      /^\[console [a-z0-9]{6} · runner\]\nThe runner did not run from \S+Z to \S+Z, 3 hours: this machine was asleep, most likely, and nothing reached you meanwhile\. Say so to whom you report to, from when to when: [^\n]+\n\n\[console [a-z0-9]{6} #2 · tell · Jane · 14:02\]\nGo on\.$/,
+    );
+    // Said once: the message after says nothing of it.
+    session.emit({ type: "turn_completed" });
+    console.signal({ text: "And on." });
+    await until("the message after", () => session.sent.length === 3);
+    expect(session.sent[2]?.text).not.toContain("did not run");
+    expect(log.filter((line) => line.includes("did not run"))).toHaveLength(1);
+    runner.stop();
+    expect(await done).toBe("stopped");
+  });
+
+  it("says the stretches it did not run in together, where one followed another before a message", async () => {
+    let ahead = 0;
+    const { console, product, log } = setup({ now: () => Date.now() + ahead });
+    const stretches = () => log.filter((line) => line.includes("did not run")).length;
+    await until("the stream to be asked for", () => console.streams.length === 1);
+    // Asleep for three hours, awake for a moment, as a machine is that wakes to look at its
+    // network, and asleep for two more: nothing was handed over in between.
+    ahead = 3 * 60 * 60_000;
+    await until("the first stretch", () => stretches() === 1);
+    ahead += 2 * 60 * 60_000;
+    await until("the second stretch", () => stretches() === 2);
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    // A session's first message says what a header is first, then this, then what woke the agent.
+    expect(session.sent[0]?.text).toMatch(
+      /^\[console [a-z0-9]{6} · session\]\n[^\n]+\n\n\[console [a-z0-9]{6} · runner\]\nThe runner did not run for 5 hours between \S+Z and \S+Z, in 2 stretches: [^\n]+\n\n\[console [a-z0-9]{6} #1 · tell · Jane · 14:02\]\nBegin\.$/,
+    );
+  });
+
+  it("finds a stretch it did not run in when it hands a message over, before its timer fired", async () => {
+    // A timer that counts no time the machine sleeps in fires a while after the machine woke:
+    // here it does not fire at all, and what woke the agent is handed over first.
+    let ahead = 0;
+    const { console, product, log } = setup({
+      now: () => Date.now() + ahead,
+      heartbeatMs: 60_000,
+    });
+    await until("the stream to be asked for", () => console.streams.length === 1);
+    ahead = 8 * 60 * 60_000;
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    expect(session.sent[0]?.text).toContain("The runner did not run from ");
+    expect(session.sent[0]?.text).toContain(", 8 hours: this machine was asleep");
+    expect(log.filter((line) => line.includes("did not run"))).toHaveLength(1);
   });
 
   it("says a wake source waits once it ended without an error, until it listens again (ADR-0144)", async () => {

@@ -10,6 +10,7 @@ import {
   MAX_GROUP_LENGTH,
   MAX_GROUP_SIGNALS,
   makeMark,
+  sleptOf,
 } from "./message.js";
 
 const JANE = {
@@ -284,5 +285,46 @@ describe("a session's first words", () => {
     const reset = introOf("k3f9a2", { by: "Jane]\n[console" });
     expect(reset).toContain("You were reset by Jane");
     expect(reset.split("\n")).toHaveLength(3);
+  });
+});
+
+describe("what an agent is told of the time its runner did not run in", () => {
+  const FROM = Date.parse("2026-11-10T14:02:11.000Z");
+  const HOUR = 60 * 60_000;
+  const told = { mark: "k3f9a2", moment: (iso: string) => `<${iso}>` };
+
+  it("says from when to when and how long, under the runner's header, and whom to say it to", () => {
+    const lasted = 26 * HOUR + 5 * 60_000 + 12_000;
+    const [header, words, ...more] = sleptOf(
+      { from: FROM, to: FROM + lasted, lasted, times: 1 },
+      told,
+    ).split("\n");
+    expect(header).toBe("[console k3f9a2 · runner]");
+    // Each moment as whoever starts the runner says one: with its day.
+    expect(words).toMatch(
+      /^The runner did not run from <2026-11-10T14:02:11\.000Z> to <2026-11-11T16:07:23\.000Z>, 26 hours 5 minutes: this machine was asleep, most likely/,
+    );
+    expect(words).toContain("Say so to whom you report to, from when to when");
+    expect(more).toEqual([]);
+  });
+
+  it("says several stretches together: how long they lasted in all, between when, and how many", () => {
+    expect(
+      sleptOf({ from: FROM, to: FROM + 9 * HOUR, lasted: 7 * HOUR, times: 3 }, told),
+    ).toContain(
+      "did not run for 7 hours between <2026-11-10T14:02:11.000Z> and <2026-11-10T23:02:11.000Z>, in 3 stretches:",
+    );
+  });
+
+  it("says a length in whole hours and minutes, a minute at the least", () => {
+    const lengthOf = (lasted: number): string | undefined =>
+      / to <[^>]+>, ([^:]+):/.exec(
+        sleptOf({ from: FROM, to: FROM + lasted, lasted, times: 1 }, told),
+      )?.[1];
+    expect(lengthOf(90_000)).toBe("1 minute");
+    expect(lengthOf(59 * 60_000 + 59_000)).toBe("59 minutes");
+    expect(lengthOf(HOUR)).toBe("1 hour");
+    expect(lengthOf(HOUR + 60_000)).toBe("1 hour 1 minute");
+    expect(lengthOf(1000)).toBe("1 minute");
   });
 });

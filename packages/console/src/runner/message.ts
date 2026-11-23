@@ -230,3 +230,54 @@ export function introOf(mark: string, reset?: { readonly by: string } | undefine
   }
   return lines.join("\n");
 }
+
+/**
+ * A stretch of time the runner did not run in, by the clock, the machine asleep most likely;
+ * or several of them taken together, where one followed another before the agent was told.
+ */
+export interface Slept {
+  /** When the runner last ran before the first of them, and when it ran again after the last. */
+  readonly from: number;
+  readonly to: number;
+  /** How long they lasted in all, and how many they were. */
+  readonly lasted: number;
+  readonly times: number;
+}
+
+/** A length of time as a line says it: whole hours and minutes, a minute at the least. */
+function lengthOf(ms: number): string {
+  const counted = (count: number, word: string): string =>
+    `${count} ${word}${count === 1 ? "" : "s"}`;
+  const minutes = Math.max(1, Math.floor(ms / 60_000));
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return [
+    ...(hours === 0 ? [] : [counted(hours, "hour")]),
+    ...(rest === 0 && hours > 0 ? [] : [counted(rest, "minute")]),
+  ].join(" ");
+}
+
+/**
+ * What the agent is told of the time its runner did not run in, ahead of what it is handed
+ * next: from when to when, how long, and whom to say it to. Under a header that carries the
+ * session's mark, as what the runner says of its own is.
+ */
+export function sleptOf(
+  slept: Slept,
+  options: {
+    readonly mark: string;
+    /** A moment with its day, since a stretch may end on another day than it began on. */
+    readonly moment: (iso: string) => string;
+  },
+): string {
+  const at = (ms: number): string => options.moment(new Date(ms).toISOString());
+  const length = lengthOf(slept.lasted);
+  const when =
+    slept.times === 1
+      ? `from ${at(slept.from)} to ${at(slept.to)}, ${length}`
+      : `for ${length} between ${at(slept.from)} and ${at(slept.to)}, in ${slept.times} stretches`;
+  return [
+    `[console ${options.mark} · runner]`,
+    `The runner did not run ${when}: this machine was asleep, most likely, and nothing reached you meanwhile. Say so to whom you report to, from when to when: a machine that sleeps leaves you unheard until something wakes it.`,
+  ].join("\n");
+}

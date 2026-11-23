@@ -4820,6 +4820,9 @@ const runner: Command = async (args, io) => {
       now: io.now,
       random: host.random,
       time: (iso) => clock.format(new Date(iso)),
+      // A stretch the runner did not run in is said as the command prints any moment: with its
+      // day, in the workspace's zone where the login kept one.
+      moment,
       files: {
         write: (path, text) => host.writePrivate(workPath(path), text),
         remove: (path) => host.remove(workPath(path)),

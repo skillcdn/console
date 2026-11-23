@@ -21,6 +21,8 @@ import {
   GROUP_WINDOW_MS,
   introOf,
   makeMark,
+  type Slept,
+  sleptOf,
 } from "./message.js";
 import { cutShown, cutShownEnd, type Redactor, redactorOf } from "./redact.js";
 import type {
@@ -68,6 +70,12 @@ export const MAX_HOLD_MS = 15 * 60_000;
 export const MAX_SOURCE_PAUSE_MS = 5 * 60_000;
 /** How long a wake source holds before the runner takes it to have worked. */
 const SOURCE_HELD_MS = 60_000;
+/**
+ * How far past a heartbeat's interval the clock is, when the runner looks at it, before the
+ * runner takes itself not to have run in between: a process that runs is never a minute late
+ * for a timer of its own.
+ */
+const SLEPT_MS = 60_000;
 /** The kinds of file a console keeps as a picture: what a product is handed as one. */
 const PICTURE_TYPES: ReadonlySet<string> = new Set([
   "image/png",
@@ -151,6 +159,11 @@ export interface RunnerOptions {
   readonly random: () => number;
   /** A moment as a header says it: the hour and the minute in the workspace's zone. */
   readonly time: (iso: string) => string;
+  /**
+   * A moment with its day, as the command prints one, for a stretch the runner did not run in,
+   * which may end on another day than it began on. Left out, as ISO 8601 says it, in UTC.
+   */
+  readonly moment?: ((iso: string) => string) | undefined;
   /**
    * Files under the desk's ignored `work/`, written for their owner alone: what a session is
    * handed of the account's store, removed at its end, and what came with a signal, under
@@ -389,6 +402,7 @@ export function createRunner(options: RunnerOptions): Runner {
   const heldFor = (before: { readonly pause: number } | undefined): number =>
     before === undefined ? timing.holdMs : Math.min(before.pause * 2, timing.maxHoldMs);
   const bounds = { outboxBytes: MAX_OUTBOX_BYTES, ...options.bounds };
+  const moment = options.moment ?? ((iso: string): string => iso);
 
   // What keeps failing is said once, and again when what is said of it changes, so that an hour
   // without the console is a line and not thousands; that it is over is said once too.
@@ -495,6 +509,12 @@ export function createRunner(options: RunnerOptions): Runner {
     | undefined;
   let reconfigure = false;
   let toldOf: string | undefined;
+  /**
+   * When the runner last looked at the clock, and the time it did not run in that its agent is
+   * still to be told of: said with the next message the agent is handed.
+   */
+  let lookedAt = options.now();
+  let slept: Slept | undefined;
   /** How each wake source stands, by its name: what the heartbeat says of them. */
   const sources = new Map<
     string,
@@ -988,6 +1008,33 @@ export function createRunner(options: RunnerOptions): Runner {
     }
   };
 
+  /**
+   * Looks whether the runner ran since it last looked, with every heartbeat's timer and before
+   * a message is handed over. Where the clock is a minute or more past where such a timer
+   * leaves it, the runner did not run in between: the machine was asleep, most likely, whatever
+   * holds it awake. Read from the clock alone, which is the same on every system, and from no
+   * log of one. Said in the runner's own line, and kept for the agent with what was kept before.
+   * A look is the timer's own and waits for no turn of the queue: a step of the runner's that
+   * takes long is no time it did not run in.
+   */
+  const look = (): void => {
+    const now = options.now();
+    const before = lookedAt;
+    lookedAt = now;
+    if (now - before < timing.heartbeatMs + SLEPT_MS) {
+      return;
+    }
+    slept = {
+      from: slept?.from ?? before,
+      to: now,
+      lasted: (slept?.lasted ?? 0) + now - before,
+      times: (slept?.times ?? 0) + 1,
+    };
+    log(
+      `the runner did not run from ${new Date(before).toISOString()} to ${new Date(now).toISOString()}: the machine was asleep, most likely`,
+    );
+  };
+
   /** Hands the product what is pending, as one message; begins a session where none is open. */
   const deliver = async (priority: "now" | "next"): Promise<void> => {
     deliverAt = undefined;
@@ -1089,7 +1136,18 @@ export function createRunner(options: RunnerOptions): Runner {
     const intro = target.first
       ? introOf(target.mark, resetBy === undefined ? undefined : { by: resetBy })
       : undefined;
-    const text = [intro, composed.text].filter((part) => part !== undefined).join("\n\n");
+    // A stretch the runner did not run in is said ahead of what the agent is handed next, in
+    // the turn that follows anyway and in none of its own. Looked for here too: a timer that
+    // counts no time the machine sleeps in fires a while after it woke.
+    look();
+    const told = slept;
+    const text = [
+      intro,
+      told === undefined ? undefined : sleptOf(told, { mark: target.mark, moment }),
+      composed.text,
+    ]
+      .filter((part) => part !== undefined)
+      .join("\n\n");
     try {
       await target.driver.send({ text, images, priority });
     } catch (error) {
@@ -1097,6 +1155,11 @@ export function createRunner(options: RunnerOptions): Runner {
       log(`a message could not be handed to the product (${codeOf(error)})`);
       pending = [...batch, ...pending];
       return;
+    }
+    // Said, once it is handed over, as what the runner says of its own is. A stretch found
+    // while the message was handed over is said with the next one.
+    if (slept === told) {
+      slept = undefined;
     }
     if (target.first) {
       target.first = false;
@@ -1951,7 +2014,12 @@ export function createRunner(options: RunnerOptions): Runner {
       said = `${stands.state} ${stands.reason} `;
       const listening = listen();
       const sourcing = (options.wakes?.sources ?? []).map((source) => keepSource(source));
-      const beating = setInterval(() => push({ t: "heartbeat" }), timing.heartbeatMs);
+      // Counted from here: what the runner waited for before it began is no time it did not run in.
+      lookedAt = options.now();
+      const beating = setInterval(() => {
+        look();
+        push({ t: "heartbeat" });
+      }, timing.heartbeatMs);
       const batching = setInterval(() => push({ t: "flush" }), timing.batchMs);
       log(
         `the runner is there: ${driver.product.name} ${probe.version ?? "of a version it did not say"}, signals after #${delivered}`,
