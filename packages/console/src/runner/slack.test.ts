@@ -77,6 +77,69 @@ describe("what an event of the messenger wakes the agent for", () => {
     });
   });
 
+  it("is a person's message in a group conversation the agent is in, named or not", () => {
+    const group = (over: Record<string, unknown> = {}) =>
+      message({ channel: "G0TEAM", channel_type: "mpim", text: "Who takes the release?", ...over });
+    expect(slackWakeOf(payload(group()))).toEqual({
+      key: "slack:G0TEAM:1762800000.000100",
+      // Said as a message of the conversation, as a direct message is, and answered there.
+      text: "A message in a group conversation at Slack, from the member U0TOM, in the conversation G0TEAM:\nWho takes the release?",
+    });
+    expect(slackWakeOf(payload(group({ thread_ts: "1762799000.000001" })))).toEqual({
+      key: "slack:G0TEAM:1762799000.000001",
+      text: "A message in a group conversation at Slack, from the member U0TOM, in the thread 1762799000.000001 of the conversation G0TEAM:\nWho takes the release?",
+    });
+    // It needs no member to tell a mention by, and no channel named in `runner.json`.
+    expect(slackWakeOf(payload(group(), null))).toBeDefined();
+    // What the agent said there itself, an edit and what an app posted wake nobody.
+    expect(slackWakeOf(payload(group({ user: MEMBER })))).toBeUndefined();
+    expect(slackWakeOf(payload(group({ subtype: "message_changed" })))).toBeUndefined();
+    expect(slackWakeOf(payload(group({ bot_id: "B0DEPLOY" })))).toBeUndefined();
+    expect(slackWakeOf(payload(group({ subtype: "bot_message" })))).toBeUndefined();
+  });
+
+  it("is a person's message in a channel runner.json names, named or not, and in no other", () => {
+    const talk = (over: Record<string, unknown> = {}) =>
+      message({ text: "Shipping at noon.", ...over });
+    expect(slackWakeOf(payload(talk()), ["C0OPS"])).toEqual({
+      key: "slack:C0OPS:1762800000.000100",
+      text: "A message in the channel C0OPS at Slack, from the member U0TOM, in the thread 1762800000.000100:\nShipping at noon.",
+    });
+    // A private channel is named the same way, and a reply is of its thread.
+    expect(
+      slackWakeOf(
+        payload(
+          talk({
+            channel: "G0PLAN",
+            channel_type: "group",
+            ts: "1762800500.000200",
+            thread_ts: "1762800000.000100",
+          }),
+        ),
+        ["C0OPS", "G0PLAN"],
+      )?.key,
+    ).toBe("slack:G0PLAN:1762800000.000100");
+    // A mention there is still said as one.
+    expect(slackWakeOf(payload(message()), ["C0OPS"])?.text.startsWith("A mention in")).toBe(true);
+    // Any other channel wakes the agent as before: only where it is named.
+    expect(slackWakeOf(payload(talk()), ["C0ELSE"])).toBeUndefined();
+    expect(slackWakeOf(payload(talk()), [])).toBeUndefined();
+    expect(slackWakeOf(payload(talk()))).toBeUndefined();
+    expect(slackWakeOf(payload(message()), ["C0ELSE"])).toBeDefined();
+    // What the agent said there itself, an edit, a join and what an app posted wake nobody, so
+    // that a channel an app reports to does not wake the agent at every post.
+    for (const quiet of [
+      talk({ user: MEMBER }),
+      talk({ subtype: "message_changed" }),
+      talk({ subtype: "channel_join" }),
+      talk({ subtype: "bot_message" }),
+      talk({ bot_id: "B0DEPLOY" }),
+      talk({ bot_id: 42 }),
+    ]) {
+      expect(slackWakeOf(payload(quiet), ["C0OPS"]), JSON.stringify(quiet)).toBeUndefined();
+    }
+  });
+
   it("is nothing the agent was not spoken to in, and nothing it said itself", () => {
     for (const quiet of [
       // Talk in a channel that names nobody, or names someone else.
@@ -153,6 +216,7 @@ describe("the slack wake source", () => {
       readonly token?: string | undefined;
       readonly opened?: unknown;
       readonly arrives?: readonly unknown[];
+      readonly channels?: readonly string[];
     } = {},
   ) {
     const asked: { url: string; method: string; headers: Readonly<Record<string, string>> }[] = [];
@@ -165,6 +229,7 @@ describe("the slack wake source", () => {
     let closed = 0;
     const host: WakeHost = {
       secret: async (name) => (name === SLACK_APP_TOKEN ? over.token : undefined),
+      channels: over.channels ?? [],
       raise: async (wake) => {
         raised.push({ ...wake });
       },
@@ -249,6 +314,21 @@ describe("the slack wake source", () => {
     // How it stands is said for the account's page (ADR-0144).
     expect(at.stood).toEqual(["connected"]);
     expect(JSON.stringify(at.log)).not.toContain("xapp-");
+  });
+
+  it("raises what a person says in a channel the desk names, and nothing of the talk elsewhere", async () => {
+    const talk = (channel: string) => payload(message({ channel, text: "Shipping at noon." }));
+    const at = fakeHost({
+      token: "xapp-not-a-real-token",
+      channels: ["C0OPS"],
+      arrives: [
+        { type: "events_api", envelope_id: "e-1", payload: talk("C0OPS") },
+        { type: "events_api", envelope_id: "e-2", payload: talk("C0ELSE") },
+      ],
+    });
+    await run(at.host);
+    expect(at.sent).toHaveLength(2);
+    expect(at.raised.map((wake) => wake.key)).toEqual(["slack:C0OPS:1762800000.000100"]);
   });
 
   it("waits where the account keeps no token for it, and asks nothing of the messenger", async () => {

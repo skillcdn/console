@@ -1806,6 +1806,7 @@ export function createRunner(options: RunnerOptions): Runner {
     }
     const host: WakeHost = {
       secret: async (name) => secretValues.get(name),
+      channels: options.config.channels ?? [],
       raise: async (raised) => {
         // The console takes so many wakes a runner raises itself within an hour (ADR-0132):
         // past that, what the sources raise is let go for a while, longer each time, and said

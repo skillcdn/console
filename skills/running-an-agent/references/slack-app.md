@@ -49,10 +49,19 @@ Add the source to `wake` in the desk's `runner.json`, and commit it:
 
 The runner reads `runner.json` when it starts, so the change is taken when the runner is next started: when the agent's OS account next logs in, or when whoever administers the machine starts its service again. A supervisor's restart of the agent starts its session again, not its runner. The runner's lines then say `the slack wake source is connected`, and a direct message or a mention of the agent arrives as a wake from the messenger, with the thread as its key.
 
+A channel the agent is to follow without being named each time, one it works in say, is named in `channels`, by the id the messenger gives it (in the channel's details, or the last part of its link), never by its name:
+
+```json
+{ "wake": ["console", "slack"], "channels": ["C0123ABCD"] }
+```
+
+The agent adds one when it, or whoever manages it, chose the channel, and takes it out again when the talk there is not for it: every message a person writes there starts a turn.
+
 ## What wakes the agent, and what does not
 
 - A message in a direct conversation with the agent, and a message anywhere the agent is that mentions it, from anyone but the agent itself.
-- Not what is said in a channel without naming it, not an edit, a join, a deletion or a reaction, and nothing the agent said.
+- What a person says in a group conversation the agent is in, and in a channel `channels` names, whether it names the agent or not.
+- Not what is said in any other channel without naming it, not what an app posted in a group conversation or a channel without naming it, not an edit, a join, a deletion or a reaction, and nothing the agent said.
 
 A wake carries where it was said, by which member, and the message's words as someone else's, cut where they are long. The agent reads the thread with the messenger's own tool before it answers there.
 

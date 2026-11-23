@@ -240,6 +240,11 @@ export interface WakeSocket {
 export interface WakeHost {
   /** A secret of the account's store, by name; nothing where it keeps none. */
   secret(name: string): Promise<string | undefined>;
+  /**
+   * The channels `runner.json` names as ones the agent listens to, by the ids of the messenger
+   * they are of: what a person says in one wakes the agent, named or not.
+   */
+  readonly channels: readonly string[];
   /** Raises a wake: the console records it, and it reaches the agent in order, as someone else's words. */
   raise(wake: { readonly key: string; readonly text: string }): Promise<void>;
   /** A line for whoever reads the runner's own output: never what a message says. */

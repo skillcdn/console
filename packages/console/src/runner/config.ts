@@ -21,6 +21,8 @@ const workFile = z.string().check(
   ),
 );
 const secretName = z.string().check(z.refine(isSecretName, "is the name of a secret"));
+/** A channel of a messenger, by the id the messenger gives it: never its name, which changes. */
+const channel = z.string().check(z.regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/));
 const MAX_ENTRIES = 50;
 /** The browsers a desk may name for its product's browser tool. */
 export const RUNNER_BROWSERS = ["chrome"] as const;
@@ -66,6 +68,12 @@ export const runnerConfigSchema = z.object({
    * product gives it by itself.
    */
   browser: z.optional(z.enum(RUNNER_BROWSERS)),
+  /**
+   * The channels of a messenger the agent listens to, by their ids there: what a person says in
+   * one wakes the agent through that messenger's wake source, named or not. Left out, a channel
+   * wakes the agent only where it is named.
+   */
+  channels: z.optional(z.array(channel).check(z.maxLength(MAX_ENTRIES))),
 });
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
 

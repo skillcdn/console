@@ -261,6 +261,11 @@ describe("runner.json", () => {
       ok: true,
       config: { permissions: "dontAsk" },
     });
+    // The channels the agent listens to are named by the messenger's ids for them.
+    expect(parseRunnerConfig(JSON.stringify({ channels: ["C0OPS", "G0PLAN"] }))).toMatchObject({
+      ok: true,
+      config: { channels: ["C0OPS", "G0PLAN"] },
+    });
     expect(read).toMatchObject({
       ok: true,
       config: {
@@ -300,6 +305,10 @@ describe("runner.json", () => {
       [JSON.stringify({ permissions: "--dangerously-skip-permissions" }), "permissions"],
       [JSON.stringify({ permissions: "auto --settings x.json" }), "permissions"],
       [JSON.stringify({ permissions: ["auto"] }), "permissions"],
+      [JSON.stringify({ channels: "C0OPS" }), "channels"],
+      [JSON.stringify({ channels: ["#ops"] }), "channels"],
+      [JSON.stringify({ channels: ["C0OPS\nC0ELSE"] }), "channels"],
+      [JSON.stringify({ channels: Array.from({ length: 51 }, () => "C0OPS") }), "channels"],
       [`{"driver":"claude","pad":"${"x".repeat(70_000)}"}`, "larger"],
     ] as const) {
       const read = parseRunnerConfig(config);
