@@ -4712,6 +4712,67 @@ describe("configuring, as the person", () => {
     );
   });
 
+  it("writes an invitation's line to a file, and says no code, where an agent's record would keep it", async () => {
+    const { fetch, calls } = fakeConsole({
+      "POST /api/v1/agents/mira/invitation": {
+        status: 201,
+        body: {
+          invitation: { createdAt: WHEN, expiresAt: "2026-10-16T10:00:00.000Z", by: BOB },
+          code: "ABCD-EFGH",
+          command: "console agent setup --console https://console.test --code ABCD-EFGH",
+        },
+      },
+    });
+    const written: { path: string; name: string; words: string }[] = [];
+    const writeBytes: CliIo["writeBytes"] = async (path, bytes, name) => {
+      written.push({ path, name, words: new TextDecoder().decode(bytes) });
+      return `/home/bob/${path}`;
+    };
+    const made = harness({ fetch, env: SIGNED_IN, terminal: false, writeBytes });
+    expect(await runCli(["agent", "invite", "mira", "--out", "line.md"], made.io)).toBe(EXIT.ok);
+    // The file holds what the command would have printed: the line, to be copied, and the guide.
+    expect(written).toHaveLength(1);
+    expect(written[0]).toMatchObject({ path: "line.md", name: "mira-invitation.md" });
+    const words = written[0]?.words ?? "";
+    expect(words).toContain("An invitation for @mira, good until 2026-10-16T10:00:00.000Z");
+    expect(words).toContain(
+      "\n```\nSet this machine up for an agent account. Install what is missing yourself, without asking: first Node.js 24 or later and the command (npm i -g @skillcdn/console). Then run console agent setup --console https://console.test --code ABCD-EFGH and do what it prints. Ask me only for a sign-in or an administrator's password.\n```\n",
+    );
+    expect(words).toContain("https://console.test/setup/ABCD-EFGH");
+    // What is printed names the file and how it is handed on, and nothing of the code.
+    expect(made.out()).toContain("An invitation for @mira, good until 2026-10-16T10:00:00.000Z");
+    expect(made.out()).toContain("Its line is written to /home/bob/line.md and is not shown here");
+    expect(made.out()).toContain("--file /home/bob/line.md --to <login>");
+    expect(made.out() + made.err()).not.toContain("ABCD");
+    expect(made.out() + made.err()).not.toContain("EFGH");
+    // As data too: the invitation and the file, never the code or the command.
+    const data = harness({ fetch, env: SIGNED_IN, writeBytes });
+    expect(await runCli(["agent", "invite", "mira", "--out", "line.md", "--json"], data.io)).toBe(
+      EXIT.ok,
+    );
+    expect(JSON.parse(data.out())).toEqual({
+      handle: "mira",
+      invitation: { createdAt: WHEN, expiresAt: "2026-10-16T10:00:00.000Z", by: BOB },
+      file: "/home/bob/line.md",
+    });
+    // A file that cannot be written leaves an invitation nobody holds the line of: said, with
+    // what to do, and still without the code.
+    const nowhere = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "invite", "mira", "--out", "/none/line.md"], nowhere.io)).toBe(
+      EXIT.failed,
+    );
+    expect(nowhere.err()).toContain("could not be written at /none/line.md");
+    expect(nowhere.err()).toContain("Make the invitation again");
+    expect(nowhere.out() + nowhere.err()).not.toContain("ABCD");
+    // Taking one away writes nothing: the two are not said together, and nothing is asked.
+    const before = calls.length;
+    const both = harness({ fetch, env: SIGNED_IN, writeBytes });
+    expect(await runCli(["agent", "invite", "mira", "--revoke", "--out", "line.md"], both.io)).toBe(
+      EXIT.usage,
+    );
+    expect(calls.length).toBe(before);
+  });
+
   it("prints the guide an invitation's code opens, on a machine signed in nowhere (ADR-0088)", async () => {
     const setup = {
       account: {

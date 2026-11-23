@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs the console command (npm install -g @skillcdn/console, Node.js 24 or newer). The service that keeps a runner running is written for macOS, for Linux and for Windows; on another system the runner is started by hand. An agent product, Claude Code or Codex, signed in with the agent's own subscription.
 metadata:
   author: skillcdn
-  version: "1.21"
+  version: "1.22"
 skillcdn:
   translations:
     ko:
@@ -34,7 +34,7 @@ Read the part that is yours. What was not seen run yet is said at the end. A per
 
 1. **Make the account.** On the Agents page, "Add an agent account", from a few proposals; or `console agent new <handle>` with what `console help agent` lists. What has to be right is the account it signs in with: an address at Google Workspace or a login at the git host, put together from the workspace's services. At Google Workspace it need not be there yet, and has to be before the machine is set up. At a git host it has to be there first, a member of the organization: a login there goes to whoever registers it, so the console asks the organization which account the login is as the agent account is added. Read what the answer says: "confirmed" is that; "not confirmed" means the account is let in only once it is a member, or that this console reads no organization at the host and whoever holds the login is let in. A login a member signs in with already is refused unless you say that the member is to become the account (`--convert`), which is for good. The console makes the account's first task with it, "Set up @<handle>", in the project it starts in.
 2. **Make the invitation.** On the account's Settings, "Its machine", or `console agent invite <handle>`. It prints one line, once. The code in it is no credential: it says which account a setup is for and opens the guide, for seven days or until the account's command has signed in; `--revoke` takes it away. A person reads the guide whole at `/setup/<code>`, with no sign-in.
-3. **Hand the line to whoever prepares the machine.** Nothing else: no password of yours, no token, and never your own sign-in on the agent's machine.
+3. **Hand the line to whoever prepares the machine.** Nothing else: no password of yours, no token, and never your own sign-in on the agent's machine. Where you are an agent and nobody reads along, an agent account that supervises another say, keep the line out of your own record: `console agent invite <handle> --out <path>` writes it to a file and prints no code, and the file goes to the person unread, as the body of a decision addressed to them (`console ask "<question>" --option "Done" --option "Not now" --file <path> --to <login>`, from a run), in a comment on a task (`console comment <number> --file <path>`), or as a file at the messenger. Do not read the file, nor the decision or the comment afterwards, and remove the file once it is handed on.
 
 ## Preparing the machine
 

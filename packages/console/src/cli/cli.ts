@@ -5479,11 +5479,23 @@ const agentSignals = async (args: readonly string[], io: CliIo): Promise<number>
 // The invitation that leads a machine to an agent account (ADR-0088): made, made again in place
 // of the one before, or taken away, by a supervisor. Its code is no credential: it says which
 // account a setup is for and opens the guide, and the account is entered through its own sign-in.
+// What the command prints under an agent is in that agent's record from then on, and an agent
+// account that supervises another has nobody reading along: with --out the line goes to a file,
+// which the commands that take one (--file) carry to a person, and the output names no code.
 const agentInvite = async (args: readonly string[], io: CliIo): Promise<number> => {
-  const { values, positionals } = parse(args, { revoke: { type: "boolean" } });
+  const { values, positionals } = parse(args, {
+    revoke: { type: "boolean" },
+    out: { type: "string" },
+  });
   const handle = handleOf(
-    theOne(positionals, "Say whose: console agent invite <handle> [--revoke]"),
+    theOne(positionals, "Say whose: console agent invite <handle> [--out <path>] | --revoke"),
   );
+  const out = text(values, "out");
+  if (on(values, "revoke") && out !== undefined) {
+    throw misuse(
+      "Say one of --out <path>, which writes the line of a new invitation to a file, and --revoke, which takes the invitation away.",
+    );
+  }
   const session = await open(io, values);
   if (on(values, "revoke")) {
     await session.client.revokeAgentInvitation(handle);
@@ -5496,12 +5508,46 @@ const agentInvite = async (args: readonly string[], io: CliIo): Promise<number> 
     return EXIT.ok;
   }
   const made = await session.client.inviteAgent(handle);
-  answer(io, session, made, () =>
+  const until = `good until ${moment(made.invitation.expiresAt)} or until its command has signed in`;
+  const guide = `${session.url}/setup/${made.code}`;
+  if (out === undefined) {
+    answer(io, session, made, () =>
+      [
+        `An invitation for @${handle}, ${until}. The code is shown this once. It is no credential: it says which account a setup is for, and gives nobody the account.`,
+        "On the agent's machine, in its own OS account, say to its product:",
+        `  ${setupSentenceOf(made.command)}`,
+        `or run the command there yourself. A person reads the same guide at ${guide}`,
+      ].join("\n"),
+    );
+    return EXIT.ok;
+  }
+  // Markdown, since the file is read where it is handed on: a decision's body, a comment, a
+  // messenger. The line stands in a block of its own, to be copied as written.
+  const words = [
+    `An invitation for @${handle}, ${until}. Its code is no credential: it says which account a setup is for, and gives nobody the account.`,
+    "",
+    "On the agent's machine, in its own OS account, say to its product:",
+    "",
+    "```",
+    setupSentenceOf(made.command),
+    "```",
+    "",
+    `or run the command there yourself. A person reads the same guide at ${guide}`,
+    "",
+  ].join("\n");
+  let written: string;
+  try {
+    written = await io.writeBytes(out, new TextEncoder().encode(words), `${handle}-invitation.md`);
+  } catch {
+    // The code came this once and went nowhere: the invitation stands and nobody holds its line.
+    throw failed(
+      `The invitation of @${handle} is made, and its line could not be written at ${out}, so nobody has it. Make the invitation again with a path that can be written: it takes the place of this one.`,
+    );
+  }
+  answer(io, session, { handle, invitation: made.invitation, file: written }, () =>
     [
-      `An invitation for @${handle}, good until ${moment(made.invitation.expiresAt)} or until its command has signed in. The code is shown this once. It is no credential: it says which account a setup is for, and gives nobody the account.`,
-      "On the agent's machine, in its own OS account, say to its product:",
-      `  ${setupSentenceOf(made.command)}`,
-      `or run the command there yourself. A person reads the same guide at ${session.url}/setup/${made.code}`,
+      `An invitation for @${handle}, ${until}. Its line is written to ${written} and is not shown here: it carries the code, which is shown nowhere else.`,
+      `Hand the file on unread to whoever prepares the machine: as the body of a decision for them (console ask "<question>" --option "<one>" --option "<another>" --file ${written} --to <login>), in a comment on a task (console comment <number> --file ${written}), or as a file at the messenger. A decision or a comment read with the command afterwards shows the line.`,
     ].join("\n"),
   );
   return EXIT.ok;
