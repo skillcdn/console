@@ -203,7 +203,13 @@ import {
 } from "./format.js";
 import { COMMAND_HELP, helpFor, ownSkillPath, usage } from "./help.js";
 import { describeInstall, type Install, updateCommandFor } from "./install.js";
-import { awakeWords, heldAwake, lookAtMachine, type MachineLook } from "./machine-check.js";
+import {
+  awakeWords,
+  heldAwake,
+  lookAtMachine,
+  type MachineLook,
+  standsInTheWay,
+} from "./machine-check.js";
 import type { NoticeStore } from "./notices.js";
 import {
   type ConsolePack,
@@ -5968,6 +5974,7 @@ async function handOver(
   }
   const plate = await client.work().catch(() => undefined);
   const first = plate?.tasks.find((one) => one.task.title === onboardingTitle(handle));
+  const inTheWay = await standsInTheWay(machine);
   const lines = [
     began
       ? `@${handle}'s session has begun: the agent is at work.`
@@ -5981,6 +5988,12 @@ async function handOver(
     `That is the machine prepared: stop here. What comes next, its sign-ins, its tokens, its desk's repository, its profile and its messenger, is @${handle}'s own, done in its own session: do none of it for it.`,
     `What you change on this machine afterwards, say to it: console agent wake me "<what changed>"`,
     awakeWords(machine.platform, await heldAwake(machine), log),
+    ...(inTheWay.length === 0
+      ? []
+      : [
+          `What on this machine still leaves @${handle} unheard with nobody there, for whoever keeps the machine to change or to accept:`,
+          ...inTheWay.map((line) => `- ${line}`),
+        ]),
   ];
   io.stdout(`${lines.join("\n")}\n`);
 }

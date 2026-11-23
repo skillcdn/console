@@ -5836,7 +5836,10 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
         written.push({ path, mode });
       },
       run: async (command, args, options) => {
-        if (command === "xcode-select" || command === "pmset" || args.join(" ") === "--version") {
+        if (
+          ["xcode-select", "pmset", "fdesetup", "defaults"].includes(command) ||
+          args.join(" ") === "--version"
+        ) {
           looked.push([command, ...args].join(" "));
         } else if (command === "git" && args[0] === "-C") {
           deskGit.push(args.slice(2));
@@ -6053,9 +6056,11 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
                 out: 'pid 412(caffeinate): [0x0001] 00:00:02 PreventUserIdleSystemSleep named: "caffeinate command-line tool"\n',
                 err: "",
               }
-            : command === "git" && args.includes("--get-all")
-              ? { code: 1, out: "", err: "" }
-              : undefined,
+            : command === "fdesetup"
+              ? { code: 0, out: "FileVault is On.\n", err: "" }
+              : command === "git" && args.includes("--get-all")
+                ? { code: 1, out: "", err: "" }
+                : undefined,
     });
     const run = harness({
       fetch,
@@ -6069,6 +6074,10 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
       "xcode-select -p",
       "git --version",
       "claude --version",
+      "pmset -g",
+      "fdesetup status",
+      "defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser",
+      "defaults read /Library/Preferences/com.apple.SoftwareUpdate AutomaticallyInstallMacOSUpdates",
       "pmset -g assertions",
     ]);
     expect(out).toContain(
@@ -6111,7 +6120,11 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     expect(out).toContain('say to it: console agent wake me "<what changed>"');
     // Asked of the system, which said that the runner's helper holds it.
     expect(out).toContain("The machine is kept from sleeping while the runner runs");
-    expect(out.trimEnd().endsWith("where the machine is to come back by itself.")).toBe(true);
+    // And last what its settings, read, still leave to whoever keeps it, with the cost.
+    expect(out).toContain(
+      "What on this machine still leaves @mira unheard with nobody there, for whoever keeps the machine to change or to accept:\n- A restart: FileVault is on,",
+    );
+    expect(out.trimEnd().endsWith("name who logs in after a restart.")).toBe(true);
   });
 
   it("gives up a sign-in that is not the account's, and sets nothing up", async () => {

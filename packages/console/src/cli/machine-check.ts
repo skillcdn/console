@@ -201,13 +201,14 @@ export async function heldAwake(machine: SetupMachine): Promise<boolean | undefi
  * What a setup says of sleep, a sentence by platform: that the machine is held awake where the
  * system said so, that it is not where it said that, and where it cannot be asked, what the
  * runner does and where it says whether that holds; then what is left to whoever keeps the
- * machine. `log` is where the runner's own lines are.
+ * machine. `log` is where the runner's own lines are. Of a Mac's restart it says nothing: its
+ * settings are read, and `standsInTheWay` says what they leave to do.
  */
 export function awakeWords(platform: string, held: boolean | undefined, log?: string): string {
   const back =
-    platform === "linux"
-      ? ""
-      : " After a restart the runner starts when this OS account is logged in: turn on automatic login for it where the machine is to come back by itself.";
+    platform === "win32"
+      ? " After a restart the runner starts when this OS account is logged in: turn on automatic login for it where the machine is to come back by itself."
+      : "";
   if (held === false) {
     return `The machine is not held awake by the runner: set it never to sleep when idle (System Settings, Energy; or sudo pmset -a sleep 0, which takes an administrator), or the agent is not heard from once it sleeps.${back}`;
   }
@@ -220,4 +221,74 @@ export function awakeWords(platform: string, held: boolean | undefined, log?: st
       ? " Where they say it is not, or the machine sleeps all the same: powercfg /change standby-timeout-ac 0."
       : " Where they say it is not, turn sleeping when idle off in the system's power settings.";
   return `The runner asks the system to keep the machine from sleeping while it runs, and ${where} say whether that holds.${otherwise}${back}`;
+}
+
+/** A setting of the system as a program prints it, trimmed; nothing where it did not answer. */
+const setting = async (
+  machine: SetupMachine,
+  command: string,
+  args: readonly string[],
+): Promise<string | undefined> => {
+  const ran = await machine.run(command, args);
+  return ran.code === 0 ? ran.out.trim() : undefined;
+};
+
+/**
+ * The settings of a Mac that leave an agent unheard once nobody is at the machine, a line each
+ * with what to change and what the change costs, for whoever keeps the machine: a sleep when
+ * idle, a power failure it does not start after, and a restart, an update's own among them,
+ * that the OS account is not logged in after. Each is read as any account may read it; one
+ * that does not answer is not spoken of, and nothing is changed. Elsewhere there is nothing to
+ * read: a Linux account's service starts with the machine, and `awakeWords` says Windows' part.
+ */
+export async function standsInTheWay(machine: SetupMachine): Promise<readonly string[]> {
+  if (machine.platform !== "darwin") {
+    return [];
+  }
+  const lines: string[] = [];
+  const power = (await setting(machine, "pmset", ["-g"])) ?? "";
+  const minutes = /^\s*sleep\s+(\d+)/m.exec(power)?.[1];
+  if (minutes !== undefined && minutes !== "0") {
+    lines.push(
+      `Sleep: the machine is set to sleep after ${minutes} idle ${minutes === "1" ? "minute" : "minutes"}. The runner holds that off only while it runs, and a machine that did fall asleep stays asleep until someone wakes it. Set it never to sleep: sudo pmset -a sleep 0, which takes an administrator, or System Settings, Energy. The cost is the power of a machine that is always on; the display still sleeps.`,
+    );
+  }
+  if (/^\s*autorestart\s+0\b/m.test(power)) {
+    lines.push(
+      "A power failure: the machine stays off when the power comes back. Have it start by itself: sudo pmset -a autorestart 1, or System Settings, Energy. It costs nothing but that the machine starts with nobody there.",
+    );
+  }
+
+  // A launch agent runs while its account is logged in, and macOS logs one account in by
+  // itself, and none while the disk is encrypted.
+  const encrypted = /FileVault is On/i.test((await setting(machine, "fdesetup", ["status"])) ?? "");
+  const auto =
+    (await setting(machine, "defaults", [
+      "read",
+      "/Library/Preferences/com.apple.loginwindow",
+      "autoLoginUser",
+    ])) ?? "";
+  const back = auto === machine.user;
+  if (encrypted) {
+    lines.push(
+      `A restart: FileVault is on, and with it macOS logs no account in by itself, so after every restart the runner waits until someone logs in as ${machine.user} at the machine. To come back by itself the machine gives FileVault up (sudo fdesetup disable) and logs ${machine.user} in automatically (System Settings, Users & Groups; an administrator). The cost: the disk is no longer encrypted, so whoever takes the machine or its disk reads all of it, the agent's sign-ins among it. Keep FileVault where that weighs more, and name who logs in after a restart.`,
+    );
+  } else if (!back) {
+    lines.push(
+      auto.length === 0
+        ? `A restart: no account is logged in by itself, so after every restart the runner waits until someone logs in as ${machine.user} at the machine. Turn automatic login on for ${machine.user} (System Settings, Users & Groups; an administrator). The cost: whoever starts the machine is in that account without its password. macOS logs one account in so: where several agents share the machine, choose which, and name who logs the others in after a restart.`
+        : `A restart: macOS logs one account in by itself, and here that is ${auto}, so after every restart the runner of ${machine.user} waits until someone logs in as ${machine.user} at the machine. Choose which account the machine logs in by itself, and name who logs the others in after a restart.`,
+    );
+  }
+  const updates = await setting(machine, "defaults", [
+    "read",
+    "/Library/Preferences/com.apple.SoftwareUpdate",
+    "AutomaticallyInstallMacOSUpdates",
+  ]);
+  if (!back && (updates === "1" || updates?.toLowerCase() === "true")) {
+    lines.push(
+      "Updates: macOS installs its updates by itself and restarts for them, at night as a rule, which leaves the agent unheard until someone logs in. Turn that off (System Settings, General, Software Update, Automatic Updates: Install macOS updates) where nobody is there to log in. The cost: the system's fixes wait until a person installs them, so someone has to.",
+    );
+  }
+  return lines;
 }
