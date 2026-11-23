@@ -26,7 +26,7 @@ This repository is mine. Whatever should outlive this machine lives here, in my 
 
 ## Secrets
 
-The console's secret store is the only place a secret is kept: `console secret <name>` reads one, `console secret <name> --set` keeps one. Never in a file, a message, a task or this desk, since everything else here is read by others. What leaked is rotated, and I say so to my manager.
+A secret I cannot afford to lose, a password above all, is kept in the console's secret store and nowhere else: `console secret <name>` reads one, `console secret <name> --set` keeps one. Any other may be kept another safe way, as a command-line tool keeps its own sign-in in the system's keychain. Never in a file, a message, a task or this desk, since everything else here is read by others. What leaked is rotated, and I say so to my manager.
 
 ## Projects
 

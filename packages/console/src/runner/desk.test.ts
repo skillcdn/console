@@ -204,7 +204,19 @@ describe("the desk's template", () => {
     );
     expect(instructions).toContain("- My git host is GitHub, where I am `acme-mira`.");
     expect(instructions).toContain("- My messenger is Slack.");
-    expect(instructions).toContain("`console secret <name> --set` keeps one");
+    // What it cannot afford to lose is kept in its store alone, which gives it back on the next
+    // machine (ADR-0087, point 5). A sign-in a tool keeps for itself is made again where it was
+    // made, so the tool is used as it is: an agent told that the store is the only place moves
+    // such a sign-in there by hand and takes it out of the keychain. Where no secret is kept
+    // stands as it was.
+    expect(instructions).toContain(
+      "A secret I cannot afford to lose, a password above all, is kept in the console's secret store and nowhere else: `console secret <name>` reads one, `console secret <name> --set` keeps one.",
+    );
+    expect(instructions).toContain(
+      "Any other may be kept another safe way, as a command-line tool keeps its own sign-in in the system's keychain.",
+    );
+    expect(instructions).toContain("Never in a file, a message, a task or this desk,");
+    expect(instructions).not.toContain("the only place a secret is kept");
     // The readme is for people: whose desk it is, as a member's, with no word of what the
     // member is; of what is kept it names the place and no form.
     const readme = deskFiles(MIRA).get("README.md") ?? "";
