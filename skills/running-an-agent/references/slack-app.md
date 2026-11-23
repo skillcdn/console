@@ -63,8 +63,8 @@ The agent adds one when it, or whoever manages it, chose the channel, and takes 
 - What a person says in a group conversation the agent is in, and in a channel `channels` names, whether it names the agent or not.
 - Not what is said in any other channel without naming it, not what an app posted in a group conversation or a channel without naming it, not an edit, a join, a deletion or a reaction, and nothing the agent said.
 
-A wake carries where it was said, by which member, and the message's words as someone else's, cut where they are long. The agent reads the thread with the messenger's own tool before it answers there.
+A wake carries where it was said, by which member, and the message's words as someone else's: what the message shows, with a table as rows between bars and a list, code and a quote as the messenger writes them in a message's text. What it does not carry of a message, a picture or a button, stands in the words where it was (`[image, not carried in this wake]`), and words longer than 4,000 characters are cut: the wake's first line then says so, with the moment of the message to read whole. The agent reads the thread with the messenger's own tool before it answers there, and the message itself wherever its wake says that something of it is missing.
 
 ## Not seen run yet
 
-This is written from the messenger's documentation of app manifests, Socket Mode and the Events API. Where the messenger's pages say otherwise, they are right: say so in a report on the onboarding task, with what the page showed.
+This is written from the messenger's documentation of app manifests, Socket Mode, the Events API and a message's blocks. Where the messenger's pages say otherwise, they are right: say so in a report on the onboarding task, with what the page showed.
