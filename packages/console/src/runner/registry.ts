@@ -43,6 +43,12 @@ export interface DriverHost {
   readonly args?: readonly string[] | undefined;
   /** The version of the command the runner is, for a driver that says to the product what it is spoken to by. */
   readonly version?: string | undefined;
+  /**
+   * The system the runner is on, as the runtime names it (`darwin`, `linux`, `win32`), for a
+   * driver that names its product a program beside the product's own, which each system starts
+   * its own way. Left out, a program is named as it is started everywhere but on Windows.
+   */
+  readonly platform?: string | undefined;
   /** The ids a driver writes its messages under, where a test wants to know them; random otherwise. */
   readonly uuid?: (() => string) | undefined;
   /** The durations a driver waits, for a test to shorten. */

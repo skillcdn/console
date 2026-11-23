@@ -266,6 +266,17 @@ describe("runner.json", () => {
       ok: true,
       config: { channels: ["C0OPS", "G0PLAN"] },
     });
+    // The browser is a name of a short list (ADR-0149): a Chrome with no window, or the
+    // product's own tool in one with a window, as a desk of before names it. Anything else is
+    // no browser, and never words for a product's command line.
+    for (const browser of ["headless", "chrome"]) {
+      expect(parseRunnerConfig(JSON.stringify({ browser }))).toMatchObject({
+        ok: true,
+        config: { browser },
+      });
+    }
+    expect(parseRunnerConfig(JSON.stringify({ browser: "--chrome" })).ok).toBe(false);
+    expect(parseRunnerConfig(JSON.stringify({ browser: "firefox" })).ok).toBe(false);
     expect(read).toMatchObject({
       ok: true,
       config: {

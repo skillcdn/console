@@ -30,7 +30,7 @@ describe("the onboarding task of an agent account", () => {
     // Where it signs in at a page, it is told how a sign-in stays and what to do where one
     // wants a person, with nothing it signs in with in a message.
     expect(own).toContain(
-      "- **Sign in at a page in the machine's own browser.** Use a browser tool of your product that attaches to the ordinary browser of your OS account",
+      '- **Sign in at a page in the browser you are started with.** Use the browser your runner.json names as "browser": it keeps a profile, so a sign-in stays there from one session to the next.',
     );
     expect(own).toContain("ask for a person to sign in inside your session");
     expect(own).toContain(
@@ -45,9 +45,16 @@ describe("the onboarding task of an agent account", () => {
       "- **Join the messenger and set your profile.** Accept the invitation to `acme.slack.com` that came to `mira@acme.example`, the address you sign in with, and set your name, your title and your picture as any member does",
     );
     expect(own).not.toMatch(/you are an agent|AI agent|not a person/i);
-    // The browser tool of the one product the package knows, said where the agent is told to use one.
+    // The browsers a runner.json names, said where the agent is told to sign in at a page: the
+    // one with no window that a new desk names, and the product's own tool (ADR-0149).
     expect(own).toContain(
-      'For Claude Code that tool works in Google Chrome with the Claude in Chrome extension, and is turned on by "browser": "chrome" in runner.json.',
+      '"headless", which a new desk names, is a Google Chrome with no window and a profile of its own, driven with the tools of the server chrome-devtools',
+    );
+    expect(own).toContain(
+      '"chrome" is, for Claude Code, its own browser tool in the Google Chrome of your OS account, which takes the Claude in Chrome extension there',
+    );
+    expect(own).toContain(
+      'a browser with no window has none for them, so where a service goes on wanting a person, ask for "chrome" to be your browser instead.',
     );
     // The wake source is taken by the runner by itself, and where to see that it is.
     expect(own).toContain(
@@ -112,7 +119,7 @@ describe("the onboarding task of an agent account", () => {
       workspace: { handle: null, domain: null, services: {} },
     });
     expect(body.split("\n").filter((line) => line.startsWith("- **"))).toEqual([
-      expect.stringContaining("Sign in at a page in the machine's own browser"),
+      expect.stringContaining("Sign in at a page in the browser you are started with"),
       expect.stringContaining("Put your picture on your profiles"),
       expect.stringContaining("Record the accounts you hold elsewhere"),
       expect.stringContaining("Introduce yourself to your manager"),

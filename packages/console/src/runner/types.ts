@@ -102,8 +102,8 @@ export interface StartOptions {
    */
   readonly permissions?: string | undefined;
   /**
-   * The browser the product's browser tool works in, as `runner.json` names it; a driver whose
-   * product has no such tool to turn on takes nothing of it.
+   * The agent's browser, as `runner.json` names it; a driver that starts its product with none
+   * takes nothing of it.
    */
   readonly browser?: string | undefined;
   /**

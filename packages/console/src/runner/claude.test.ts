@@ -271,6 +271,61 @@ describe("the claude driver", () => {
     );
   });
 
+  it("starts the product with the program that drives a headless Chrome as a server of its own, where the desk names that browser (ADR-0149)", () => {
+    const bare = { cwd: "/d", env: {}, model: "opus", effort: null, resume: undefined };
+    const serversOf = (args: readonly string[]): unknown =>
+      JSON.parse(args[args.indexOf("--mcp-config") + 1] ?? "null");
+    const headless = claudeArguments({ ...bare, browser: "headless" }, "darwin");
+    expect(serversOf(headless)).toEqual({
+      mcpServers: {
+        "chrome-devtools": {
+          command: "chrome-devtools-mcp",
+          args: ["--headless", "--no-usage-statistics", "--no-performance-crux"],
+        },
+      },
+    });
+    // The product's own browser tool is not asked for beside it, and the option that takes
+    // the server is followed by an option: it takes whatever stands after it up to the next.
+    expect(headless).not.toContain("--chrome");
+    expect(headless[headless.indexOf("--mcp-config") + 2]).toBe("--model");
+    // The mode is what it is without a browser: the server's tools are leave for nothing.
+    expect(headless.filter((word) => /allow/i.test(word))).toEqual([]);
+    expect(headless[headless.indexOf("--permission-mode") + 1]).toBe("auto");
+    // On Windows the program is a script, started through the system's own interpreter.
+    expect(serversOf(claudeArguments({ ...bare, browser: "headless" }, "win32"))).toMatchObject({
+      mcpServers: {
+        "chrome-devtools": {
+          command: "cmd",
+          args: [
+            "/c",
+            "chrome-devtools-mcp",
+            "--headless",
+            "--no-usage-statistics",
+            "--no-performance-crux",
+          ],
+        },
+      },
+    });
+    // A desk that names the product's own tool, or none, is started with no server.
+    expect(claudeArguments({ ...bare, browser: "chrome" }, "darwin")).not.toContain("--mcp-config");
+    expect(claudeArguments(bare, "darwin")).not.toContain("--mcp-config");
+    // The driver starts the product for the system its host says it is on.
+    const fake = fakeChild();
+    const spawned: (readonly string[])[] = [];
+    const driver = createClaudeDriver({
+      cwd: "/d",
+      platform: "win32",
+      spawn: (_command, args) => {
+        spawned.push(args);
+        return fake.child;
+      },
+    });
+    driver.start({ ...bare, browser: "headless" });
+    expect(serversOf(spawned[0] ?? [])).toMatchObject({
+      mcpServers: { "chrome-devtools": { command: "cmd" } },
+    });
+  });
+
   it("sends a message as one line under an id of its own, with its pictures as image blocks and the product's own priority", async () => {
     const { session, sent } = started();
     await session.send({

@@ -2158,6 +2158,10 @@ describe("the runner", () => {
     const plain = setup();
     plain.console.signal({ text: "Begin." });
     expect((await sessionOf(plain.product)).options.browser).toBeUndefined();
+    // A browser with no window is named the same way (ADR-0149).
+    const headless = setup({ config: { browser: "headless" } });
+    headless.console.signal({ text: "Begin." });
+    expect((await sessionOf(headless.product)).options).toMatchObject({ browser: "headless" });
   });
 
   it("ends for a runner.json that changed, between two turns, to be begun again with it (ADR-0144)", async () => {

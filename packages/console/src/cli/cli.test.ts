@@ -5800,6 +5800,7 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
           : {
               "/Applications/Google Chrome.app/Contents/Info.plist": "",
               "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe": "",
+              "/opt/google/chrome/chrome": "",
             }),
         ...over.files,
       }),
@@ -5836,7 +5837,7 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
         written.push({ path, mode });
       },
       run: async (command, args, options) => {
-        if (command === "xcode-select" || command === "pmset" || args.join(" ") === "--version") {
+        if (command === "xcode-select" || command === "pmset" || args.at(-1) === "--version") {
           looked.push([command, ...args].join(" "));
         } else if (command === "git" && args[0] === "-C") {
           deskGit.push(args.slice(2));
@@ -5974,8 +5975,9 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     expect(bare.written).toEqual([]);
     expect(bare.runs).toEqual([]);
 
-    // The product is there and its browser is not: said with the way out for an agent that
-    // signs in at no page, which then sets the machine up with no browser named.
+    // The product is there and the agent's browser is not, a Chrome with no window where
+    // nobody names another (ADR-0149): said with the way out for an agent that signs in at no
+    // page, which then sets the machine up with no browser named.
     const browserless = fakeMachine({ bare: true });
     const stopped = harness({
       fetch: consoleOf().fetch,
@@ -5984,9 +5986,12 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     });
     expect(await runCli(LINE, stopped.io)).toBe(EXIT.failed);
     expect(stopped.err()).toContain(
-      "- Google Chrome: Claude Code's browser tool works in it, and the agent signs in at its services with that tool.",
+      "- Google Chrome: the agent's browser is a Chrome with no window, which Claude Code is started with, and the agent signs in at its services in it. Install it in /Applications, where the program that starts it looks.",
     );
     expect(stopped.err()).toContain("say --no-browser");
+    // The program that drives it is there, and is not asked for.
+    expect(stopped.err()).not.toContain("- chrome-devtools-mcp:");
+    expect(browserless.looked).toContain("chrome-devtools-mcp --version");
     const without = fakeMachine({ bare: true });
     const went = harness({
       fetch: consoleOf().fetch,
@@ -5998,6 +6003,56 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     expect(
       JSON.parse(without.files.get("/Users/mira/desk/runner.json") ?? "{}"),
     ).not.toHaveProperty("browser");
+
+    // The program that drives a Chrome with no window is not there: said with what installs
+    // it, and with the product's own browser tool as the other way.
+    const undriven = fakeMachine({
+      ran: (command) =>
+        command === "chrome-devtools-mcp"
+          ? { code: null, out: "", err: "spawn ENOENT" }
+          : undefined,
+    });
+    const lacking = harness({
+      fetch: consoleOf().fetch,
+      machine: undriven.machine,
+      store: memoryStore().store,
+    });
+    expect(await runCli(LINE, lacking.io)).toBe(EXIT.failed);
+    expect(lacking.err()).toContain(
+      "- chrome-devtools-mcp: the program that drives a Chrome with no window for Claude Code. Install it: npm install -g chrome-devtools-mcp. For Claude Code's own browser tool instead, in a Chrome with a window and the Claude in Chrome extension, say --browser chrome.",
+    );
+    expect(undriven.written).toEqual([]);
+
+    // Whoever runs the setup chooses the product's own browser tool: the browser is looked
+    // for, the program is not, the extension is said in a line, and the desk names that one.
+    const chosen = harness({
+      fetch: consoleOf().fetch,
+      machine: undriven.machine,
+      store: memoryStore().store,
+    });
+    expect(await runCli([...LINE, "--browser", "chrome"], chosen.io)).toBe(EXIT.ok);
+    expect(chosen.out()).toContain(
+      "The machine has what the setup needs: git, Claude Code, Google Chrome.",
+    );
+    expect(chosen.out()).toContain(
+      "Claude Code's browser tool also takes the Claude in Chrome extension in it",
+    );
+    expect(JSON.parse(undriven.files.get("/Users/mira/desk/runner.json") ?? "{}")).toMatchObject({
+      driver: "claude",
+      browser: "chrome",
+    });
+    // A browser is a name of the short list, and one is said or none.
+    for (const words of [
+      ["--browser", "firefox"],
+      ["--browser", "chrome", "--no-browser"],
+    ]) {
+      const refused = harness({
+        fetch: consoleOf().fetch,
+        machine: fakeMachine().machine,
+        store: memoryStore().store,
+      });
+      expect(await runCli([...LINE, ...words], refused.io)).toBe(EXIT.usage);
+    }
 
     // The product named is the one looked for, and the one a new desk names.
     const other = fakeMachine({
@@ -6069,18 +6124,19 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
       "xcode-select -p",
       "git --version",
       "claude --version",
+      "chrome-devtools-mcp --version",
       "pmset -g assertions",
     ]);
+    // The agent's browser is a Chrome with no window where nobody names another (ADR-0149):
+    // nothing of it is unseen, so no line is said of an extension or a sign-in.
     expect(out).toContain(
-      "The machine has what the setup needs: git, Claude Code (2.1.329 (Claude Code)), Google Chrome.",
+      "The machine has what the setup needs: git, Claude Code (2.1.329 (Claude Code)), Google Chrome and chrome-devtools-mcp, which drives it with no window.",
     );
-    expect(out).toContain(
-      "Claude Code's browser tool also takes the Claude in Chrome extension in it",
-    );
+    expect(out).not.toContain("the Claude in Chrome extension");
     // What was found is what the runner starts with.
     expect(JSON.parse(at.files.get("/Users/mira/desk/runner.json") ?? "{}")).toMatchObject({
       driver: "claude",
-      browser: "chrome",
+      browser: "headless",
     });
     // The desk is a repository whose git asks the account's store for the token, for the
     // workspace's git host alone and in place of the machine's own helpers.

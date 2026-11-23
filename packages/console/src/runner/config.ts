@@ -24,8 +24,13 @@ const secretName = z.string().check(z.refine(isSecretName, "is the name of a sec
 /** A channel of a messenger, by the id the messenger gives it: never its name, which changes. */
 const channel = z.string().check(z.regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/));
 const MAX_ENTRIES = 50;
-/** The browsers a desk may name for its product's browser tool. */
-export const RUNNER_BROWSERS = ["chrome"] as const;
+/**
+ * The browsers a desk may name (ADR-0149): `headless`, a Google Chrome with no window and a
+ * profile of its own, driven by a program the product is started with; and `chrome`, the
+ * product's own browser tool, in the Chrome of the OS account with its window.
+ */
+export const RUNNER_BROWSERS = ["headless", "chrome"] as const;
+export type RunnerBrowser = (typeof RUNNER_BROWSERS)[number];
 const bounded = <T extends Record<string, string>>(entries: T): boolean =>
   Object.keys(entries).length <= MAX_ENTRIES;
 
@@ -62,10 +67,9 @@ export const runnerConfigSchema = z.object({
    */
   permissions: z.optional(z.string().check(z.regex(/^[A-Za-z][A-Za-z0-9-]{0,39}$/))),
   /**
-   * The browser the product's own browser tool works in, for a driver whose product has such a
-   * tool and turns it on when it is started (ADR-0140): a name of a short list, and never words
-   * for the product's command line. Left out, a session has no browser tool but what the
-   * product gives it by itself.
+   * The agent's browser, for a driver that starts its product with one (ADR-0140, ADR-0149): a
+   * name of a short list, and never words for the product's command line. Left out, a session
+   * has no browser but what the product gives it by itself.
    */
   browser: z.optional(z.enum(RUNNER_BROWSERS)),
   /**

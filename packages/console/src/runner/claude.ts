@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { MAX_FILE_BYTES } from "../limits.js";
 import { TRANSCRIPT_PICTURE_TYPES } from "../vocabulary.js";
+import { headlessServers } from "./browser.js";
 import type { DriverHost } from "./registry.js";
 import {
   type Child,
@@ -632,8 +633,11 @@ const WORD = /^[A-Za-z0-9][A-Za-z0-9._:[\]-]{0,199}$/;
 const word = (value: string | null | undefined): string | undefined =>
   typeof value === "string" && WORD.test(value) ? value : undefined;
 
-/** The arguments the product is started with. */
-export function claudeArguments(options: StartOptions): readonly string[] {
+/**
+ * The arguments the product is started with. `platform` is the system the runner is on, as the
+ * runtime names it: what a program named beside the product's own is started as.
+ */
+export function claudeArguments(options: StartOptions, platform?: string): readonly string[] {
   const model = word(options.model);
   const effort = word(options.effort);
   const resume = word(options.resume);
@@ -656,6 +660,13 @@ export function claudeArguments(options: StartOptions): readonly string[] {
     // The product's browser tool is off in a run nobody attends unless it is asked for when the
     // product starts: seen with 2.1.329, where its own setting for it did nothing in this mode.
     ...(options.browser === "chrome" ? ["--chrome"] : []),
+    // A headless browser is no tool of the product's own (ADR-0149): the product starts the
+    // program that drives one as a server of its own, named here for this run alone, and its
+    // settings are left as they are. The server's tools are leave for nothing by themselves:
+    // the mode decides of them as of every tool.
+    ...(options.browser === "headless"
+      ? ["--mcp-config", JSON.stringify(headlessServers(platform))]
+      : []),
     ...(model === undefined ? [] : ["--model", model]),
     ...(effort === undefined ? [] : ["--effort", effort]),
     ...(resume === undefined ? [] : ["--resume", resume]),
@@ -698,7 +709,10 @@ export function createClaudeDriver(host: DriverHost): Driver {
     },
     start(options) {
       return sessionOf(
-        host.spawn(command, claudeArguments(options), { cwd: options.cwd, env: options.env }),
+        host.spawn(command, claudeArguments(options, host.platform), {
+          cwd: options.cwd,
+          env: options.env,
+        }),
         command,
         claudeMode(options.permissions),
         uuid,

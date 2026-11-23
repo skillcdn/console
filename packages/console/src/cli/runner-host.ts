@@ -18,6 +18,8 @@ export interface RunnerHost {
   /** The operating system as it calls itself, and the OS account the runner runs in. */
   readonly os: string;
   readonly user: string;
+  /** The system as the runtime names it (`darwin`, `linux`, `win32`); left out by a host that touches no machine. */
+  readonly platform?: string | undefined;
   /** A file under the desk, as text; nothing where there is none. */
   readText(path: string): Promise<string | undefined>;
   /** Writes a file under the desk for its owner alone, its folders made on the way: a text, or bytes as they are. */
@@ -92,6 +94,7 @@ export function createRunnerHost(
     spawn: createSpawn(env),
     os: `${osType()} ${release()}`,
     user: user.length === 0 ? "unknown" : user,
+    platform: process.platform,
     async readText(path) {
       try {
         return await readFile(under(path), "utf8");

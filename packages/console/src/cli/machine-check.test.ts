@@ -42,26 +42,53 @@ describe("the look at a machine before a setup", () => {
     const linux = machineOf("linux", {
       ran: (command) => (command === "claude" ? NOT_THERE : undefined),
     });
-    expect(await lookAtMachine(linux.machine, { browser: true })).toMatchObject({
+    const codex = await lookAtMachine(linux.machine, { browser: "headless" });
+    expect(codex).toMatchObject({
       driver: "codex",
       product: "Codex",
-      // A product with no browser tool of its own asks for no browser.
+      // A product its driver starts with no browser is asked for none, and that is said.
       browser: undefined,
       missing: [],
     });
+    expect(codex.notes[0]).toBe(
+      "No browser for Codex: its driver starts it with none, and the desk names none.",
+    );
     expect(linux.asked).toEqual(["git --version", "claude --version", "codex --version"]);
 
+    // The agent's browser where nobody says another (ADR-0149): a Chrome with no window, where
+    // the program that starts it looks, and that program, started as the system starts it.
     const windows = machineOf("win32", {
       there: ["C:\\Users\\mira\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe"],
     });
-    const found = await lookAtMachine(windows.machine, { browser: true });
-    expect(found).toMatchObject({ driver: "claude", browser: "chrome", missing: [] });
-    expect(found.notes[0]).toContain("the Claude in Chrome extension");
+    const found = await lookAtMachine(windows.machine, { browser: "headless" });
+    expect(found).toMatchObject({ driver: "claude", browser: "headless", missing: [] });
+    expect(windows.asked.at(-1)).toBe("cmd /c chrome-devtools-mcp --version");
+    // Nothing of it is unseen: no extension and no sign-in is said a line of.
+    expect(found.notes.join(" ")).not.toContain("extension");
+    const server = machineOf("linux", { there: ["/opt/google/chrome/chrome"] });
+    expect(await lookAtMachine(server.machine, { browser: "headless" })).toMatchObject({
+      driver: "claude",
+      browser: "headless",
+      missing: [],
+    });
+    expect(server.asked).toEqual([
+      "git --version",
+      "claude --version",
+      "chrome-devtools-mcp --version",
+    ]);
+
+    // The product's own browser tool, where whoever runs the setup names it: the browser
+    // wherever a person keeps it, and a line for the extension, which cannot be seen.
+    const own = machineOf("darwin", { there: ["/home/mira/Applications/Google Chrome.app"] });
+    const tool = await lookAtMachine(own.machine, { browser: "chrome" });
+    expect(tool).toMatchObject({ driver: "claude", browser: "chrome", missing: [] });
+    expect(tool.notes[0]).toContain("the Claude in Chrome extension");
+    expect(own.asked).not.toContain("chrome-devtools-mcp --version");
   });
 
   it("says what installs each thing that is missing, as its system installs it", async () => {
     const windows = machineOf("win32", { ran: () => NOT_THERE });
-    const none = await lookAtMachine(windows.machine, { driver: "claude", browser: true });
+    const none = await lookAtMachine(windows.machine, { driver: "claude", browser: "headless" });
     expect(none.missing).toEqual([
       "git: winget install --id Git.Git -e --source winget, then a new terminal so that it is on the PATH.",
       "Claude Code: its command claude does not answer where this command looks for programs. Install it (its native installer for Windows, which puts claude.exe on the PATH) and sign it in with the agent's own subscription.",
@@ -69,10 +96,29 @@ describe("the look at a machine before a setup", () => {
     // The driver asked for is the one a new desk names, found or not.
     expect(none.driver).toBe("claude");
 
+    // A headless browser is two things, each said with what installs it, and with the ways
+    // out: the product's own tool, and an agent that signs in at no page.
+    const bare = machineOf("linux", {
+      ran: (command) => (command === "chrome-devtools-mcp" ? NOT_THERE : undefined),
+    });
+    const neither = await lookAtMachine(bare.machine, { browser: "headless" });
+    expect(neither.browser).toBeUndefined();
+    expect(neither.missing).toEqual([
+      "Google Chrome: the agent's browser is a Chrome with no window, which Claude Code is started with, and the agent signs in at its services in it. Install it from its maker's package (google-chrome-stable), which takes an administrator. For an agent that signs in at no page, say --no-browser.",
+      "chrome-devtools-mcp: the program that drives a Chrome with no window for Claude Code. Install it: npm install -g chrome-devtools-mcp. For Claude Code's own browser tool instead, in a Chrome with a window and the Claude in Chrome extension, say --browser chrome.",
+    ]);
+    // A copy in the OS account's own Applications is none the program that starts it finds.
+    const own = machineOf("darwin", { there: ["/home/mira/Applications/Google Chrome.app"] });
+    const elsewhere = await lookAtMachine(own.machine, { browser: "headless" });
+    expect(elsewhere.missing).toHaveLength(1);
+    expect(elsewhere.missing[0]).toContain(
+      "Install it in /Applications, where the program that starts it looks.",
+    );
+
     const linux = machineOf("linux", {
       ran: (command) => (command.startsWith("google-chrome") ? NOT_THERE : undefined),
     });
-    const browserless = await lookAtMachine(linux.machine, { browser: true });
+    const browserless = await lookAtMachine(linux.machine, { browser: "chrome" });
     expect(browserless.missing).toHaveLength(1);
     expect(browserless.missing[0]).toContain(
       "Google Chrome: Claude Code's browser tool works in it",
@@ -80,7 +126,7 @@ describe("the look at a machine before a setup", () => {
     // An agent that signs in at no page is asked for none.
     expect((await lookAtMachine(linux.machine, { browser: false })).missing).toEqual([]);
     // A product the package has no driver's command for is not looked for.
-    const other = await lookAtMachine(linux.machine, { driver: "acp", browser: true });
+    const other = await lookAtMachine(linux.machine, { driver: "acp", browser: "headless" });
     expect(other).toMatchObject({ driver: "acp", product: undefined, missing: [] });
   });
 

@@ -1,5 +1,5 @@
 import type { RestWorkspace } from "./schemas.js";
-import { BROWSER_TOOL_OF_A_PRODUCT, guideServicesOf } from "./setup-guide.js";
+import { BROWSER_OF_AN_AGENT, guideServicesOf } from "./setup-guide.js";
 
 // The onboarding of an agent account (ADR-0088, points 4 to 6): its first task, which the
 // console makes when the account is made, with the agent as its worker. The agent works it as
@@ -41,8 +41,8 @@ export function onboardingOf(input: OnboardingInput): {
   const own = [
     ...services.flatMap((one) => one.onboarding.map((step) => item(step.title, step.body))),
     item(
-      "Sign in at a page in the machine's own browser",
-      `Use a browser tool of your product that attaches to the ordinary browser of your OS account: a sign-in stays there from one session to the next. ${BROWSER_TOOL_OF_A_PRODUCT} Where a sign-in wants a person, a code sent to a phone or a picture to solve, ask for a person to sign in inside your session, over a remote desktop or at the machine, and say which service and which account; nothing you sign in with goes into a message, a task or a comment.`,
+      "Sign in at a page in the browser you are started with",
+      `Use the browser your runner.json names as "browser": it keeps a profile, so a sign-in stays there from one session to the next. ${BROWSER_OF_AN_AGENT} Where a sign-in wants a person, a code sent to a phone or a picture to solve, ask for a person to sign in inside your session, over a remote desktop or at the machine, and say which service and which account; a browser with no window has none for them, so where a service goes on wanting a person, ask for "chrome" to be your browser instead. Nothing you sign in with goes into a message, a task or a comment.`,
     ),
     item(
       "Put your picture on your profiles",

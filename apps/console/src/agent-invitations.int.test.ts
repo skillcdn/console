@@ -264,14 +264,17 @@ describe("the invitation that leads a machine to an agent account (ADR-0088)", (
             first === "." ? "/home/mira" : first.startsWith("/") ? first : `/home/mira/${first}`;
           return [base, ...rest].join("/");
         },
-        exists: async (path) => files.has(path),
+        // The machine has the agent's browser where the program that starts it with no window
+        // looks for it (ADR-0149); `files` is what the command wrote, and nothing else.
+        exists: async (path) => files.has(path) || path === "/opt/google/chrome/chrome",
         read: async (path) => files.get(path),
         holds: async () => false,
         write: async (path, text) => {
           files.set(path, text);
         },
         // The machine has what a setup looks for (ADR-0140): a program asked for its version
-        // answers. Nothing else is run here.
+        // answers, the product's command and the program that drives the browser among them.
+        // Nothing else is run here.
         run: async (_command, args) =>
           args.join(" ") === "--version"
             ? { code: 0, out: "", err: "" }
@@ -366,6 +369,12 @@ describe("the invitation that leads a machine to an agent account (ADR-0088)", (
         (name) => `/home/mira/desk/${name}`,
       ),
     );
+    // What the look at the machine found is what the runner starts with: the product, and a
+    // browser with no window, which nobody said another than (ADR-0149).
+    expect(JSON.parse(own.files.get("/home/mira/desk/runner.json") ?? "{}")).toMatchObject({
+      driver: "claude",
+      browser: "headless",
+    });
     // The desk says the services as the workspace names them, for this account.
     expect(own.files.get("/home/mira/desk/AGENTS.md")).toContain("@mira");
     expect(own.files.get("/home/mira/desk/AGENTS.md")).toContain("acme-mira");

@@ -1,11 +1,15 @@
+import { HEADLESS_TOOL, headlessToolCommand } from "../runner/browser.js";
+import type { RunnerBrowser } from "../runner/config.js";
 import type { SetupMachine } from "./setup-machine.js";
 
 // What `console agent setup` looks for on a machine before it asks anyone to sign in (ADR-0140):
-// git, the command of the agent's product, and the browser that product's browser tool works
-// in. Everything that is missing is found in one look and said at once, with what installs it,
-// so that the session that was given the line installs it all and runs the line again, and a
-// person is asked to sign in once, on a machine that is ready. What the setup cannot see, a
-// product's sign-in and a browser's extension, it says in a line and does not hold up for.
+// git, the command of the agent's product, and the agent's browser, which is a Chrome with no
+// window and the program that drives it unless whoever runs the setup names the product's own
+// browser tool (ADR-0149). Everything that is missing is found in one look and said at once,
+// with what installs it, so that the session that was given the line installs it all and runs
+// the line again, and a person is asked to sign in once, on a machine that is ready. What the
+// setup cannot see, a product's sign-in and a browser's extension, it says in a line and does
+// not hold up for.
 
 /** A product the package has a driver for, as a setup looks for it on a machine. */
 interface Product {
@@ -14,8 +18,14 @@ interface Product {
   readonly command: string;
   /** What installs it for an OS account, by platform; `any` where one line does everywhere. */
   readonly install: Readonly<Record<string, string>>;
-  /** The browser its own browser tool works in, and what that browser needs for it. */
-  readonly browser?: { readonly name: "chrome"; readonly needs: string } | undefined;
+  /**
+   * The browsers its driver starts it with, by the names `runner.json` takes (ADR-0149):
+   * `headless` asks nothing of the product, and `chrome` is the product's own browser tool,
+   * with what that tool needs in the browser. Left out, its driver starts it with none.
+   */
+  readonly browsers?:
+    | { readonly headless?: true; readonly chrome?: { readonly needs: string } }
+    | undefined;
 }
 
 const PRODUCTS: readonly Product[] = [
@@ -28,7 +38,7 @@ const PRODUCTS: readonly Product[] = [
       // The runner starts a program, and npm makes a script of it there.
       win32: "its native installer for Windows, which puts claude.exe on the PATH",
     },
-    browser: { name: "chrome", needs: "the Claude in Chrome extension" },
+    browsers: { headless: true, chrome: { needs: "the Claude in Chrome extension" } },
   },
   {
     driver: "codex",
@@ -47,8 +57,8 @@ export interface MachineLook {
   readonly driver: string | undefined;
   /** What the product is called and the version it says, where it answered. */
   readonly product: string | undefined;
-  /** The browser the product's browser tool works in, where the product has such a tool and the browser is there. */
-  readonly browser: "chrome" | undefined;
+  /** The agent's browser, as a new desk names it: the one asked for, where the product is started with it and it is there. */
+  readonly browser: RunnerBrowser | undefined;
   /** What is missing, a line each, with what installs it: the setup stops for any of these. */
   readonly missing: readonly string[];
   /** What the setup could not see and says once: it goes on. */
@@ -76,12 +86,19 @@ function gitMissing(platform: string): string {
   }
 }
 
-/** Whether Google Chrome is on the machine, looked for where each system keeps it. */
-async function chromeThere(machine: SetupMachine): Promise<boolean> {
+/**
+ * Whether Google Chrome is on the machine, looked for where each system keeps it. `by` says
+ * who starts it. A person, or a product's tool in a browser that is open, takes it wherever it
+ * is. The program that starts one with no window looks in the system's own place and nowhere
+ * else: a copy in the OS account's own Applications on a Mac, or a command of its name on
+ * Linux that is not its maker's package, is none that program finds.
+ */
+async function chromeThere(machine: SetupMachine, by: "person" | "program"): Promise<boolean> {
   if (machine.platform === "darwin") {
     return (
       (await machine.exists("/Applications/Google Chrome.app")) ||
-      (await machine.exists(machine.path(machine.home, "Applications", "Google Chrome.app")))
+      (by === "person" &&
+        (await machine.exists(machine.path(machine.home, "Applications", "Google Chrome.app"))))
     );
   }
   if (machine.platform === "win32") {
@@ -104,6 +121,9 @@ async function chromeThere(machine: SetupMachine): Promise<boolean> {
     }
     return false;
   }
+  if (by === "program") {
+    return machine.exists("/opt/google/chrome/chrome");
+  }
   for (const command of ["google-chrome", "google-chrome-stable"]) {
     if ((await answers(machine, command, ["--version"])) !== undefined) {
       return true;
@@ -112,14 +132,27 @@ async function chromeThere(machine: SetupMachine): Promise<boolean> {
   return false;
 }
 
+/** Where Google Chrome is put for the program that starts it with no window, in a few words for a line that asks for it. */
+function chromePlace(platform: string): string {
+  switch (platform) {
+    case "darwin":
+      return " in /Applications, where the program that starts it looks";
+    case "linux":
+      return " from its maker's package (google-chrome-stable), which takes an administrator";
+    default:
+      return "";
+  }
+}
+
 /**
  * Looks at the machine: git, the product, its browser. `driver` names the product where whoever
  * runs the setup said one, and the first of the package's products that answers is taken where
- * they said none; `browser: false` is an agent that signs in at no page.
+ * they said none; `browser` is the browser asked for, `headless` where whoever runs the setup
+ * said none, and `false` for an agent that signs in at no page.
  */
 export async function lookAtMachine(
   machine: SetupMachine,
-  wanted: { readonly driver?: string | undefined; readonly browser: boolean },
+  wanted: { readonly driver?: string | undefined; readonly browser: RunnerBrowser | false },
 ): Promise<MachineLook> {
   const missing: string[] = [];
   const notes: string[] = [];
@@ -154,17 +187,43 @@ export async function lookAtMachine(
     );
   }
 
-  let browser: "chrome" | undefined;
-  const tool = found?.product.browser;
-  if (tool !== undefined && wanted.browser) {
-    if (await chromeThere(machine)) {
-      browser = tool.name;
-      notes.push(
-        `Google Chrome is there. ${found?.product.name}'s browser tool also takes ${tool.needs} in it, signed in as the agent's subscription account: install it now where it is not there.`,
-      );
+  let browser: RunnerBrowser | undefined;
+  if (found !== undefined && wanted.browser !== false) {
+    const { name, browsers } = found.product;
+    const tool = browsers?.chrome;
+    if (wanted.browser === "headless" && browsers?.headless === true) {
+      // Nothing of it is the product's or a person's: the browser and the program that drives
+      // it are both seen from here, and there is no extension and no sign-in to say a line of.
+      const chrome = await chromeThere(machine, "program");
+      const program = headlessToolCommand(machine.platform, ["--version"]);
+      const drives = (await answers(machine, program.command, program.args)) !== undefined;
+      if (!chrome) {
+        missing.push(
+          `Google Chrome: the agent's browser is a Chrome with no window, which ${name} is started with, and the agent signs in at its services in it. Install it${chromePlace(machine.platform)}. For an agent that signs in at no page, say --no-browser.`,
+        );
+      }
+      if (!drives) {
+        missing.push(
+          `${HEADLESS_TOOL.command}: the program that drives a Chrome with no window for ${name}. Install it: ${HEADLESS_TOOL.install}.${tool === undefined ? "" : ` For ${name}'s own browser tool instead, in a Chrome with a window and ${tool.needs}, say --browser chrome.`}`,
+        );
+      }
+      if (chrome && drives) {
+        browser = "headless";
+      }
+    } else if (wanted.browser === "chrome" && tool !== undefined) {
+      if (await chromeThere(machine, "person")) {
+        browser = "chrome";
+        notes.push(
+          `Google Chrome is there. ${name}'s browser tool also takes ${tool.needs} in it, signed in as the agent's subscription account: install it now where it is not there.`,
+        );
+      } else {
+        missing.push(
+          `Google Chrome: ${name}'s browser tool works in it, and the agent signs in at its services with that tool. Install it, and ${tool.needs} in it. For an agent that signs in at no page, say --no-browser.`,
+        );
+      }
     } else {
-      missing.push(
-        `Google Chrome: ${found?.product.name}'s browser tool works in it, and the agent signs in at its services with that tool. Install it, and ${tool.needs} in it. For an agent that signs in at no page, say --no-browser.`,
+      notes.push(
+        `No browser for ${name}: its driver starts it with none${browsers === undefined ? "" : ` of the kind ${wanted.browser}`}, and the desk names none.`,
       );
     }
   }
