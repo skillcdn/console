@@ -27,12 +27,12 @@ describe("the onboarding task of an agent account", () => {
       body.indexOf("## What you ask for"),
     );
     expect(own.split("\n").filter((line) => line.startsWith("- **"))).toHaveLength(9);
-    // Where it signs in at a page, it is told how a sign-in stays and what to do where one
-    // wants a person, with nothing it signs in with in a message.
+    // Where it signs in at a page, it is told how a sign-in stays, with nothing it signs in with
+    // in a message; no sign-in is set aside for a person: it asks for help where it cannot go on.
     expect(own).toContain(
       '- **Sign in at a page in the browser you are started with.** Use the browser your runner.json names as "browser": it keeps a profile, so a sign-in stays there from one session to the next.',
     );
-    expect(own).toContain("ask for a person to sign in inside your session");
+    expect(own).not.toContain("ask for a person to sign in");
     expect(own).toContain(
       "- **Make the account your own.** Sign in as `mira@acme.example`, change the first password",
     );

@@ -221,20 +221,17 @@ export function setupGuideOf(setup: RestAgentSetup, code: string): SetupGuide {
     one.onboarding.map((item) => ({ title: item.title, body: item.body })),
   );
   // How the agent signs in at the services it works with, said once for all of them: a sign-in
-  // is the agent's own, kept in the browser its runner starts it with, and where it wants a
-  // person, a person signs in inside the agent's session and nothing is sent in a message.
+  // is the agent's own, kept in the browser its runner starts it with, and nothing it signs in
+  // with is sent in a message. No sign-in is set aside for a person: a headless browser has no
+  // window for one, and the agent asks for help where it cannot go on, as with anything else.
   const browser: SetupGuideStep[] = [
     {
       title: "Use the browser you are started with, and keep it",
       body: `Sign in at a service in the browser your runner.json names as "browser". It keeps a profile, so a sign-in stays there from one session to the next, as a person's does. A browser a tool starts anew each time, with no profile kept, keeps none, and a service takes it for a stranger each time and asks again. ${BROWSER_OF_AN_AGENT}`,
     },
     {
-      title: "Where a sign-in wants a person",
-      body: "A code sent to a phone, a picture to solve, a key to touch: ask for a person to sign in inside your session. They reach your OS account over a remote desktop, or sit at the machine, sign in as you in that same browser, and leave. Ask as a decision on the board, or at the messenger where it is quick, and say which service and which account. Nothing you sign in with is sent in a message, a task or a comment.",
-    },
-    {
       title: "Keep what you sign in with",
-      body: "A password you chose or were handed goes into your store, with the day it ends where it has one: `console secret <service>.password --set --expires <day>`. Turn on a second step you can answer yourself where the service has one.",
+      body: "Nothing you sign in with is sent in a message, a task or a comment. A password you chose or were handed goes into your store, with the day it ends where it has one: `console secret <service>.password --set --expires <day>`. Turn on a second step you can answer yourself where the service has one.",
     },
   ];
   const asked: SetupGuideStep[] = described.flatMap((one) =>
