@@ -2119,11 +2119,11 @@ export const en = {
         },
         /** When what was told and not taken yet is read, by why it waits; and the way to have it read now. */
         waiting: {
-          call: "Read after the tool call under way.",
-          turn: "Read when the turn under way ends.",
+          call: "Delivered after the tool call under way.",
+          turn: "Delivered when the turn under way ends.",
           anew: "Delivered when the turn under way ends.",
-          stopped: "Read once it is started again.",
-          unheard: "Read once its runner is heard from.",
+          stopped: "Delivered once it is started again.",
+          unheard: "Delivered once its runner is heard from.",
           soon: "On its way to the agent.",
           interrupt: "Interrupt",
           interruptHint: "Stops the turn under way so that this is read now.",

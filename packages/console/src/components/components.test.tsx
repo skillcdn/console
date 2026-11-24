@@ -3242,14 +3242,14 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(waiting.match(/<li class="sc-talk-item sc-talk-told sc-talk-waiting"/g)).toHaveLength(2);
     expect(waiting).toContain('<pre class="sc-talk-text">Word 3.</pre>');
     expect(waiting).toContain("a.csv");
-    expect(waiting.match(/Read when the turn under way ends\./g)).toHaveLength(1);
+    expect(waiting.match(/Delivered when the turn under way ends\./g)).toHaveLength(1);
     expect(waiting).toMatch(
       /<button[^>]*title="Stops the turn under way so that this is read now\."[^>]*>Interrupt<\/button>/,
     );
     // With no turn to stop there is no such way: it says when the words are read, and that is all.
     for (const [why, says] of [
-      ["stopped", "Read once it is started again."],
-      ["unheard", "Read once its runner is heard from."],
+      ["stopped", "Delivered once it is started again."],
+      ["unheard", "Delivered once its runner is heard from."],
       ["soon", "On its way to the agent."],
     ] as const) {
       const still = renderToStaticMarkup(
@@ -3283,7 +3283,7 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     // A tell is named as nothing more than who said it.
     expect(begins.match(/class="sc-badge/g)).toHaveLength(1);
     expect(begins.match(/Delivered when the turn under way ends\./g)).toHaveLength(1);
-    expect(begins).not.toContain("Read after the tool call under way.");
+    expect(begins).not.toContain("Delivered after the tool call under way.");
     expect(begins).toContain(">Interrupt<");
     const korean = renderToStaticMarkup(
       <LanguageContext.Provider value={KOREAN}>
