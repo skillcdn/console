@@ -1,6 +1,7 @@
 import { MAX_FILE_BYTES } from "../limits.js";
 import { TRANSCRIPT_PICTURE_TYPES } from "../vocabulary.js";
 import type { DriverHost } from "./registry.js";
+import { connectionOf, METHOD_NOT_FOUND, RpcError } from "./rpc.js";
 import {
   type Child,
   type Cut,
@@ -52,12 +53,8 @@ const MAX_PRINTED_LENGTH = 200_000;
  * was kept. More than the longest form a secret is looked for in.
  */
 const PRINTED_BEYOND = 64 * 1024;
-/** The most that is shown of what an error carries beside its message. */
-const MAX_DETAIL_LENGTH = 1000;
 /** The protocol's code for a request the agent takes only once the product is signed in. */
 const AUTH_REQUIRED = -32000;
-/** The answer to a request for a method this client does not offer. */
-const METHOD_NOT_FOUND = -32601;
 
 /**
  * What an error says when the product is not signed in. The products' words for it are their
@@ -128,119 +125,6 @@ const wait = (ms: number): Promise<"timeout"> =>
   new Promise((resolve) => {
     setTimeout(() => resolve("timeout"), ms).unref?.();
   });
-
-/**
- * What an error carries beside its message, as words: an agent may say "Internal error" and put
- * why under `data`, as text or as an object with a message of its own.
- */
-function detailOf(data: unknown, cut: Cut): string | undefined {
-  const words = isObject(data)
-    ? (textOf(data.message) ?? textOf(data.details) ?? textOf(data.error))
-    : textOf(data);
-  const detail = words?.trim();
-  return detail === undefined || detail.length === 0 ? undefined : cut(detail, MAX_DETAIL_LENGTH);
-}
-
-/** What a request was refused with, as the protocol says it: the message, with what it carries beside it. */
-class RpcError extends Error {
-  readonly code: number;
-  constructor(code: number, message: string, data?: unknown, cut: Cut = plainCut) {
-    const detail = detailOf(data, cut);
-    super(detail === undefined || message.includes(detail) ? message : `${message}: ${detail}`);
-    this.code = code;
-  }
-}
-
-/** The two ends of the protocol on one process: requests with their answers, and what arrives unasked. */
-interface Connection {
-  request(method: string, params: Json): Promise<unknown>;
-  notify(method: string, params: Json): Promise<void>;
-  /** Answers a request of the agent's. */
-  answer(id: unknown, result: Json): Promise<void>;
-  refuse(id: unknown, code: number, message: string): Promise<void>;
-  /** Reads the process to its end, handing over what the agent says and asks. */
-  read(on: {
-    notification(method: string, params: Json): void;
-    request(id: unknown, method: string, params: Json): void;
-  }): Promise<void>;
-}
-
-function connectionOf(child: Child, cut: Cut = plainCut): Connection {
-  let next = 0;
-  const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
-  const write = (message: Json): Promise<void> =>
-    child.write(JSON.stringify({ jsonrpc: "2.0", ...message }));
-  return {
-    request(method, params) {
-      const id = next;
-      next += 1;
-      return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-        write({ id, method, params }).catch((error: unknown) => {
-          pending.delete(id);
-          reject(error instanceof Error ? error : new Error(String(error)));
-        });
-      });
-    },
-    notify: (method, params) => write({ method, params }),
-    answer: (id, result) => write({ id, result }),
-    refuse: (id, code, message) => write({ id, error: { code, message } }),
-    async read(on) {
-      try {
-        for await (const text of child.lines) {
-          if (text.trim().length === 0) {
-            continue;
-          }
-          let line: unknown;
-          try {
-            line = JSON.parse(text);
-          } catch {
-            // What is no message of the protocol is none of the runner's: a line a product
-            // printed beside it, say.
-            continue;
-          }
-          if (!isObject(line)) {
-            continue;
-          }
-          const method = textOf(line.method);
-          if (method !== undefined) {
-            const params = isObject(line.params) ? line.params : {};
-            if (line.id === undefined || line.id === null) {
-              on.notification(method, params);
-            } else {
-              on.request(line.id, method, params);
-            }
-            continue;
-          }
-          const waiting = typeof line.id === "number" ? pending.get(line.id) : undefined;
-          if (waiting === undefined || typeof line.id !== "number") {
-            continue;
-          }
-          pending.delete(line.id);
-          if (isObject(line.error)) {
-            waiting.reject(
-              new RpcError(
-                typeof line.error.code === "number" ? line.error.code : 0,
-                textOf(line.error.message) ?? "the request was refused",
-                line.error.data,
-                cut,
-              ),
-            );
-          } else {
-            waiting.resolve(line.result);
-          }
-        }
-      } catch {
-        // The output closed in the middle of a line: how the process ended says the rest.
-      }
-      // Nothing answers what was asked of a process that is gone.
-      for (const waiting of pending.values()) {
-        waiting.reject(new Error("the product's process ended"));
-      }
-      pending.clear();
-    },
-  };
-}
 
 /** What one of the product's choices is, as the protocol lists it: its id, what it stands at, and what it may be set to. */
 interface Choice {
@@ -446,7 +330,7 @@ function sessionOf(
 ): DriverSession {
   /** What cuts a text to what is shown of it: the runner's, which takes the account's secrets out first. */
   const cut = options.cut ?? plainCut;
-  const connection = connectionOf(child, cut);
+  const connection = connectionOf(child, { cut });
   /** How what the agent asks leave for is answered: settled once the session says its modes. */
   let mode = acpMode(options.permissions);
 
