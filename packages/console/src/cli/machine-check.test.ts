@@ -55,7 +55,7 @@ describe("the look at a machine before a setup", () => {
     );
     expect(linux.asked).toEqual(["git --version", "claude --version", "codex --version"]);
 
-    // The agent's browser where nobody says another (ADR-0149): a Chrome with no window, where
+    // The agent's browser where nobody says another (ADR-0151): a Chrome with no window, where
     // the program that starts it looks, and that program, started as the system starts it.
     const windows = machineOf("win32", {
       there: ["C:\\Users\\mira\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe"],

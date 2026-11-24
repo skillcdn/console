@@ -47,7 +47,7 @@ describe("the onboarding task of an agent account", () => {
     expect(own).not.toMatch(/you are an agent|AI agent|not a person/i);
     // The browsers a runner.json names, said where the agent is told to sign in at a page: the
     // one with no window, which it has where the file names none, and the product's own tool
-    // (ADR-0149). Which of them it uses is its own to choose: the task says what each is, and
+    // (ADR-0151). Which of them it uses is its own to choose: the task says what each is, and
     // sends it to neither.
     expect(own).toContain(
       '"headless", which is yours where the file names none, is a Google Chrome with no window and a profile of its own, driven with the tools of the server chrome-devtools',

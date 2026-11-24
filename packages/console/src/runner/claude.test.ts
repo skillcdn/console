@@ -271,7 +271,7 @@ describe("the claude driver", () => {
     );
   });
 
-  it("starts the product with the program that drives a headless Chrome as a server of its own, where the desk names that browser (ADR-0149)", () => {
+  it("starts the product with the program that drives a headless Chrome as a server of its own, where the desk names that browser (ADR-0151)", () => {
     const bare = { cwd: "/d", env: {}, model: "opus", effort: null, resume: undefined };
     const serversOf = (args: readonly string[]): unknown =>
       JSON.parse(args[args.indexOf("--mcp-config") + 1] ?? "null");

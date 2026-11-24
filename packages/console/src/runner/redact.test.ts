@@ -239,7 +239,7 @@ describe("runner.json", () => {
         conversation: "continuous",
         secrets: { env: {}, files: {} },
         autosave: true,
-        // A file that names no browser means the one with no window (ADR-0149).
+        // A file that names no browser means the one with no window (ADR-0151).
         browser: "headless",
       },
     });
@@ -268,7 +268,7 @@ describe("runner.json", () => {
       ok: true,
       config: { channels: ["C0OPS", "G0PLAN"] },
     });
-    // The browser is a name of a short list (ADR-0149): a Chrome with no window, the
+    // The browser is a name of a short list (ADR-0151): a Chrome with no window, the
     // product's own tool in one with a window, as a desk of before names it, or none, which
     // is said and never meant by saying nothing. Anything else is no browser, and never words
     // for a product's command line.

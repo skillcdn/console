@@ -36,7 +36,7 @@ export function setupSentenceOf(command: string): string {
 }
 
 /**
- * The browsers an agent's `runner.json` names (ADR-0149), as the agent is told of them where it
+ * The browsers an agent's `runner.json` names (ADR-0151), as the agent is told of them where it
  * is told to sign in at pages: what each is, and that which of them it uses is its own to
  * choose. The setup looks for the one asked for on the machine.
  */

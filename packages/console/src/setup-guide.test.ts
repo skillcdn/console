@@ -125,7 +125,7 @@ describe("the guide of an agent account's setup (ADR-0088)", () => {
     expect(machine?.steps[3]?.body).toContain("Do none of it for it.");
     expect(machine?.steps[3]?.body).toContain('`console agent wake me "<what changed>"`');
     // How it signs in elsewhere, at a page: in the browser its runner starts it with, where a
-    // sign-in stays, of the two it chooses between itself (ADR-0149); a person signing in
+    // sign-in stays, of the two it chooses between itself (ADR-0151); a person signing in
     // inside its session where it cannot; nothing in a message.
     expect(browser?.title).toBe("Signing in elsewhere, in a browser");
     expect(browser?.steps.map((step) => step.title)).toEqual([

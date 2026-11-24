@@ -539,7 +539,7 @@ describe("the runner", () => {
       model: null,
       effort: null,
       resume: undefined,
-      // The browser of a desk that names none (ADR-0149).
+      // The browser of a desk that names none (ADR-0151).
       browser: "headless",
       // What the driver cuts a text it shows a part of with, and keeps the end of one with: the
       // runner's, which take the secrets out first.
@@ -2157,7 +2157,7 @@ describe("the runner", () => {
     console.signal({ text: "Begin." });
     const session = await sessionOf(product);
     expect(session.options).toMatchObject({ browser: "chrome" });
-    // A desk that names no browser is started with the one with no window (ADR-0149), and
+    // A desk that names no browser is started with the one with no window (ADR-0151), and
     // one that is to have none says so.
     const plain = setup();
     plain.console.signal({ text: "Begin." });

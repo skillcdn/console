@@ -5976,7 +5976,7 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     expect(bare.runs).toEqual([]);
 
     // The product is there and the agent's browser is not, a Chrome with no window where
-    // nobody names another (ADR-0149): said with the way out for an agent that signs in at no
+    // nobody names another (ADR-0151): said with the way out for an agent that signs in at no
     // page, which then sets the machine up with no browser named.
     const browserless = fakeMachine({ bare: true });
     const stopped = harness({
@@ -6001,7 +6001,7 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
     expect(await runCli([...LINE, "--no-browser"], went.io)).toBe(EXIT.ok);
     expect(went.out()).toContain("The machine has what the setup needs: git, Claude Code.");
     // The desk says that it has none: a file that said nothing would mean the one with no
-    // window (ADR-0149).
+    // window (ADR-0151).
     expect(JSON.parse(without.files.get("/Users/mira/desk/runner.json") ?? "{}")).toMatchObject({
       browser: "none",
     });
@@ -6130,7 +6130,7 @@ describe("setting a machine up for an agent account (ADR-0088)", () => {
       "chrome-devtools-mcp --version",
       "pmset -g assertions",
     ]);
-    // The agent's browser is a Chrome with no window where nobody names another (ADR-0149):
+    // The agent's browser is a Chrome with no window where nobody names another (ADR-0151):
     // nothing of it is unseen, so no line is said of an extension or a sign-in.
     expect(out).toContain(
       "The machine has what the setup needs: git, Claude Code (2.1.329 (Claude Code)), Google Chrome and chrome-devtools-mcp, which drives it with no window.",

@@ -1,4 +1,4 @@
-// The headless browser of an agent (ADR-0149): a Google Chrome with no window, driven by a
+// The headless browser of an agent (ADR-0151): a Google Chrome with no window, driven by a
 // program that is no part of the agent's product and that the product starts beside itself, as
 // a server of the Model Context Protocol. It needs no screen, no extension and no sign-in of
 // its own, and keeps a profile of its own in the OS account's home, so that what the agent

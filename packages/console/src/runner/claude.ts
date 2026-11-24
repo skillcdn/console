@@ -660,7 +660,7 @@ export function claudeArguments(options: StartOptions, platform?: string): reado
     // The product's browser tool is off in a run nobody attends unless it is asked for when the
     // product starts: seen with 2.1.329, where its own setting for it did nothing in this mode.
     ...(options.browser === "chrome" ? ["--chrome"] : []),
-    // A headless browser is no tool of the product's own (ADR-0149): the product starts the
+    // A headless browser is no tool of the product's own (ADR-0151): the product starts the
     // program that drives one as a server of its own, named here for this run alone, and its
     // settings are left as they are. The server's tools are leave for nothing by themselves:
     // the mode decides of them as of every tool.

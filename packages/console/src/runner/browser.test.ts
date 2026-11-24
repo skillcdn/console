@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HEADLESS_TOOL, HEADLESS_WORDS, headlessServers, headlessToolCommand } from "./browser.js";
 
-// The program that drives an agent's headless browser (ADR-0149): how it is started on each
+// The program that drives an agent's headless browser (ADR-0151): how it is started on each
 // system, and what a product is handed to start it with.
 
 describe("the program that drives a headless Chrome", () => {

@@ -1,4 +1,4 @@
-# ADR-0149: An agent's browser is a Chrome with no window, unless its desk names the product's own
+# ADR-0151: An agent's browser is a Chrome with no window, unless its desk names the product's own
 
 - Status: Accepted
 - Date: 2026-11-24

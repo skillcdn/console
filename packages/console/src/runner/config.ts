@@ -25,7 +25,7 @@ const secretName = z.string().check(z.refine(isSecretName, "is the name of a sec
 const channel = z.string().check(z.regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/));
 const MAX_ENTRIES = 50;
 /**
- * The browsers a desk may name (ADR-0149): `headless`, a Google Chrome with no window and a
+ * The browsers a desk may name (ADR-0151): `headless`, a Google Chrome with no window and a
  * profile of its own, driven by a program the product is started with; `chrome`, the
  * product's own browser tool, in the Chrome of the OS account with its window; and `none`, for
  * an agent that is to have no browser.
@@ -68,7 +68,7 @@ export const runnerConfigSchema = z.object({
    */
   permissions: z.optional(z.string().check(z.regex(/^[A-Za-z][A-Za-z0-9-]{0,39}$/))),
   /**
-   * The agent's browser, for a driver that starts its product with one (ADR-0140, ADR-0149): a
+   * The agent's browser, for a driver that starts its product with one (ADR-0140, ADR-0151): a
    * name of a short list, and never words for the product's command line. `headless` where the
    * file names none, a desk written before the name was there among them; `none` is said, and
    * never meant by saying nothing.

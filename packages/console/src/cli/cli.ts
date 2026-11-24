@@ -6106,7 +6106,7 @@ const agentSetup = async (args: readonly string[], io: CliIo): Promise<number> =
       `Not a driver this command has: ${driver}. It has: ${ownRunnerModules({ user: machine.user }).drivers.names().join(", ")}.`,
     );
   }
-  // The agent's browser (ADR-0149): a Chrome with no window where nobody says another.
+  // The agent's browser (ADR-0151): a Chrome with no window where nobody says another.
   const named = text(values, "browser");
   const browser = SETUP_BROWSERS.find((one) => one === named);
   if (named !== undefined && browser === undefined) {

@@ -5,7 +5,7 @@ import type { SetupMachine } from "./setup-machine.js";
 // What `console agent setup` looks for on a machine before it asks anyone to sign in (ADR-0140):
 // git, the command of the agent's product, and the agent's browser, which is a Chrome with no
 // window and the program that drives it unless whoever runs the setup names the product's own
-// browser tool (ADR-0149). Everything that is missing is found in one look and said at once,
+// browser tool (ADR-0151). Everything that is missing is found in one look and said at once,
 // with what installs it, so that the session that was given the line installs it all and runs
 // the line again, and a person is asked to sign in once, on a machine that is ready. What the
 // setup cannot see, a product's sign-in and a browser's extension, it says in a line and does
@@ -19,7 +19,7 @@ interface Product {
   /** What installs it for an OS account, by platform; `any` where one line does everywhere. */
   readonly install: Readonly<Record<string, string>>;
   /**
-   * The browsers its driver starts it with, by the names `runner.json` takes (ADR-0149):
+   * The browsers its driver starts it with, by the names `runner.json` takes (ADR-0151):
    * `headless` asks nothing of the product, and `chrome` is the product's own browser tool,
    * with what that tool needs in the browser. Left out, its driver starts it with none.
    */

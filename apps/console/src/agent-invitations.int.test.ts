@@ -265,7 +265,7 @@ describe("the invitation that leads a machine to an agent account (ADR-0088)", (
           return [base, ...rest].join("/");
         },
         // The machine has the agent's browser where the program that starts it with no window
-        // looks for it (ADR-0149); `files` is what the command wrote, and nothing else.
+        // looks for it (ADR-0151); `files` is what the command wrote, and nothing else.
         exists: async (path) => files.has(path) || path === "/opt/google/chrome/chrome",
         read: async (path) => files.get(path),
         holds: async () => false,
@@ -370,7 +370,7 @@ describe("the invitation that leads a machine to an agent account (ADR-0088)", (
       ),
     );
     // What the look at the machine found is what the runner starts with: the product, and a
-    // browser with no window, which nobody said another than (ADR-0149).
+    // browser with no window, which nobody said another than (ADR-0151).
     expect(JSON.parse(own.files.get("/home/mira/desk/runner.json") ?? "{}")).toMatchObject({
       driver: "claude",
       browser: "headless",
