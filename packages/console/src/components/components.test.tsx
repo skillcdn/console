@@ -3278,13 +3278,11 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     );
     expect(begins).toContain('<pre class="sc-talk-text">The release is out.</pre>');
     expect(begins).toMatch(
-      /<span class="sc-name">Mira<\/span><span class="sc-badge sc-badge-neutral">Reset<\/span>/,
+      /<span class="sc-name">Mira<\/span><span class="sc-badge sc-badge-neutral">New conversation<\/span>/,
     );
     // A tell is named as nothing more than who said it.
     expect(begins.match(/class="sc-badge/g)).toHaveLength(1);
-    expect(
-      begins.match(/A new conversation begins with this when the turn under way ends\./g),
-    ).toHaveLength(1);
+    expect(begins.match(/Delivered when the turn under way ends\./g)).toHaveLength(1);
     expect(begins).not.toContain("Read after the tool call under way.");
     expect(begins).toContain(">Interrupt<");
     const korean = renderToStaticMarkup(
@@ -3303,8 +3301,8 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
         </ol>
       </LanguageContext.Provider>,
     );
-    expect(koreanAnew).toContain("지금 턴이 끝나면 이 말로 새 대화를 시작합니다.");
-    expect(koreanAnew).toContain(">초기화<");
+    expect(koreanAnew).toContain("지금 턴이 끝나면 전달됩니다.");
+    expect(koreanAnew).toContain(">새 대화<");
   });
 
   it("shows that the agent is at work, and the conversation in a pane with the box at its foot", () => {
@@ -3509,7 +3507,7 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(running).toContain('<div class="sc-signal-box">');
     // What changes how the agent stands is said apart from what is said to it.
     expect(running).not.toContain(">Stop<");
-    expect(running).not.toContain(">Reset<");
+    expect(running).not.toContain(">New conversation<");
     // Nothing is said yet: there is nothing to tell.
     expect(/<button[^>]*type="submit"[^>]*>/.exec(running)?.[0]).toContain('disabled=""');
     // Files of any kind, chosen with the console's file picker, as a decision's files are.
@@ -3535,9 +3533,11 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     const running = of("running");
     expect(running).toContain(">Stop</button>");
     expect(running).not.toContain(">Restart</button>");
-    expect(running).toContain(">Reset</button>");
+    expect(running).toContain(">New conversation</button>");
     expect(running).toContain("<b>Stop</b> Ends its session.");
-    expect(running).toContain("<b>Reset</b> Begins a new conversation.");
+    expect(running).toContain(
+      "<b>New conversation</b> Ends this conversation and begins a new one.",
+    );
     expect(running).toContain(">Words for the agent<");
     // A stopped agent is started again; one that could not go on is either.
     const stopped = of("stopped");

@@ -2012,7 +2012,7 @@ export const en = {
         reasons: {
           started: "its runner started",
           resumed: "it goes on",
-          reset: "it was reset",
+          reset: "it began a new conversation",
           completed: "a turn completed",
           stop: "a supervisor stopped it",
           model_refused: "the model refused",
@@ -2057,7 +2057,7 @@ export const en = {
           interrupt: "Interrupt",
           stop: "Stop",
           restart: "Restart",
-          reset: "Reset",
+          reset: "New conversation",
           set: "Model or effort",
         },
         /** What was answered where a tool asked before it ran. */
@@ -2121,7 +2121,7 @@ export const en = {
         waiting: {
           call: "Read after the tool call under way.",
           turn: "Read when the turn under way ends.",
-          anew: "A new conversation begins with this when the turn under way ends.",
+          anew: "Delivered when the turn under way ends.",
           stopped: "Read once it is started again.",
           unheard: "Read once its runner is heard from.",
           soon: "On its way to the agent.",
@@ -2143,14 +2143,15 @@ export const en = {
         controlWordsPlaceholder: "Why, where you have a word for it",
         send: "Tell",
         stop: "Stop",
-        stopHint: "Ends its session. It stays stopped until it is restarted or reset.",
+        stopHint:
+          "Ends its session. It stays stopped until it is restarted or begins a new conversation.",
         restart: "Restart",
         restartHint: "Goes on with the same conversation.",
-        reset: "Reset",
-        resetHint: "Begins a new conversation.",
-        resetConfirm: "Reset, with a new conversation",
+        reset: "New conversation",
+        resetHint: "Ends this conversation and begins a new one.",
+        resetConfirm: "Begin a new conversation",
         resetWarning:
-          "A reset begins a new conversation: the agent keeps nothing of this one but what is on the board and in its desk. The words above are given to it first.",
+          "In a new conversation the agent keeps nothing of this one but what is on the board and in its desk. The words above are given to it first.",
         cancel: "Cancel",
         sent: (number: number, kind: string) => `Sent as #${number}: ${kind}.`,
         tooMany: (most: number) => `At most ${most} files with one message.`,
@@ -2181,7 +2182,7 @@ export const en = {
         ends: {
           stopped: "stopped",
           restarted: "restarted",
-          reset: "reset",
+          reset: "new conversation",
           crashed: "crashed",
           exited: "exited",
           taken_over: "taken over",
