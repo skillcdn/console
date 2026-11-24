@@ -423,6 +423,10 @@ function AgentLive(props: {
     // product took, or the record of an earlier session says was never read (ADR-0131).
     const floor = open ? (taken ?? delivered) : Math.max(taken ?? 0, delivered);
     const waiting = waitingOf(signals ?? [], floor);
+    // The account's own reset waits for the turn under way to end, whatever its product takes
+    // in a turn (ADR-0154).
+    const last = waiting.at(-1);
+    const anew = last?.kind === "reset" && last.by?.id === agent.person.id;
     const why =
       state === "stopped"
         ? "stopped"
@@ -430,9 +434,11 @@ function AgentLive(props: {
           ? "unheard"
           : working === undefined
             ? "soon"
-            : agent.runner?.offers?.steer === false
-              ? "turn"
-              : "call";
+            : anew
+              ? "anew"
+              : agent.runner?.offers?.steer === false
+                ? "turn"
+                : "call";
     return (
       <>
         <TalkWorking

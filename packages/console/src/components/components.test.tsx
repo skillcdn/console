@@ -3190,6 +3190,21 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(waitingOf(record, 7)).toEqual([]);
     // Files alone wait too, as what was sent.
     expect(waitingOf([signal(8, { text: "", attachments: [SHEET] })], 0)).toHaveLength(1);
+    // So do the words of a reset, a supervisor's or the account's own (ADR-0154), which a new
+    // conversation begins with; a reset with none, and a restart, are no message that waits.
+    const own = { ...alice, id: "0199c4d8-0000-7000-8000-0000000000a9", name: "Mira" };
+    const anew = signal(11, { kind: "reset", by: own, text: "The release is out." });
+    expect(
+      waitingOf(
+        [
+          anew,
+          signal(10, { kind: "reset", text: "Start over." }),
+          signal(9, { kind: "reset", text: "" }),
+          signal(8, { kind: "restart", text: "Go on." }),
+        ],
+        7,
+      ).map((one) => one.number),
+    ).toEqual([10, 11]);
     // A pane is followed while whoever reads is at its end, give or take a line.
     expect(followsEnd({ scrollHeight: 2000, scrollTop: 1400, clientHeight: 600 })).toBe(true);
     expect(
@@ -3253,6 +3268,25 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
       ),
     ).not.toContain(">Interrupt<");
     expect(renderToStaticMarkup(<TalkWaiting signals={[]} why="call" />)).toBe("");
+    // The account's own reset waits for the turn under way to end: it stands as what a
+    // supervisor said does, named as a reset beside who sent it, with when the new
+    // conversation begins and the way to have it begin now.
+    const begins = renderToStaticMarkup(
+      <ol>
+        <TalkWaiting signals={[signal(3), anew]} why="anew" onInterrupt={() => undefined} />
+      </ol>,
+    );
+    expect(begins).toContain('<pre class="sc-talk-text">The release is out.</pre>');
+    expect(begins).toMatch(
+      /<span class="sc-name">Mira<\/span><span class="sc-badge sc-badge-neutral">Reset<\/span>/,
+    );
+    // A tell is named as nothing more than who said it.
+    expect(begins.match(/class="sc-badge/g)).toHaveLength(1);
+    expect(
+      begins.match(/A new conversation begins with this when the turn under way ends\./g),
+    ).toHaveLength(1);
+    expect(begins).not.toContain("Read after the tool call under way.");
+    expect(begins).toContain(">Interrupt<");
     const korean = renderToStaticMarkup(
       <LanguageContext.Provider value={KOREAN}>
         <ol>
@@ -3262,6 +3296,15 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     );
     expect(korean).toContain(KOREAN.messages.agents.page.live.waiting.call);
     expect(korean).toContain(">끼어들기<");
+    const koreanAnew = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>
+        <ol>
+          <TalkWaiting signals={[anew]} why="anew" />
+        </ol>
+      </LanguageContext.Provider>,
+    );
+    expect(koreanAnew).toContain("지금 턴이 끝나면 이 말로 새 대화를 시작합니다.");
+    expect(koreanAnew).toContain(">초기화<");
   });
 
   it("shows that the agent is at work, and the conversation in a pane with the box at its foot", () => {

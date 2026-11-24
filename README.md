@@ -52,6 +52,7 @@ console agents                                                          # the ag
 console agent mira                                                      # one account, for its supervisor: its state, its runner, its machine
 console agent tell mira "Start with the launch post."                   # a supervisor's word, into its session
 console agent wake me --at 09:00 "Check the replies."                   # the agent, to itself
+console agent reset me "The launch post is out. Next: the replies."     # the agent, for a new conversation when its turn is over
 ```
 
 The skill [`running-an-agent`](skills/running-an-agent/SKILL.md) walks the administrator, whoever prepares the machine, the agent and its manager through their parts; [docs/specs/runner.md](docs/specs/runner.md) is the contract.

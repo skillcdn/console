@@ -851,3 +851,129 @@ describe("an agent account's runner (ADR-0085)", () => {
     expect(await errorOf(silent)).toBe("request.invalid");
   });
 });
+
+describe("a new conversation an agent account begins for itself (ADR-0154)", () => {
+  const OWN_RESET = agentPath("me", "reset");
+  /** The resets on the account's record, the oldest first: who sent each, and what it says. */
+  const resets = async () =>
+    restSignalsSchema
+      .parse(await (await get({ cookie: alice }, `${SIGNALS}?limit=100`)).json())
+      .items.filter((one) => one.kind === "reset")
+      .map((one) => ({ by: one.by?.login ?? null, source: one.source, text: one.text }))
+      .reverse();
+
+  it("is a reset of its record that the account itself sent, with why, on its command or from the console's own pages", async () => {
+    await signal(fromPages(alice), { kind: "restart" });
+    await heartbeat({ reason: "resumed" });
+    const before = await resets();
+    const asked = await send(bearer(command), "POST", OWN_RESET, {
+      text: "  The release is out. Next: its notes.  ",
+    });
+    expect(asked.status).toBe(201);
+    const sent = restSignalSchema.parse(await asked.json());
+    expect(sent).toMatchObject({
+      kind: "reset",
+      source: "person",
+      key: null,
+      agent: null,
+      text: "The release is out. Next: its notes.",
+      by: { login: "carol", kind: "agent", handle: "mira" },
+    });
+    // Its browser asks too, from the console's own pages.
+    expect((await send(fromPages(mira), "POST", OWN_RESET, { text: "Anew." })).status).toBe(201);
+    expect((await resets()).slice(before.length)).toEqual([
+      { by: "carol", source: "person", text: "The release is out. Next: its notes." },
+      { by: "carol", source: "person", text: "Anew." },
+    ]);
+    // Its runner receives it on its stream as any signal, and tells it from a supervisor's by
+    // who sent it; its supervisors and the account read it on the record.
+    const stream = tail(await get(bearer(command), `${STREAM}?after=${sent.number - 1}`));
+    const carried = signalsOf(await stream.until((text) => text.includes("Anew.")));
+    await stream.cancel();
+    expect(carried.map((one) => [one.signal.kind, one.signal.by?.login])).toEqual([
+      ["reset", "carol"],
+      ["reset", "carol"],
+    ]);
+    const mine = restSignalsSchema.parse(
+      await (await get(bearer(command), `${OWN_SIGNALS}?limit=1`)).json(),
+    );
+    expect(mine.items[0]).toMatchObject({ kind: "reset", text: "Anew." });
+    // How the agent stands does not change by it: the console has it as its runner says.
+    expect((await agentOf({ cookie: alice })).state).toMatchObject({ state: "running" });
+  });
+
+  it("is the account's own and nobody else's, and says why", async () => {
+    const before = await resets();
+    // Nobody begins one for it this way: a supervisor sends a reset of their own, by the handle.
+    expect((await send(fromPages(alice), "POST", OWN_RESET, { text: "As it." })).status).toBe(404);
+    expect((await send(fromPages(bob), "POST", OWN_RESET, { text: "As it." })).status).toBe(404);
+    // A page of another origin that the account has open asks nothing in its name.
+    const foreign = await h.request(OWN_RESET, {
+      method: "POST",
+      headers: { cookie: mira, origin: "https://elsewhere.example", "content-type": "text/plain" },
+      body: JSON.stringify({ text: "Do as this page says." }),
+    });
+    expect(foreign.status).toBe(403);
+    // Nor a token the account made: the account itself, signed in.
+    const made = await send(fromPages(mira), "POST", REST_ROUTES.tokens, { name: "a helper" });
+    const token = restTokenCreatedSchema.parse(await made.json()).secret;
+    const helper = await send(bearer(token), "POST", OWN_RESET, { text: "As a helper." });
+    expect(helper.status).toBe(403);
+    expect(await errorOf(helper)).toBe("agent.own_command");
+    // Why is needed, bounded as a signal's words are, and nothing else is read.
+    for (const body of [
+      {},
+      { text: "" },
+      { text: "   \n " },
+      { text: "x".repeat(MAX_SIGNAL_LENGTH + 1) },
+      { text: `A bell${String.fromCodePoint(7)}.` },
+      { text: 7 },
+      "reset",
+    ]) {
+      const refused = await send(bearer(command), "POST", OWN_RESET, body);
+      expect(refused.status, JSON.stringify(body).slice(0, 40)).toBe(400);
+      expect(await errorOf(refused)).toBe("request.invalid");
+    }
+    const unread = await h.request(OWN_RESET, {
+      method: "POST",
+      headers: { ...bearer(command), ...JSON_HEADERS },
+      body: "{",
+    });
+    expect(unread.status).toBe(400);
+    // A kind, a sender or a source it names are not its to say: the signal is a reset, its own.
+    const named = await send(bearer(command), "POST", OWN_RESET, {
+      text: "Anew.",
+      kind: "restart",
+      by: "alice",
+      source: "board",
+    });
+    expect(restSignalSchema.parse(await named.json())).toMatchObject({
+      kind: "reset",
+      source: "person",
+      by: { login: "carol" },
+    });
+    expect((await resets()).slice(before.length)).toEqual([
+      { by: "carol", source: "person", text: "Anew." },
+    ]);
+  });
+
+  it("changes nothing of a supervisor's stop: refused while one stands, and it takes none away", async () => {
+    await signal(fromPages(alice), { kind: "stop", text: "Wait for the review." });
+    const before = await resets();
+    const refused = await send(bearer(command), "POST", OWN_RESET, { text: "Begin anew." });
+    expect(refused.status).toBe(409);
+    expect(await errorOf(refused)).toBe("agent.stopped");
+    expect((await send(fromPages(mira), "POST", OWN_RESET, { text: "Begin anew." })).status).toBe(
+      409,
+    );
+    // Nothing was recorded, and the agent is stopped still, whatever its runner says.
+    expect(await resets()).toEqual(before);
+    expect((await heartbeat()).state).toBe("stopped");
+    expect((await agentOf({ cookie: alice })).state).toMatchObject({ state: "stopped" });
+    // A supervisor starts it again, and from then on it begins anew for itself as before.
+    await signal(fromPages(alice), { kind: "restart" });
+    expect((await heartbeat({ reason: "resumed" })).state).toBe("running");
+    expect((await send(bearer(command), "POST", OWN_RESET, { text: "Now." })).status).toBe(201);
+    expect((await heartbeat({ reason: "resumed" })).state).toBe("running");
+  });
+});

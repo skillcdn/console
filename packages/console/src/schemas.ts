@@ -893,6 +893,18 @@ export type RestOwnWakeRaised = z.infer<typeof restOwnWakeRaisedSchema>;
 export const restOwnWakesSchema = z.object({ items: z.array(restOwnWakeSchema) });
 export type RestOwnWakes = z.infer<typeof restOwnWakesSchema>;
 
+/**
+ * What `POST /api/v1/agents/me/reset` is sent (ADR-0154): an agent account begins a new
+ * conversation for itself, when the turn it asks in is over. Its words say why, which its
+ * record keeps, and are what the new conversation reads first: they are needed.
+ */
+export const restOwnResetInputSchema = z.object({
+  text: paragraphs(MAX_SIGNAL_LENGTH).check(
+    z.refine((value) => value.trim().length > 0, "an account that begins anew says why"),
+  ),
+});
+export type RestOwnResetInput = z.infer<typeof restOwnResetInputSchema>;
+
 /** What the heartbeat is answered: where the account's record of signals stands, what its supervisors chose, and how the console has the agent. */
 export const restRunnerHeartbeatSchema = z.object({
   latest: z.int().check(z.gte(0)),

@@ -130,6 +130,7 @@ beforeAll(async () => {
       agentSessionsPerHour: 3,
       runnerWakesPerHour: 2,
       ownWakesPerHour: 2,
+      ownResetsPerHour: 2,
       agentStateChangesPerHour: 3,
     },
   });
@@ -157,6 +158,7 @@ describe("what an agent account's runner writes within an hour (ADR-0132)", () =
       agentSessionsPerHour: 60,
       runnerWakesPerHour: 600,
       ownWakesPerHour: 30,
+      ownResetsPerHour: 6,
       agentStateChangesPerHour: 20,
     });
   });
@@ -250,6 +252,32 @@ describe("what an agent account's runner writes within an hour (ADR-0132)", () =
     expect((await own()).status).toBe(201);
     // What its runner raises from a messenger is counted by itself, and takes none of these.
     expect((await raise("C2/1")).status).toBe(201);
+    later(10);
+    expect((await own()).status).toBe(201);
+    const over = await own();
+    expect(over.status).toBe(429);
+    expect(await errorOf(over)).toBe("signal.too_many");
+    expect(retryOf(over)).toBeGreaterThan(49 * 60);
+    expect(retryOf(over)).toBeLessThanOrEqual(50 * 60);
+    // Once the first is an hour old, the hour has room for one more.
+    later(51);
+    expect((await own()).status).toBe(201);
+    expect((await own()).status).toBe(429);
+  });
+
+  it("takes so many new conversations an account begins for itself within the hour, counted apart from a supervisor's resets and its own wakes (ADR-0154)", async () => {
+    later(120);
+    const own = () => send(bearer(command), "POST", agentPath("me", "reset"), { text: "Anew." });
+    expect((await own()).status).toBe(201);
+    // A supervisor's reset is not counted, nor a wake the account raises for itself.
+    for (const body of [{ kind: "reset" }, { kind: "reset", text: "Start over." }]) {
+      expect(
+        (await send(fromPages(alice), "POST", agentPath("mira", "signals"), body)).status,
+      ).toBe(201);
+    }
+    expect(
+      (await send(bearer(command), "POST", agentPath("me", "wakes"), { text: "Again." })).status,
+    ).toBe(201);
     later(10);
     expect((await own()).status).toBe(201);
     const over = await own();

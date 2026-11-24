@@ -6,6 +6,7 @@ import {
   MAX_OPTION_LABEL_LENGTH,
   MAX_OPTIONS,
   MAX_PROJECT_KEY_LENGTH,
+  MAX_SIGNAL_LENGTH,
   MAX_TITLE_LENGTH,
   MAX_TOKEN_DAYS,
   MAX_TOKEN_NAME_LENGTH,
@@ -31,6 +32,7 @@ import {
   restListingInputSchema,
   restMemberInputSchema,
   restMeSchema,
+  restOwnResetInputSchema,
   restPersonPatchSchema,
   restPersonSchema,
   restProjectIconSchema,
@@ -640,5 +642,40 @@ describe("the archive of the board (ADR-0029)", () => {
     ).toBe(true);
     expect(restArchiveTasksInputSchema.safeParse({ goalId: "nope" }).success).toBe(false);
     expect(restArchiveTasksInputSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("a new conversation an agent account begins for itself (ADR-0154)", () => {
+  it("takes why, in words bounded as a signal's are, and nothing an account could say of who sends it", () => {
+    expect(
+      restOwnResetInputSchema.parse({ text: "The release is out.\nNext: its notes." }),
+    ).toEqual({ text: "The release is out.\nNext: its notes." });
+    expect(restOwnResetInputSchema.safeParse({ text: "x".repeat(MAX_SIGNAL_LENGTH) }).success).toBe(
+      true,
+    );
+    // A kind, a sender or a source is not the account's to name: what is not why is not read.
+    expect(
+      restOwnResetInputSchema.parse({
+        text: "Anew.",
+        kind: "restart",
+        by: "jane",
+        source: "board",
+      }),
+    ).toEqual({ text: "Anew." });
+    for (const input of [
+      {},
+      { text: "" },
+      { text: " \n\t " },
+      { text: "x".repeat(MAX_SIGNAL_LENGTH + 1) },
+      { text: `A bell${String.fromCodePoint(7)}.` },
+      { text: `Hidden${String.fromCodePoint(0x202e)}words.` },
+      { text: 7 },
+      { text: ["Anew."] },
+      { text: { toString: "Anew." } },
+      null,
+      "Anew.",
+    ]) {
+      expect(restOwnResetInputSchema.safeParse(input).success, JSON.stringify(input)).toBe(false);
+    }
   });
 });

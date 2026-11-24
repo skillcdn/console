@@ -4541,6 +4541,81 @@ describe("configuring, as the person", () => {
     expect(person.err()).not.toContain("does not take an account's own wake yet");
   });
 
+  it("begins a new conversation for an agent account's own, with why, when its turn is over (ADR-0154)", async () => {
+    const mira = { ...BOB, id: "0199c4d8-0000-7000-8000-000000000009", login: "acme-mira" };
+    const sent = (text: string) => ({
+      number: 12,
+      kind: "reset",
+      by: { ...mira, name: "Mira", kind: "agent", handle: "mira" },
+      agent: null,
+      plugin: null,
+      source: "person",
+      key: null,
+      text,
+      set: null,
+      attachments: [],
+      at: WHEN,
+    });
+    const { fetch, calls } = fakeConsole({
+      "POST /api/v1/agents/me/reset": [
+        { status: 201, body: sent("The release is out. Next: its notes.") },
+        { status: 201, body: sent("From a file.") },
+        {
+          status: 409,
+          body: { error: { code: "agent.stopped", message: "A supervisor stopped the agent." } },
+        },
+        {
+          status: 429,
+          body: { error: { code: "signal.too_many", message: "As many as an hour takes." } },
+        },
+      ],
+    });
+    const asked = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["agent", "reset", "me", "The release is out. Next: its notes."], asked.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe("POST /api/v1/agents/me/reset");
+    expect(calls.at(-1)?.body).toEqual({ text: "The release is out. Next: its notes." });
+    // It says when the new conversation begins, and what goes with it: nothing but the words.
+    expect(asked.out()).toBe(
+      "Asked, as signal #12 of your record: when this turn is over, your session ends and a new conversation begins with these words. Nothing else of this one goes with it: put what must be kept on the board, in your desk or in your product's memory before the turn ends.\n",
+    );
+    // The words from a file, or from standard input, as a supervisor's are.
+    const filed = harness({ fetch, env: SIGNED_IN, readFile: async () => "From a file.\n" });
+    expect(await runCli(["agent", "reset", "me", "--file", "why.md"], filed.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ text: "From a file." });
+    // What the console refuses is said as it says it: a stop that stands, and the hour's bound.
+    const stopped = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "reset", "me", "Again."], stopped.io)).toBe(EXIT.failed);
+    expect(stopped.err()).toContain("A supervisor stopped the agent.");
+    const full = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "reset", "me", "Again."], full.io)).toBe(EXIT.failed);
+    expect(full.err()).toContain("As many as an hour takes.");
+    // Why is needed, and asked for before the console is.
+    const before = calls.length;
+    for (const args of [
+      ["agent", "reset", "me"],
+      ["agent", "reset", "me", "   "],
+      ["agent", "reset", "me", "words", "more"],
+    ]) {
+      const unsaid = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, unsaid.io), args.join(" ")).toBe(EXIT.usage);
+      expect(unsaid.err()).toContain('console agent reset me "<why>"');
+    }
+    expect(calls.length).toBe(before);
+    // A console of before knows no such route, and is said to be one.
+    const old = harness({ fetch: fakeConsole({}).fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "reset", "me", "Anew."], old.io)).toBe(EXIT.failed);
+    expect(old.err()).toContain("This console does not take an account's own reset yet");
+    // A supervisor's reset of another account is the signal it was: sent at once, words or none.
+    const theirs = fakeConsole({
+      "POST /api/v1/agents/mira/signals": { status: 201, body: { ...sent(""), by: BOB } },
+    });
+    const supervisor = harness({ fetch: theirs.fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "reset", "mira"], supervisor.io)).toBe(EXIT.ok);
+    expect(theirs.calls.at(-1)?.body).toEqual({ kind: "reset" });
+  });
+
   it("says how an agent account stands, and what its runner said, where the console answers it (ADR-0085)", async () => {
     const mira = {
       person: {

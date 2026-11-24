@@ -203,6 +203,8 @@ export const ko: Messages = {
     "transcript.too_many_sessions": "계정이 한 시간에 시작할 수 있는 세션을 모두 시작했습니다.",
     "signal.too_many": "계정의 러너가 한 시간에 올릴 수 있는 깨움을 모두 올렸습니다.",
     "wake.too_many": "계정이 나중을 위해 둘 수 있는 깨움을 모두 두었습니다.",
+    "agent.stopped":
+      "감독자가 에이전트를 멈췄습니다. 감독자가 다시 시작할 때까지는 스스로 새 대화를 시작할 수 없습니다.",
     "wake.not_found": "계정에 그 이름의 깨움이 없습니다.",
     "transcript.unknown_file": "이벤트가 그 세션에 올리지 않은 사진을 가리킵니다.",
     "agent.not_found": "에이전트 계정을 찾을 수 없습니다.",
@@ -2000,6 +2002,7 @@ export const ko: Messages = {
         waiting: {
           call: "지금 하는 도구 호출이 끝나면 읽습니다.",
           turn: "지금 턴이 끝나면 읽습니다.",
+          anew: "지금 턴이 끝나면 이 말로 새 대화를 시작합니다.",
           stopped: "다시 시작하면 읽습니다.",
           unheard: "러너가 연결되면 읽습니다.",
           soon: "에이전트에게 전달하는 중입니다.",

@@ -18,6 +18,7 @@ import {
   type RestSignal,
   type RestSignals,
   restFileInputSchema,
+  restOwnResetInputSchema,
   restOwnWakeInputSchema,
   restRunnerHeartbeatInputSchema,
   restRunnerWakeSchema,
@@ -36,6 +37,7 @@ import {
   RunnerError,
   recordHeartbeat,
   type SignalRecord,
+  StoppedError,
   sendSignal,
 } from "../db/queries/agent-runners.js";
 import {
@@ -446,6 +448,72 @@ export function registerAgentRunnerRest(
       }
       throw error;
     }
+  });
+
+  // A new conversation the account begins for itself (ADR-0154), signed in as itself: a reset
+  // of its record, sent by the account with why, which its runner takes when the turn under
+  // way is over. So many within an hour, and nothing of how the agent stands changes by it:
+  // while a supervisor's stop stands it is refused, and it takes no stop away.
+  app.post(`${OWN}/reset`, tooLarge, async (c) => {
+    if (!access.presentsToken(c) && !access.fromOwnPages(c)) {
+      return foreignOrigin(c);
+    }
+    const caller = await own(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    let json: unknown;
+    try {
+      json = await c.req.json();
+    } catch {
+      return invalid(c, "The request body is not readable JSON.");
+    }
+    const parsed = restOwnResetInputSchema.safeParse(json);
+    if (!parsed.success) {
+      return invalid(c, problemOf(parsed.error.issues));
+    }
+    let sent: SignalRecord;
+    try {
+      sent = await sendSignal(database, {
+        account: caller.person,
+        kind: "reset",
+        by: actorOf(caller),
+        source: "person",
+        key: undefined,
+        text: parsed.data.text.trim(),
+        set: undefined,
+        own: true,
+        perHour: quotas.ownResetsPerHour,
+        now: clock.now(),
+      });
+    } catch (error) {
+      if (error instanceof StoppedError) {
+        return c.json(
+          errorBody(
+            "agent.stopped",
+            "A supervisor stopped the agent: it begins no conversation for itself until a supervisor starts it again.",
+          ),
+          409,
+        );
+      }
+      if (error instanceof RunnerError) {
+        c.header("retry-after", String(error.retryAfter));
+        return c.json(
+          errorBody(
+            "signal.too_many",
+            "The account began as many conversations for itself within the hour as it may. One asked for later is taken.",
+          ),
+          429,
+        );
+      }
+      throw error;
+    }
+    wakes.nudge(caller.person.id);
+    logger.info(
+      { agent: caller.person.id, signal: sent.number, requestId: c.get("requestId") },
+      "an account began a conversation anew for itself",
+    );
+    return c.json(restSignal(sent), 201);
   });
 
   /** The wakes an account keeps for later, the soonest first. */

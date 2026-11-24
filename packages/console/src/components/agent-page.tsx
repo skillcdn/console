@@ -590,9 +590,10 @@ export function takenOf(events: readonly RestTranscriptEvent[]): number | undefi
 }
 
 /**
- * The words supervisors sent that the agent has not taken: the tells, and the interrupts that
- * carry words or files, after the last signal the record says it took, the oldest first. A
- * signal is taken in order, so everything up to that one was.
+ * The words sent that the agent has not taken: the tells, the interrupts that carry words or
+ * files, and the resets that carry words, a supervisor's or the account's own (ADR-0154),
+ * which a new conversation begins with, after the last signal the record says it took, the
+ * oldest first. A signal is taken in order, so everything up to that one was.
  */
 export function waitingOf(signals: readonly RestSignal[], taken: number): readonly RestSignal[] {
   return signals
@@ -600,7 +601,7 @@ export function waitingOf(signals: readonly RestSignal[], taken: number): readon
       (signal) =>
         signal.number > taken &&
         signal.source === "person" &&
-        (signal.kind === "tell" || signal.kind === "interrupt") &&
+        (signal.kind === "tell" || signal.kind === "interrupt" || signal.kind === "reset") &&
         (signal.text.trim().length > 0 || signal.attachments.length > 0),
     )
     .slice()
@@ -1479,10 +1480,11 @@ export interface TalkWaitingProps {
   readonly signals: readonly RestSignal[];
   /**
    * Why they wait, which says when they are read: a turn under way that the product takes a
-   * message in (`call`) or takes none in (`turn`), an agent that is stopped, a runner not heard
-   * from, or nothing but the moment it takes to hand them over (`soon`).
+   * message in (`call`) or takes none in (`turn`), or whose end the last of them, the account's
+   * own reset, waits for to begin a new conversation (`anew`); an agent that is stopped, a
+   * runner not heard from, or nothing but the moment it takes to hand them over (`soon`).
    */
-  readonly why: "call" | "turn" | "stopped" | "unheard" | "soon";
+  readonly why: "call" | "turn" | "anew" | "stopped" | "unheard" | "soon";
   /** Where the bytes of a file of a signal are read. */
   readonly fileHref?: ((number: number, fileId: string) => string) | undefined;
   readonly busy?: boolean | undefined;
@@ -1494,9 +1496,10 @@ export interface TalkWaitingProps {
 }
 
 /**
- * What supervisors said and the agent has not taken yet, at the foot of the conversation: each
- * as it will stand there, quieter, with when it is read; and under the last, while a turn is
- * under way, the way to have them read now. Rows of the conversation's list.
+ * What was said and the agent has not taken yet, at the foot of the conversation: each as it
+ * will stand there, quieter, with what it was where it was more than a tell and when it is
+ * read; and under the last, while a turn is under way, the way to have them read now. Rows of
+ * the conversation's list.
  */
 export function TalkWaiting(props: TalkWaitingProps) {
   const words = useWords().agents.page.live;
@@ -1504,7 +1507,9 @@ export function TalkWaiting(props: TalkWaitingProps) {
   if (props.signals.length === 0) {
     return null;
   }
-  const stops = props.onInterrupt !== undefined && (props.why === "call" || props.why === "turn");
+  const stops =
+    props.onInterrupt !== undefined &&
+    (props.why === "call" || props.why === "turn" || props.why === "anew");
   return (
     <>
       {props.signals.map((signal, index) => {
@@ -1548,6 +1553,7 @@ export function TalkWaiting(props: TalkWaitingProps) {
               <span className="sc-name">
                 {signal.by === null ? words.kinds.person : personName(signal.by)}
               </span>
+              {signal.kind !== "tell" && <Badge>{wordOf(words.signalKinds, signal.kind)}</Badge>}
               <Time iso={signal.at} precision="clock" />
             </div>
             {last && (

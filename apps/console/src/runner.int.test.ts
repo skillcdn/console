@@ -9,6 +9,7 @@ import {
   restClaimSchema,
   restConnectionSchema,
   restSignalSchema,
+  restSignalsSchema,
   restTranscriptEventsSchema,
 } from "@skillcdn/console/api";
 import {
@@ -75,9 +76,14 @@ const transcript = async (id: string) =>
     .parse(await (await get({ cookie: alice }, agentPath("mira", "sessions", id, "events"))).json())
     .items.map((event) => [event.kind, event.text] as const);
 
-/** A product the test speaks for: it answers every message with what it was told, and says its turn is done. */
-function echoingDriver() {
+/**
+ * A product the test speaks for: it answers every message with what it was told, and says its
+ * turn is done; or, `held`, leaves the turn under way until the test says it is over.
+ */
+function echoingDriver(held = false) {
   const started: { options: StartOptions; sent: DriverMessage[] }[] = [];
+  /** Ends the turn under way in the session started last, where the driver holds its turns. */
+  let finish: () => void = () => undefined;
   const driver: Driver = {
     name: "claude",
     product: { name: "Claude Code", tried: ["2.1.0"] },
@@ -89,13 +95,14 @@ function echoingDriver() {
       started.push({ options, sent });
       const queue: DriverEvent[] = [
         { type: "running", model: options.model, effort: options.effort, version: "2.1.0" },
-        { type: "conversation", id: "c-1" },
+        { type: "conversation", id: `c-${started.length}` },
       ];
       let wake: (() => void) | undefined;
       const emit = (...events: DriverEvent[]) => {
         queue.push(...events);
         wake?.();
       };
+      finish = () => emit({ type: "turn_completed" });
       return {
         send: async (message) => {
           sent.push(message);
@@ -107,7 +114,7 @@ function echoingDriver() {
               text: `GIT_TOKEN=${options.env.GIT_TOKEN ?? "none"}`,
             },
             { type: "event", kind: "assistant", text: `Heard: ${said}` },
-            { type: "turn_completed" },
+            ...(held ? [{ type: "taken" } as const] : [{ type: "turn_completed" } as const]),
           );
         },
         interrupt: async () => undefined,
@@ -133,7 +140,7 @@ function echoingDriver() {
       };
     },
   };
-  return { driver, started };
+  return { driver, started, finish: () => finish() };
 }
 
 beforeAll(async () => {
@@ -300,5 +307,105 @@ describe("a runner and the console, together (ADR-0085, ADR-0086)", () => {
     expect(last?.ended).toBe("exited");
     expect(log.join("\n")).not.toContain("Hold the release");
     expect(log.join("\n")).not.toContain(TOKEN);
+  });
+
+  it("begins a new conversation at the account's own word, once the turn it was said in is over (ADR-0154)", async () => {
+    // A product whose turn is under way until the test says it is over.
+    const product = echoingDriver(true);
+    const client = createClient({
+      baseUrl: h.origin,
+      token: command,
+      fetch: (input, init) => h.request(input.replace(h.origin, ""), init),
+    });
+    const runner = createRunner({
+      client,
+      driver: product.driver,
+      config: DEFAULT_RUNNER_CONFIG,
+      // Who the runner is, as the command says it of the account it is signed in as.
+      account: (await agent()).person.id,
+      cwd: "/home/mira/desk",
+      machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
+      version: "0.5.0",
+      now: () => Date.now(),
+      random: Math.random,
+      time: () => "14:02",
+      files: { write: async () => undefined, remove: async () => undefined },
+      state: { load: async () => undefined, save: async () => undefined },
+      log: () => undefined,
+      timing: { heartbeatMs: 200, batchMs: 30, groupWindowMs: 30, reconnectMs: 50 },
+    });
+    const done = runner.run();
+    /** The newest session, once the agent said something in it. */
+    const answered = (other?: string) =>
+      until("a session the agent answered in", async () => {
+        const [open] = await sessions();
+        if (open === undefined || open.ended !== null || open.id === other) {
+          return undefined;
+        }
+        const events = await transcript(open.id);
+        return events.some(([kind]) => kind === "assistant") ? { open, events } : undefined;
+      });
+    try {
+      await tell({ kind: "tell", text: "Write the notes." });
+      const first = await answered();
+      expect(product.started).toHaveLength(1);
+      // The agent asks in the middle of its turn, on the account's own command, as
+      // `console agent reset me` does.
+      const asked = await client.sendOwnReset({
+        text: "The notes are written. Next: the release.",
+      });
+      expect(asked).toMatchObject({ kind: "reset", source: "person", by: { handle: "mira" } });
+      await sleep(400);
+      // Nothing ends while the turn is under way, and the record says that it waits.
+      expect((await sessions())[0]).toMatchObject({ id: first.open.id, ended: null });
+      expect(product.started).toHaveLength(1);
+      const record = restSignalsSchema.parse(
+        await (await get({ cookie: alice }, `${agentPath("mira", "signals")}?limit=1`)).json(),
+      );
+      expect(record.items[0]).toMatchObject({ number: asked.number, kind: "reset" });
+      expect(record.delivered).toBeLessThan(asked.number);
+
+      // The turn is over: the session ends as reset, and the next begins at once, with a new
+      // conversation whose first message says who began it, where why is, and what to read.
+      product.finish();
+      const second = await answered(first.open.id);
+      expect(second.open).toMatchObject({ ended: null, resumed: false });
+      expect((await sessions()).find((one) => one.id === first.open.id)?.ended).toBe("reset");
+      expect((await transcript(first.open.id)).slice(-2)).toEqual([
+        ["status", "The turn completed."],
+        ["status", "The session ended: reset."],
+      ]);
+      expect(product.started).toHaveLength(2);
+      expect(product.started[1]?.options.resume).toBeUndefined();
+      const message = product.started[1]?.sent[0]?.text ?? "";
+      expect(message).toMatch(/^\[console [a-z0-9]{6} · session\]\n/);
+      expect(message).toContain("You began this conversation yourself (console agent reset me)");
+      expect(message).toContain(
+        `Why is in your own words, under the header #${asked.number} below.`,
+      );
+      expect(message).toContain("Read first what was kept of your work");
+      expect(message).toMatch(
+        new RegExp(
+          `\\[console [a-z0-9]{6} #${asked.number} · reset · Mira · 14:02\\]\\nThe notes are written\\. Next: the release\\.$`,
+        ),
+      );
+      // On the new session's record as what the agent was sent, as a supervisor's reset is.
+      expect(second.events[0]).toEqual(["person", "The notes are written. Next: the release."]);
+      expect(second.events).toContainEqual([
+        "assistant",
+        "Heard: The notes are written. Next: the release.",
+      ]);
+      const now = await until("how the agent stands", async () => {
+        const seen = await agent();
+        return seen.state?.reason === "reset" && seen.runner?.delivered === asked.number
+          ? seen
+          : undefined;
+      });
+      expect(now.state).toMatchObject({ state: "running", reason: "reset" });
+      expect(now.runner?.session).toBe(second.open.id);
+    } finally {
+      runner.stop();
+      await done;
+    }
   });
 });

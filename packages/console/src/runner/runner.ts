@@ -133,6 +133,11 @@ export interface RunnerOptions {
   readonly config: RunnerConfig;
   /** The desk: the directory the runner was started in. */
   readonly cwd: string;
+  /**
+   * The id of the account the runner is: a `reset` that account sent is its own (ADR-0154),
+   * taken when the turn under way is over. Left out, every reset is a supervisor's.
+   */
+  readonly account?: string | undefined;
   readonly machine: { readonly name: string; readonly os: string; readonly user: string };
   /** The version of the package the runner runs from. */
   readonly version: string;
@@ -462,8 +467,10 @@ export function createRunner(options: RunnerOptions): Runner {
   let held = false;
   /** The agent could not go on: how many tries ended so, and when what arrives by itself goes next. */
   let waits: { tries: number; until: number } | undefined;
-  /** The next session begins a new conversation, and says who reset it. */
-  let resetBy: string | undefined;
+  /** The next session begins a new conversation, and says who reset it, and under which header why. */
+  let resetBy: { by: string; own?: boolean; number?: number } | undefined;
+  /** The account's own reset (ADR-0154), which waits for the turn under way to end: owed until then, so not delivered. */
+  let ownReset: RestSignal | undefined;
   /** The open session is to end as soon as no turn is under way: what was chosen for it is taken when one starts. */
   let renew = false;
   let deliverAt: number | undefined;
@@ -1086,9 +1093,7 @@ export function createRunner(options: RunnerOptions): Runner {
       time: options.time,
       attached: (signal) => attached.get(signal.number) ?? [],
     });
-    const intro = target.first
-      ? introOf(target.mark, resetBy === undefined ? undefined : { by: resetBy })
-      : undefined;
+    const intro = target.first ? introOf(target.mark, resetBy) : undefined;
     const text = [intro, composed.text].filter((part) => part !== undefined).join("\n\n");
     try {
       await target.driver.send({ text, images, priority });
@@ -1347,12 +1352,28 @@ export function createRunner(options: RunnerOptions): Runner {
       }
       case "restart":
       case "reset": {
+        if (
+          signal.kind === "reset" &&
+          options.account !== undefined &&
+          signal.by?.id === options.account
+        ) {
+          // The account's own: taken by the loop once no turn is under way, the one it was
+          // sent in among them, and owed until then. A second stands for the first.
+          const earlier = ownReset;
+          ownReset = signal;
+          owed.add(signal.number);
+          if (earlier !== undefined) {
+            owed.delete(earlier.number);
+            await account(earlier);
+          }
+          return;
+        }
         held = false;
         waits = undefined;
         await end(signal.kind === "reset" ? "reset" : "restarted");
         if (signal.kind === "reset") {
           conversation = undefined;
-          resetBy = by;
+          resetBy = { by, ...(signal.text.trim().length > 0 ? { number: signal.number } : {}) };
           // What a product was handed and never took is tried once more, in the new
           // conversation: a product that does not start with it again is not sent it a
           // third time, so that no signal stands in the way of every one after it for ever.
@@ -1435,6 +1456,35 @@ export function createRunner(options: RunnerOptions): Runner {
         }
       }
     }
+  };
+
+  /**
+   * Takes the account's own reset (ADR-0154), once no turn is under way: the open session ends
+   * as reset, and the next begins a new conversation with the account's words, at once. It
+   * changes nothing of how the agent stands: where a supervisor's stop came meanwhile it is let
+   * go, and whoever starts the agent again says with which conversation.
+   */
+  const beginAnew = async (signal: RestSignal): Promise<void> => {
+    ownReset = undefined;
+    owed.delete(signal.number);
+    if (held) {
+      log(`#${signal.number} let go: the agent was stopped before its own reset was taken`);
+      await account(signal);
+      return;
+    }
+    await end("reset");
+    conversation = undefined;
+    // Where a supervisor reset the agent meanwhile, the first message says so: the account's
+    // words are read under their own header all the same.
+    resetBy ??= {
+      by: signal.by?.name ?? signal.by?.login ?? "you",
+      own: true,
+      number: signal.number,
+    };
+    pending.push(signal);
+    await persist();
+    setState("running", "reset");
+    scheduleDeliver();
   };
 
   const onDriver = async (target: OpenSession, event: DriverEvent): Promise<void> => {
@@ -2007,6 +2057,10 @@ export function createRunner(options: RunnerOptions): Runner {
                 await beat();
                 await readSecrets();
               }
+            }
+            // The account's own reset is taken between two turns, however the turn ended.
+            if (ownReset !== undefined && session?.turn !== true) {
+              await beginAnew(ownReset);
             }
           } catch (error) {
             log(`the runner could not do what it was about to (${codeOf(error)}); it goes on`);

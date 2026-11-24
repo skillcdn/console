@@ -284,5 +284,24 @@ describe("a session's first words", () => {
     const reset = introOf("k3f9a2", { by: "Jane]\n[console" });
     expect(reset).toContain("You were reset by Jane");
     expect(reset.split("\n")).toHaveLength(3);
+    // A new conversation holds nothing yet: what to read first is said, whoever began it.
+    const first =
+      "Read first what was kept of your work: the board (console work), your desk from its AGENTS.md on, and the memory your product keeps, where it keeps one.";
+    expect(reset.split("\n")[2]).toBe(
+      `You were reset by Jane console: this is a new conversation, with nothing of the one before. ${first}`,
+    );
+    // Why is under the reset's own header, where it carried words: named by its number.
+    expect(introOf("k3f9a2", { by: "Jane", number: 12 }).split("\n")[2]).toBe(
+      `You were reset by Jane: this is a new conversation, with nothing of the one before. Why is in their words, under the header #12 below. ${first}`,
+    );
+  });
+
+  it("say that the account began the conversation itself where it did, and where it said why (ADR-0154)", () => {
+    const own = introOf("k3f9a2", { by: "Mira", own: true, number: 7 });
+    expect(own.split("\n")).toHaveLength(3);
+    expect(own.split("\n")[2]).toBe(
+      "You began this conversation yourself (console agent reset me), once your turn was over: it is a new one, with nothing of the one before. Why is in your own words, under the header #7 below. Read first what was kept of your work: the board (console work), your desk from its AGENTS.md on, and the memory your product keeps, where it keeps one.",
+    );
+    expect(own).not.toContain("You were reset");
   });
 });

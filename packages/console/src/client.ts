@@ -68,6 +68,7 @@ import {
   type RestMembers,
   type RestMePatch,
   type RestMyDecisions,
+  type RestOwnResetInput,
   type RestOwnWakeInput,
   type RestOwnWakeRaised,
   type RestOwnWakes,
@@ -832,6 +833,12 @@ export interface ConsoleClient {
   ownWakes(handle: string, signal?: AbortSignal): Promise<RestOwnWakes>;
   /** Takes a wake kept for later away, by what it is called; the account's own. */
   cancelOwnWake(key: string): Promise<void>;
+  /**
+   * An agent account begins a new conversation for itself (ADR-0154), by its own command: a
+   * `reset` of its record, sent by the account, which its runner takes when the turn under way
+   * is over, with the words that say why.
+   */
+  sendOwnReset(input: RestOwnResetInput): Promise<RestSignal>;
   /** The runner begins a session (ADR-0086): the one that was open is taken over. */
   beginAgentSession(input: RestAgentSessionInput): Promise<RestAgentSession>;
   /** The runner reports a batch of a session's events, in order; the same number sent again changes nothing. */
@@ -1774,6 +1781,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         restOwnWakesSchema,
       );
     },
+    sendOwnReset: (input) =>
+      request("POST", `${base}${agentPath("me", "reset")}`, input, restSignalSchema),
     async *signalStream(after, signal) {
       let response: Response;
       try {

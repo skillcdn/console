@@ -43,6 +43,13 @@ export class RunnerError extends DomainError {
   }
 }
 
+/** What an account asked of itself while a supervisor's stop stands (ADR-0154). `code` is what the API answers with. */
+export class StoppedError extends DomainError {
+  constructor() {
+    super("agent.stopped", "a supervisor's stop stands over what the account asks of itself");
+  }
+}
+
 /** What the console has of a runner, as its row says. */
 export interface RunnerRecord {
   readonly personId: string;
@@ -407,8 +414,9 @@ export async function setAgentHours(
  * Sends a signal: the next number of the account's record, with who sent it. A `stop` stands
  * from then on, and the agent is `stopped` at once, by whoever sent it; a `restart` or a `reset`
  * takes the stop away, and the agent is as its runner next says. A `set` keeps the choice with
- * the account. The account's stream is woken, in every process, through the database's own
- * channel.
+ * the account. A `reset` the account sends itself (`own`, ADR-0154) changes nothing of how it
+ * stands: it takes no stop away, and is refused while one stands. The account's stream is
+ * woken, in every process, through the database's own channel.
  */
 export async function sendSignal(
   database: Database,
@@ -427,10 +435,16 @@ export async function sendSignal(
     /** The pictures sent with it, their bytes kept already. */
     readonly files?: readonly Omit<SignalFileRecord, "id">[] | undefined;
     /**
-     * For a wake the account's runner raises itself, or the account for itself (ADR-0145): how
-     * many of them the record takes within an hour (ADR-0132), counted among those of the same
-     * source, kind and sender. One more is refused, `signal.too_many`. Unbounded where left
-     * out, as what a supervisor, the board and the schedule send is.
+     * For a reset the account sends itself (ADR-0154), which a supervisor's stop that stands
+     * refuses, `agent.stopped`, and which takes no stop away.
+     */
+    readonly own?: boolean | undefined;
+    /**
+     * For a wake the account's runner raises itself, or the account for itself (ADR-0145), and
+     * for the account's own reset (ADR-0154): how many of them the record takes within an hour
+     * (ADR-0132), counted among those of the same source, kind and sender. One more is
+     * refused, `signal.too_many`. Unbounded where left out, as what a supervisor, the board
+     * and the schedule send is.
      */
     readonly perHour?: number | undefined;
     /**
@@ -446,6 +460,9 @@ export async function sendSignal(
   const number = await drizzleOf(database).transaction(async (tx) => {
     const before = await lockedRunner(tx, account.id, now);
     const next = before.nextSignal;
+    if (input.own === true && before.stopSignal !== null) {
+      throw new StoppedError();
+    }
     if (input.perHour !== undefined) {
       // The wake that would be one too many: the one that many before it is not an hour old.
       // Looked for among the account's last signals alone, under the row's lock, so that two
@@ -511,7 +528,7 @@ export async function sendSignal(
       );
     }
     const stops = kind === "stop";
-    const starts = kind === "restart" || kind === "reset";
+    const starts = (kind === "restart" || kind === "reset") && input.own !== true;
     const becomesStopped = stops && before.state !== "stopped";
     await tx
       .update(agentRunners)

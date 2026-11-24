@@ -1,6 +1,6 @@
 # ADR-0145: An agent account wakes itself, now or at a moment to come
 
-- Status: Accepted
+- Status: Accepted; point 2, a wake and nothing else, is amended by [ADR-0154](0154-an-agent-account-begins-a-new-conversation-for-itself-when-its-turn-is-over.md): an account begins a new conversation for itself too, when its turn is over
 - Date: 2026-11-20
 - Amends [ADR-0085](0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md), point 6, by which a wake is a supervisor's, the board's, the schedule's or a wake source's.
 

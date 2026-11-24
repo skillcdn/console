@@ -137,6 +137,11 @@ describe("the desk's template", () => {
     expect(instructions).toContain(
       "It takes the task as me, once, and names its run on every command after (`--run <id>`).",
     );
+    // Where its work has a break it begins a new conversation itself, with what must go on
+    // kept first, which nothing but the template would tell a session of (ADR-0154).
+    expect(instructions).toContain(
+      'I put what must go on where the next one finds it, on the board, in this desk or in my product\'s memory, and begin a new conversation: `console agent reset me "<why>"`.',
+    );
     // What it must look at again later, it wakes itself for (ADR-0145).
     expect(instructions).toContain(
       'I wake myself for: `console agent wake me "<what for>" --in <minutes>`.',

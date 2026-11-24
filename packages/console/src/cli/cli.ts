@@ -92,6 +92,7 @@ import {
   type RestRules,
   type RestRun,
   type RestRunBrief,
+  type RestSignal,
   type RestTask,
   type RestTaskPatch,
 } from "../schemas.js";
@@ -4802,6 +4803,7 @@ const runner: Command = async (args, io) => {
         version: io.version,
       }),
       config: read.config,
+      account: person.id,
       reconfigured: async () => {
         const now = await readConfig();
         return !now.ok ? { problem: now.problem } : now.text === read.text ? "same" : "changed";
@@ -5338,6 +5340,43 @@ const ownWake = async (args: readonly string[], io: CliIo): Promise<number> => {
   return EXIT.ok;
 };
 
+const OWN_RESET_USAGE =
+  'Say why, which the new conversation reads first: console agent reset me "<why>" [--file <path>]';
+
+// A new conversation an agent account begins for itself (ADR-0154), by its own command, where
+// its work has a break: its runner takes it when the turn it is asked in is over. The words
+// say why, on the account's record, and are what the new conversation reads first.
+const ownReset = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const { values, positionals } = parse(args, { file: { type: "string" } });
+  const [, words, ...rest] = positionals;
+  if (rest.length > 0) {
+    throw misuse(OWN_RESET_USAGE);
+  }
+  const said = ((await bodyOf(io, values, words)) ?? "").trim();
+  if (said.length === 0) {
+    throw misuse(OWN_RESET_USAGE);
+  }
+  const session = await open(io, values);
+  let sent: RestSignal;
+  try {
+    sent = await session.client.sendOwnReset({ text: said });
+  } catch (error) {
+    // A console of before knows no such route: said as what it is.
+    if (error instanceof ApiError && error.status === 404 && error.code === "not_found") {
+      throw failed("This console does not take an account's own reset yet: it does from 0.6.1 on.");
+    }
+    throw error;
+  }
+  answer(
+    io,
+    session,
+    sent,
+    () =>
+      `Asked, as signal #${sent.number} of your record: when this turn is over, your session ends and a new conversation begins with these words. Nothing else of this one goes with it: put what must be kept on the board, in your desk or in your product's memory before the turn ends.`,
+  );
+  return EXIT.ok;
+};
+
 /** The kinds of signal a supervisor sends with words: which need them, and which take them. */
 const WORDED_SIGNALS: Readonly<Record<string, { readonly needs: boolean }>> = {
   tell: { needs: true },
@@ -5368,6 +5407,18 @@ const agentSignal = async (
     }
     if (whom === "me") {
       return ownWake(args, io);
+    }
+  }
+  // And so is its own reset: console agent reset me.
+  if (kind === "reset") {
+    let whom: string | undefined;
+    try {
+      whom = parse(args, { file: { type: "string" } }).positionals[0];
+    } catch {
+      whom = undefined;
+    }
+    if (whom === "me") {
+      return ownReset(args, io);
     }
   }
   const { values, positionals } = parse(args, { file: { type: "string" } });

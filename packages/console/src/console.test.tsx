@@ -602,6 +602,7 @@ describe("createConsole", () => {
     runnerHeartbeat: never,
     raiseWake: never,
     raiseOwnWake: never,
+    sendOwnReset: never,
     ownWakes: never,
     cancelOwnWake: never,
     signalStream: () => ({

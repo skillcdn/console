@@ -28,6 +28,15 @@ const JANE = {
   status: "active",
   createdAt: WHEN,
 } as unknown as NonNullable<RestSignal["by"]>;
+/** The agent account the runner is, where a test says which: what it sends itself is its own. */
+const MIRA = {
+  ...JANE,
+  id: "0199c4d8-0000-7000-8000-000000000002",
+  login: "mira",
+  name: "Mira",
+  kind: "agent",
+  handle: "mira",
+} as unknown as NonNullable<RestSignal["by"]>;
 const TOKEN = "not-a-real-token-4f9a2c71";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -390,6 +399,8 @@ afterEach(async () => {
 function setup(
   over: {
     config?: Partial<RunnerConfig>;
+    /** The id of the account the runner is; a runner that knows of none where left out. */
+    account?: string;
     driver?: Parameters<typeof fakeDriver>[0];
     state?: RunnerState;
     before?: (console: ReturnType<typeof fakeConsole>) => void;
@@ -431,6 +442,7 @@ function setup(
     client: console.client,
     driver: product.driver,
     config: { ...DEFAULT_RUNNER_CONFIG, ...over.config },
+    account: over.account,
     cwd: "/home/mira/desk",
     machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
     version: "0.5.0",
@@ -813,6 +825,122 @@ describe("the runner", () => {
     expect(saved.some((state) => state.conversation === undefined && state.delivered === 1)).toBe(
       true,
     );
+  });
+
+  it("takes the account's own reset when the turn it was sent in is over, and begins the new conversation with its words (ADR-0154)", async () => {
+    const { console, product, saved } = setup({ account: MIRA.id });
+    console.signal({ text: "Begin." });
+    const first = await sessionOf(product);
+    await until("the message", () => first.sent.length === 1);
+    first.emit(...STARTED, { type: "taken" });
+    await until("the conversation", () => saved.at(-1)?.conversation === "c-1");
+    // In the middle of the turn it is sent in: nothing ends, and it is not delivered.
+    console.signal({ kind: "reset", by: MIRA, text: "The release is out. Next: its notes." });
+    await sleep(80);
+    expect(console.ended).toEqual([]);
+    expect(product.sessions).toHaveLength(1);
+    expect(first.state.stopped).toBe(false);
+    expect(saved.at(-1)?.delivered).toBe(1);
+    // The turn ends: the session does, as reset, and the next begins at once, with nothing of
+    // the conversation before.
+    first.emit({ type: "turn_completed" });
+    const second = await sessionOf(product, 2);
+    await until("the message", () => second.sent.length === 1);
+    expect(console.ended).toEqual(["reset"]);
+    expect(second.options.resume).toBeUndefined();
+    expect(console.begun[1]).toMatchObject({ resumed: false });
+    const text = second.sent[0]?.text ?? "";
+    expect(text).toMatch(/^\[console [a-z0-9]{6} · session\]/);
+    expect(text).toContain("You began this conversation yourself (console agent reset me)");
+    expect(text).toContain("Why is in your own words, under the header #2 below.");
+    expect(text).toContain("Read first what was kept of your work: the board (console work)");
+    expect(text).not.toContain("You were reset");
+    expect(text).toContain("#2 · reset · Mira · 14:02]\nThe release is out. Next: its notes.");
+    // On the new session's record as what the agent was sent, by the account, as a
+    // supervisor's reset is; and how the agent stands says that it was reset.
+    await until("the record", () => console.events(2).length >= 1);
+    expect(console.events(2)[0]).toEqual([1, "person", "The release is out. Next: its notes."]);
+    expect(console.kept.get("0199c4d8-0000-7000-8000-000000000002")?.[0]?.data).toEqual({
+      signal: 2,
+      kind: "reset",
+      source: "person",
+      key: null,
+      by: "mira",
+      agent: null,
+    });
+    await until("the state", () => console.beats.at(-1)?.reason === "reset");
+    expect(console.beats.at(-1)).toMatchObject({ state: "running", reason: "reset" });
+    // Delivered once the new conversation took it, and not before.
+    expect(saved.at(-1)?.delivered).toBe(1);
+    second.emit({ type: "conversation", id: "c-2" }, { type: "taken" });
+    await until("the count", () => saved.at(-1)?.delivered === 2);
+    expect(saved.at(-1)).toMatchObject({ conversation: "c-2", delivered: 2 });
+  });
+
+  it("takes the account's own reset at once where no turn is under way, and a supervisor's at once whatever is", async () => {
+    const { console, product, saved } = setup({ account: MIRA.id });
+    console.signal({ text: "Begin." });
+    const first = await sessionOf(product);
+    await until("the message", () => first.sent.length === 1);
+    first.emit(...STARTED, { type: "turn_completed" });
+    await until("the conversation", () => saved.at(-1)?.conversation === "c-1");
+    // Whoever is at the machine asks on the account's command while the agent rests.
+    console.signal({ kind: "reset", by: MIRA, text: "The sign-in was mended. Begin anew." });
+    const second = await sessionOf(product, 2);
+    await until("the message", () => second.sent.length === 1);
+    expect(console.ended).toEqual(["reset"]);
+    expect(second.options.resume).toBeUndefined();
+    expect(second.sent[0]?.text).toContain("You began this conversation yourself");
+    // A supervisor's is not waited with: in the middle of a turn the session ends all the same.
+    second.emit({ type: "conversation", id: "c-2" }, { type: "taken" });
+    await until("the conversation", () => saved.at(-1)?.conversation === "c-2");
+    console.signal({ kind: "reset", text: "Start over from the board." });
+    const third = await sessionOf(product, 3);
+    await until("the message", () => third.sent.length === 1);
+    expect(console.ended).toEqual(["reset", "reset"]);
+    expect(third.sent[0]?.text).toContain("You were reset by Jane: this is a new conversation");
+    expect(third.sent[0]?.text).toContain("Why is in their words, under the header #3 below.");
+    expect(third.sent[0]?.text).not.toContain("You began this conversation yourself");
+  });
+
+  it("lets the account's own reset go where a supervisor stopped the agent before its turn was over, and counts one that waits as not delivered", async () => {
+    const { console, product, saved, log, runner, done } = setup({ account: MIRA.id });
+    console.signal({ text: "Begin." });
+    const first = await sessionOf(product);
+    await until("the message", () => first.sent.length === 1);
+    first.emit(...STARTED, { type: "taken" });
+    await until("the conversation", () => saved.at(-1)?.conversation === "c-1");
+    // Two of its own, one after the other: the second stands for the first, which is let go,
+    // and waits itself.
+    console.signal({ kind: "reset", by: MIRA, text: "A first thought." });
+    console.signal({ kind: "reset", by: MIRA, text: "A second thought." });
+    await sleep(80);
+    expect(console.ended).toEqual([]);
+    expect(saved.at(-1)?.delivered).toBe(2);
+    // A stop stands over it: the session ends as stopped, and the account's own is let go.
+    console.signal({ kind: "stop" });
+    await until("the stop", () => console.ended.length === 1);
+    await until("the count", () => saved.at(-1)?.delivered === 4);
+    expect(console.ended).toEqual(["stopped"]);
+    expect(log.some((line) => line.includes("#3 let go"))).toBe(true);
+    expect(console.beats.at(-1)).toMatchObject({ state: "stopped", reason: "stop" });
+    // Whoever starts the agent again says with which conversation: a restart, with the same.
+    console.signal({ kind: "restart", text: "Go on." });
+    const second = await sessionOf(product, 2);
+    await until("the message", () => second.sent.length === 1);
+    expect(second.options.resume).toBe("c-1");
+    expect(second.sent[0]?.text).not.toContain("You began this conversation yourself");
+    expect(second.sent[0]?.text).not.toContain("A second thought.");
+    // One that waits when the runner itself ends is not delivered: the console sends it again
+    // to the runner started after, which takes it then.
+    second.emit({ type: "taken" });
+    await until("the count", () => saved.at(-1)?.delivered === 5);
+    console.signal({ kind: "reset", by: MIRA, text: "A third." });
+    await sleep(80);
+    runner.stop();
+    await done;
+    expect(saved.at(-1)).toMatchObject({ conversation: "c-1", delivered: 5 });
+    expect(console.ended).toEqual(["stopped", "exited"]);
   });
 
   it("takes the model and the effort chosen for it at the next session, which begins when no turn is under way", async () => {

@@ -105,6 +105,8 @@ export const MAX_AGENT_SESSIONS_PER_HOUR = 60;
 export const MAX_RUNNER_WAKES_PER_HOUR = 600;
 /** How many wakes an agent account raises for itself within an hour, those kept for later among them when they are raised (ADR-0145). */
 export const MAX_OWN_WAKES_PER_HOUR = 30;
+/** How many times an agent account begins a new conversation for itself within an hour (ADR-0154). */
+export const MAX_OWN_RESETS_PER_HOUR = 6;
 export const MAX_AGENT_STATE_CHANGES_PER_HOUR = 20;
 /** How many events one page of a session carries when none is asked for, and the most it may. */
 export const TRANSCRIPT_PAGE_LIMIT = 100;

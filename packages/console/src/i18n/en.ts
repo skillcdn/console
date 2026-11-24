@@ -247,6 +247,8 @@ export const en = {
     "transcript.too_many_sessions": "The account began as many sessions within the hour as it may.",
     "signal.too_many": "The account's runner raised as many wakes within the hour as it may.",
     "wake.too_many": "The account keeps as many wakes for later as it may.",
+    "agent.stopped":
+      "A supervisor stopped the agent: it begins no conversation for itself until a supervisor starts it again.",
     "wake.not_found": "The account keeps no wake of that name.",
     "transcript.unknown_file": "An event names a picture that was not handed in to its session.",
     "agent.not_found": "The agent account was not found.",
@@ -2119,6 +2121,7 @@ export const en = {
         waiting: {
           call: "Read after the tool call under way.",
           turn: "Read when the turn under way ends.",
+          anew: "A new conversation begins with this when the turn under way ends.",
           stopped: "Read once it is started again.",
           unheard: "Read once its runner is heard from.",
           soon: "On its way to the agent.",
