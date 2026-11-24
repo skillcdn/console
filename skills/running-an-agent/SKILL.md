@@ -42,7 +42,7 @@ Read the part that is yours. What was not seen run yet is said at the end. A per
 
 1. **An OS account for the agent,** apart from anyone's, on a machine that stays on. Whether it holds an administrator's rights is for whoever keeps the machine to say: an agent that is to install and update what it needs usually does.
 2. **Logged in when the machine starts.** The runner is the OS account's own service, which needs no administrator: a launch agent on a Mac and a scheduled task on Windows, which run while the account is logged in, so set the machine to log it in; on Linux a unit of the account's own systemd, which starts with the machine once lingering is on (setup asks for it, and says where an administrator has to: `sudo loginctl enable-linger <account>`).
-3. **The product, signed in with the agent's own subscription,** in that OS account: Claude Code, Codex, or another that speaks the Agent Client Protocol.
+3. **The product, signed in with the agent's own subscription,** in that OS account: Claude Code, Codex, or another that speaks the Agent Client Protocol. Codex is run as its app server, which a build of 0.139.0 or later has: keep it current.
 4. **The line,** said to a session of the product there. Then sign in when asked, yourself, in the browser the command opens. Never write a password in the chat.
 
 **The session's part** is the machine's least. The line says to install what is missing without asking, Node.js 24 or newer and the command first, and to run `console agent setup --console <origin> --code <code>` ([the command](/docs/specs/cli.md#setting-a-machine-up)), which:

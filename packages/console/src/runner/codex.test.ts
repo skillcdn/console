@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { codexArguments, createCodexDriver } from "./codex.js";
+import { createCodexDriver } from "./codex.js";
 import { ownRunnerModules } from "./modules.js";
 import type { Child, DriverEvent, DriverMessage, StartOptions } from "./types.js";
 
-// The `codex` driver against a product that is not there: a child a turn, whose lines the test
-// writes in the shapes the binary printed when the driver was run against it (0.164.0): each
-// cut down to what a reader could take from it, with every id and path invented. What the
-// binary was not seen to print, its reasoning, a tool of a server and a search, is in the
-// shapes its documentation gives.
+// The `codex` driver against a product that is not there: one process a session, which the test
+// speaks for, a JSON-RPC message a line. What it is written and what it answers are in the
+// shapes the product's app server has (`codex app-server generate-ts`, 0.172.0). What the
+// binary itself answered when it was spoken to signed out (0.139.0, 0.167.0, 0.172.0) is cut
+// down to what a reader could take from it, with every id and path invented: how it begins and
+// goes on with a thread, starts a turn and says its message back, takes a message into a turn,
+// stops one, refuses what it refuses, and fails a turn for the sign-in. A turn's tools, its
+// reasoning and what it asks leave for are in the generated shapes, and were not seen run.
+
+type Json = Record<string, unknown>;
 
 /** A process the test speaks for: what it was started with, what it was sent, and its output to write. */
 function fakeChild(args: readonly string[], options: { cwd: string; env: object }) {
@@ -91,24 +96,122 @@ async function until(what: string, test: () => boolean): Promise<void> {
   throw new Error(`never: ${what}`);
 }
 
+const DESK = "/home/mira/desk";
+const THREAD = "0199c4d8-0000-7000-8000-0000000000c1";
+const TURN = "0199c4d8-0000-7000-8000-0000000000d1";
+const NEXT_TURN = "0199c4d8-0000-7000-8000-0000000000d2";
+
+/** What the product answers when it is told who speaks to it. */
+const INITIALIZED = {
+  userAgent: "skillcdn-console-runner/0.172.0 (Linux 6.8; x86_64) unknown",
+  codexHome: "/home/mira/.codex",
+  platformFamily: "unix",
+  platformOs: "linux",
+};
+/** What it answers when a thread is begun or gone on with: the thread, and what it runs with. */
+const opened = (over: Json = {}): Json => ({
+  thread: {
+    id: THREAD,
+    sessionId: THREAD,
+    preview: "",
+    ephemeral: false,
+    modelProvider: "openai",
+    status: { type: "idle" },
+    cwd: DESK,
+    cliVersion: "0.172.0",
+    source: "vscode",
+    turns: [],
+  },
+  model: "gpt-6-sol",
+  modelProvider: "openai",
+  cwd: DESK,
+  approvalPolicy: "on-request",
+  approvalsReviewer: "auto_review",
+  sandbox: { type: "workspaceWrite", writableRoots: [], networkAccess: false },
+  reasoningEffort: null,
+  ...over,
+});
+const turnOf = (id: string, status = "inProgress", error: Json | null = null): Json => ({
+  id,
+  rootTurnId: id,
+  items: [],
+  itemsView: "notLoaded",
+  status,
+  error,
+  startedAt: 1795496007,
+  completedAt: status === "inProgress" ? null : 1795496022,
+  durationMs: status === "inProgress" ? null : 15556,
+});
+const turnStarted = (id: string): Json => ({
+  method: "turn/started",
+  params: { threadId: THREAD, turn: turnOf(id) },
+  emittedAtMs: 1795496007269,
+});
+const turnCompleted = (id: string, status = "completed", error: Json | null = null): Json => ({
+  method: "turn/completed",
+  params: { threadId: THREAD, turn: turnOf(id, status, error) },
+  emittedAtMs: 1795496022785,
+});
+const itemOf = (method: "item/started" | "item/completed", item: Json, turn = TURN): Json => ({
+  method,
+  params: { item, threadId: THREAD, turnId: turn },
+});
+/** A message said back, as the product says one when it reads it: under the id it was handed over with. */
+const saidBack = (clientId: string, text: string, turn = TURN): Json[] => {
+  const item = {
+    type: "userMessage",
+    id: `item-${clientId}`,
+    clientId,
+    content: [{ type: "text", text, text_elements: [] }],
+  };
+  return [itemOf("item/started", item, turn), itemOf("item/completed", item, turn)];
+};
+const answer = (id: string, text: string): Json =>
+  itemOf("item/completed", { type: "agentMessage", id, text, phase: null });
+
+const message = (text: string, priority: "now" | "next" = "next"): DriverMessage => ({
+  text,
+  images: [],
+  priority,
+});
+const textOf = (text: string): Json => ({ type: "text", text, text_elements: [] });
+
+/** The settings a thread is begun with where the desk names no mode: the product's own reviewer answers. */
+const REVIEWED = {
+  sandbox: "workspace-write",
+  approvalPolicy: "on-request",
+  approvalsReviewer: "auto_review",
+};
+
 function started(over: Partial<StartOptions> = {}) {
-  const turns: ReturnType<typeof fakeChild>[] = [];
+  const processes: ReturnType<typeof fakeChild>[] = [];
+  let ids = 0;
   const driver = createCodexDriver({
     spawn: (_command, args, options) => {
       const fake = fakeChild(args, options);
-      turns.push(fake);
+      processes.push(fake);
       return fake.child;
     },
-    cwd: "/home/mira/desk",
+    cwd: DESK,
+    version: "0.6.4",
+    // The ids a message is handed over under, in order: m-1, m-2 and so on.
+    uuid: () => {
+      ids += 1;
+      return `m-${ids}`;
+    },
   });
   const session = driver.start({
-    cwd: "/home/mira/desk",
+    cwd: DESK,
     env: { GIT_TOKEN: "not-a-real-token" },
     model: null,
     effort: null,
     resume: undefined,
     ...over,
   });
+  const product = processes[0];
+  if (product === undefined) {
+    throw new Error("the product was not started");
+  }
   const events: DriverEvent[] = [];
   /** How many messages the product was said to have taken: told apart from the blocks, which the tests read in order. */
   const taken = { count: 0 };
@@ -121,14 +224,31 @@ function started(over: Partial<StartOptions> = {}) {
       }
     }
   })();
-  /** The process of a turn, once the driver started it: the first is 0. */
-  const turn = async (index: number) => {
-    await until(`turn ${index} to start`, () => turns.length > index);
-    const fake = turns[index];
-    if (fake === undefined) {
-      throw new Error("no such turn");
-    }
-    return fake;
+  /** Everything the product was written, a message a line. */
+  const sent = (): Json[] => product.sent.map((line) => JSON.parse(line) as Json);
+  const answered = new Set<unknown>();
+  /** The oldest request of a method that the test has not answered yet, once the driver made it. */
+  const request = async (method: string): Promise<{ id: unknown; params: Json }> => {
+    const found: { one?: Json } = {};
+    await until(`a request of ${method}, of ${product.sent.join(" ")}`, () => {
+      found.one = sent().find(
+        (one) => one.method === method && one.id !== undefined && !answered.has(one.id),
+      );
+      return found.one !== undefined;
+    });
+    answered.add(found.one?.id);
+    return { id: found.one?.id, params: (found.one?.params ?? {}) as Json };
+  };
+  /** Answers the oldest unanswered request of a method; what it was asked with. */
+  const answers = async (method: string, result: Json): Promise<Json> => {
+    const asked = await request(method);
+    product.says({ id: asked.id, result });
+    return asked.params;
+  };
+  const refuses = async (method: string, text: string, code = -32600): Promise<Json> => {
+    const asked = await request(method);
+    product.says({ id: asked.id, error: { code, message: text } });
+    return asked.params;
   };
   /** What the session said once it said so many things. */
   const said = async (count: number) => {
@@ -136,31 +256,38 @@ function started(over: Partial<StartOptions> = {}) {
     await tick();
     return events;
   };
-  return { driver, session, turns, turn, events, said, read, taken };
+  /** The conversation opens: the product says what it is, and begins a thread. What the thread was begun with. */
+  const opens = async (thread: Json = opened()): Promise<Json> => {
+    await answers("initialize", INITIALIZED);
+    const settings = await answers("thread/start", thread);
+    await said(3);
+    return settings;
+  };
+  /** How many of a method the product was written. */
+  const count = (method: string): number => sent().filter((one) => one.method === method).length;
+  return {
+    driver,
+    session,
+    processes,
+    product,
+    events,
+    said,
+    read,
+    taken,
+    sent,
+    request,
+    answers,
+    refuses,
+    opens,
+    count,
+  };
 }
 
-const THREAD = "0199c4d8-0000-7000-8000-0000000000c1";
-const message = (text: string, priority: "now" | "next" = "next"): DriverMessage => ({
-  text,
-  images: [],
-  priority,
-});
-const BEGAN = [{ type: "thread.started", thread_id: THREAD }, { type: "turn.started" }];
-const USAGE = { input_tokens: 17162, cached_input_tokens: 12928, output_tokens: 5 };
-const answers = (id: string, text: string) => ({
-  type: "item.completed",
-  item: { id, type: "agent_message", text },
-});
-const COMPLETED = { type: "turn.completed", usage: USAGE };
-/** The settings a turn is started with where the desk names no mode: the product's own reviewer answers. */
-const REVIEWED = [
-  "-c",
-  'sandbox_mode="workspace-write"',
-  "-c",
-  'approval_policy="on-request"',
-  "-c",
-  'approvals_reviewer="auto_review"',
-];
+/** The blocks of a session as a test reads them: a kind with the beginning of its text and its facts, or what the driver said. */
+const shapes = (events: readonly DriverEvent[]) =>
+  events.map((event) =>
+    event.type === "event" ? [event.kind, event.text.slice(0, 60), event.data] : event.type,
+  );
 
 describe("the codex driver", () => {
   it("is the package's driver for Codex, beside the one for Claude Code", () => {
@@ -168,12 +295,12 @@ describe("the codex driver", () => {
     expect(modules.drivers.names()).toEqual(["acp", "claude", "codex"]);
     const { driver } = started();
     expect(driver.name).toBe("codex");
-    // The builds the driver was run against, and no other.
-    expect(driver.product).toEqual({ name: "Codex", tried: ["0.164.0-alpha.11.1"] });
-    // No message is taken in a turn; a picture is taken as a file, by its path in the desk;
-    // the model is each turn's.
+    // No build ran a turn through the driver yet: none is listed as tried.
+    expect(driver.product).toEqual({ name: "Codex", tried: [] });
+    // A message is put into the turn under way; a picture is taken as a file, by its path in
+    // the desk; the model is said with a turn.
     expect(driver.can).toEqual({
-      steer: false,
+      steer: true,
       images: true,
       imageFiles: true,
       resume: true,
@@ -186,442 +313,441 @@ describe("the codex driver", () => {
     });
   });
 
-  it("starts a turn of the unmodified binary with nobody at the terminal: a conversation begun, or one gone on with", () => {
-    const turn = (over: Partial<Parameters<typeof codexArguments>[0]> = {}) =>
-      codexArguments({
-        model: null,
-        effort: null,
-        permissions: undefined,
-        conversation: undefined,
-        ...over,
-      });
-    expect(turn()).toEqual(["exec", "--json", "--skip-git-repo-check", ...REVIEWED, "-"]);
-    expect(turn({ model: "gpt-6-luna", effort: "low", conversation: THREAD })).toEqual([
-      "exec",
-      "resume",
-      "--json",
-      "--skip-git-repo-check",
-      ...REVIEWED,
-      "-m",
-      "gpt-6-luna",
-      "-c",
-      'model_reasoning_effort="low"',
-      THREAD,
-      "-",
-    ]);
-    // The mode the desk names, in the product's own word, said at every turn; whatever a mode
-    // does not allow is asked of nobody.
-    const modeOf = (permissions: string | undefined) => turn({ permissions }).slice(3, -1);
-    expect(modeOf("read-only")).toEqual([
-      "-c",
-      'sandbox_mode="read-only"',
-      "-c",
-      'approval_policy="never"',
-    ]);
-    expect(modeOf("workspace-write")).toEqual([
-      "-c",
-      'sandbox_mode="workspace-write"',
-      "-c",
-      'approval_policy="never"',
-    ]);
-    expect(modeOf("danger-full-access")).toEqual([
-      "-c",
-      'sandbox_mode="danger-full-access"',
-      "-c",
-      'approval_policy="never"',
-    ]);
-    expect(modeOf("approve-for-me")).toEqual(REVIEWED);
-    // A mode that is none of the product's is never leave to do more: the one that allows the least.
-    expect(modeOf("everything")).toEqual(modeOf("read-only"));
-    expect(modeOf("Danger-Full-Access")).toEqual(modeOf("read-only"));
-    // What is no word of a command line never becomes an option of the product's, or a setting
-    // beside the one it was meant for: it is left out.
-    expect(
-      turn({
-        model: "--dangerously-bypass-approvals-and-sandbox",
-        effort: 'high" -c sandbox_mode="danger-full-access',
-        conversation: "--last",
-      }),
-    ).toEqual(turn());
-    expect(turn({ model: "gpt 6", effort: "", conversation: "../another" })).toEqual(turn());
-  });
-
-  it("hands a turn its message on the standard input, in the desk, with what the session was handed", async () => {
-    const { session, turn, said } = started({ model: "gpt-6-luna", effort: "low" });
-    await session.send(message("[console k3f9a2 #1 · tell · Jane · 14:02]\nLook at this."));
-    const first = await turn(0);
-    await until("the message", () => first.ended);
-    expect(first.sent).toEqual(["[console k3f9a2 #1 · tell · Jane · 14:02]\nLook at this."]);
-    expect(first.options).toEqual({
-      cwd: "/home/mira/desk",
-      env: { GIT_TOKEN: "not-a-real-token" },
+  it("starts the unmodified binary as its app server, once for a session, and begins a thread in the desk", async () => {
+    const { product, sent, answers, opens, said, processes, session } = started({
+      model: "gpt-6-luna",
+      effort: "low",
     });
-    expect(first.args).toEqual(
-      codexArguments({
-        model: "gpt-6-luna",
-        effort: "low",
-        permissions: undefined,
-        conversation: undefined,
-      }),
-    );
-    first.says(...BEGAN, answers("item_0", "ready"), COMPLETED);
-    first.exits(0);
-    expect(await said(5)).toEqual([
-      { type: "running", model: "gpt-6-luna", effort: "low", version: null },
+    expect(product.args).toEqual(["app-server"]);
+    expect(product.options).toEqual({ cwd: DESK, env: { GIT_TOKEN: "not-a-real-token" } });
+    const settings = await opens(opened({ model: "gpt-6-luna" }));
+    // The product leaves the protocol's version out on the wire, and is written to without.
+    expect(sent().every((one) => one.jsonrpc === undefined)).toBe(true);
+    expect(sent()[0]).toEqual({
+      id: 0,
+      method: "initialize",
+      params: {
+        clientInfo: {
+          name: "skillcdn-console-runner",
+          title: "SkillCDN Console runner",
+          version: "0.6.4",
+        },
+        // Nothing that is still an experiment, and no block a piece at a time.
+        capabilities: {
+          experimentalApi: false,
+          optOutNotificationMethods: expect.arrayContaining([
+            "item/agentMessage/delta",
+            "item/commandExecution/outputDelta",
+          ]),
+        },
+      },
+    });
+    expect(sent()[1]).toEqual({ method: "initialized" });
+    // The mode where the desk names none, and the model the account's settings name; the
+    // effort is said with a turn.
+    expect(settings).toEqual({ cwd: DESK, ...REVIEWED, model: "gpt-6-luna" });
+    expect(await said(3)).toEqual([
       { type: "conversation", id: THREAD },
+      // What the product says it runs with, and its own version.
+      { type: "running", model: "gpt-6-luna", effort: null, version: "0.172.0" },
       {
         type: "event",
         kind: "status",
         text: "The product started.",
-        data: { model: "gpt-6-luna", effort: "low", version: null, mode: "approve-for-me" },
+        data: { model: "gpt-6-luna", effort: null, version: "0.172.0", mode: "approve-for-me" },
       },
-      { type: "event", kind: "assistant", text: "ready" },
-      { type: "turn_completed" },
     ]);
-    // The next message goes on with the conversation the first turn named, and says nothing
-    // again of how the product runs.
-    await session.send(message("And this."));
-    const second = await turn(1);
-    expect(second.args.slice(0, 2)).toEqual(["exec", "resume"]);
-    expect(second.args.slice(-2)).toEqual([THREAD, "-"]);
-    second.says(...BEGAN, answers("item_0", "seen"), COMPLETED);
-    second.exits(0);
-    expect((await said(7)).slice(5)).toEqual([
-      { type: "event", kind: "assistant", text: "seen" },
-      { type: "turn_completed" },
-    ]);
+
+    // One process for the session, whatever it is sent: a turn starts no other.
+    await session.send(message("Go."));
+    await answers("turn/start", { turn: turnOf(TURN) });
+    expect(processes).toHaveLength(1);
   });
 
-  it("hands a turn the pictures of its message as files, each under the product's own option, before what takes nothing", async () => {
-    // Seen with the binary (0.167.0): `codex exec -i <file>` and `codex exec resume -i <file>`
-    // attach a picture to the prompt, and the product described the ones it was handed.
-    const picture = (name: string, path?: string) => ({
-      name,
-      contentType: "image/png",
-      bytes: Uint8Array.from([1]),
-      ...(path === undefined ? {} : { path }),
+  it("says the mode the desk names in the product's own words, whole, and never reads another word as leave to do more", async () => {
+    const settingsOf = async (permissions: string | undefined, over: Partial<StartOptions> = {}) =>
+      started({ permissions, ...over }).opens();
+    const unattended = { approvalPolicy: "never", approvalsReviewer: "user" };
+    expect(await settingsOf(undefined)).toEqual({ cwd: DESK, ...REVIEWED });
+    expect(await settingsOf("approve-for-me")).toEqual({ cwd: DESK, ...REVIEWED });
+    // Whatever a sandbox does not allow is asked of nobody.
+    expect(await settingsOf("read-only")).toEqual({
+      cwd: DESK,
+      sandbox: "read-only",
+      ...unattended,
     });
-    const { session, turn } = started();
-    await session.send({
-      text: "Look at these.",
-      priority: "next",
-      images: [
-        picture("screen.png", "work/inbox/7/screen.png"),
-        picture("보고서 (최종).png", "work/inbox/7/보고서 (최종).png"),
-        // A picture with no file in the desk cannot be handed over this way, and is left out.
-        picture("lost.png"),
-      ],
+    expect(await settingsOf("workspace-write")).toEqual({
+      cwd: DESK,
+      sandbox: "workspace-write",
+      ...unattended,
     });
-    const first = await turn(0);
-    await until("the message", () => first.ended);
-    expect(first.args.slice(0, 6)).toEqual([
-      "exec",
-      "-i",
-      "work/inbox/7/screen.png",
-      "-i",
-      "work/inbox/7/보고서 (최종).png",
-      "--json",
-    ]);
-    // The message is still read from the standard input, last.
-    expect(first.args.at(-1)).toBe("-");
-    expect(first.sent).toEqual(["Look at these."]);
-    first.says(...BEGAN, answers("item_0", "seen"), COMPLETED);
-    first.exits(0);
-    // The turn after goes on with the conversation, and its pictures come after `resume`.
-    await until("the first turn's end", () => first.ended);
-    await session.send({
-      text: "And this.",
-      priority: "next",
-      images: [picture("next.png", "work/inbox/8/next.png")],
+    expect(await settingsOf("danger-full-access")).toEqual({
+      cwd: DESK,
+      sandbox: "danger-full-access",
+      ...unattended,
     });
-    const second = await turn(1);
-    expect(second.args.slice(0, 5)).toEqual([
-      "exec",
-      "resume",
-      "-i",
-      "work/inbox/8/next.png",
-      "--json",
-    ]);
-    // Only a path the runner wrote under the desk's inbox goes on the command line: nothing
-    // that begins as an option, leaves the inbox, or names no file.
-    for (const path of [
-      "--dangerously-bypass-approvals-and-sandbox",
-      "-c",
-      "work/inbox/7/../../../.ssh/id",
-      "/etc/passwd",
-      "work/inbox/7/..",
-      "work/inbox/x/a.png",
-      "work/inbox/7/a/b.png",
-      "work/inbox/7/a\\b.png",
-      "",
-    ]) {
-      expect(
-        codexArguments({
-          model: null,
-          effort: null,
-          permissions: undefined,
-          conversation: undefined,
-          images: [path],
-        }),
-        path,
-      ).toEqual(
-        codexArguments({
-          model: null,
-          effort: null,
-          permissions: undefined,
-          conversation: undefined,
-        }),
-      );
-    }
+    // A mode that is none of the product's is the one that allows the least.
+    expect(await settingsOf("everything")).toEqual(await settingsOf("read-only"));
+    expect(await settingsOf("Danger-Full-Access")).toEqual(await settingsOf("read-only"));
+    // What is no word for a model is left out, and so is one for an effort, said with a turn.
+    const odd = started({ model: "gpt 6\n--dangerous", effort: 'high", "sandbox": "x' });
+    expect(await odd.opens()).toEqual({ cwd: DESK, ...REVIEWED });
+    await odd.session.send(message("Go."));
+    expect(await odd.answers("turn/start", { turn: turnOf(TURN) })).toEqual({
+      threadId: THREAD,
+      clientUserMessageId: "m-1",
+      input: [textOf("Go.")],
+    });
   });
 
   it("goes on with the conversation a session before left, where it names one", async () => {
-    const { session, turn } = started({ resume: THREAD });
-    await session.send(message("Go on."));
-    expect((await turn(0)).args).toEqual(
-      codexArguments({
-        model: null,
-        effort: null,
-        permissions: undefined,
-        conversation: THREAD,
-      }),
-    );
+    const { answers, said, count } = started({ resume: THREAD, permissions: "workspace-write" });
+    await answers("initialize", INITIALIZED);
+    // Gone on with in the mode the desk names now, and without its history said again.
+    expect(await answers("thread/resume", opened({ reasoningEffort: "high" }))).toEqual({
+      threadId: THREAD,
+      cwd: DESK,
+      sandbox: "workspace-write",
+      approvalPolicy: "never",
+      approvalsReviewer: "user",
+      excludeTurns: true,
+    });
+    expect((await said(3)).slice(0, 2)).toEqual([
+      { type: "conversation", id: THREAD },
+      // A thread keeps what it last ran with, and says so.
+      { type: "running", model: "gpt-6-sol", effort: "high", version: "0.172.0" },
+    ]);
+    expect(count("thread/start")).toBe(0);
+
+    // An id that is no word is no conversation to go on with.
+    const odd = started({ resume: "../another thread" });
+    await odd.opens();
+    expect(odd.count("thread/resume")).toBe(0);
   });
 
-  it("reads what the product does as whole blocks, a line each, until the turn completes", async () => {
-    const { session, turn, said } = started();
-    await session.send(message("Cut the release."));
-    const first = await turn(0);
-    first.says(
-      ...BEGAN,
-      answers("item_0", "I will check the notes, then patch them."),
-      {
-        type: "item.started",
-        item: {
-          id: "item_1",
-          type: "command_execution",
-          command: "/bin/bash -lc 'cat notes.txt'",
-          aggregated_output: "",
-          exit_code: null,
-          status: "in_progress",
-        },
-      },
-      {
-        type: "item.completed",
-        item: {
-          id: "item_1",
-          type: "command_execution",
-          command: "/bin/bash -lc 'cat notes.txt'",
-          aggregated_output: "hello\n",
-          exit_code: 0,
-          status: "completed",
-        },
-      },
-      {
-        type: "item.started",
-        item: {
-          id: "item_2",
-          type: "file_change",
-          changes: [
-            { path: "/home/mira/desk/a.txt", kind: "add" },
-            { path: "/home/mira/desk/notes.txt", kind: "update" },
-          ],
-          status: "in_progress",
-        },
-      },
-      {
-        type: "item.completed",
-        item: {
-          id: "item_2",
-          type: "file_change",
-          changes: [
-            { path: "/home/mira/desk/a.txt", kind: "add" },
-            { path: "/home/mira/desk/notes.txt", kind: "update" },
-          ],
-          status: "completed",
-        },
-      },
-      // A command the product wrote no beginning of, which ended in something other than 0.
-      {
-        type: "item.completed",
-        item: {
-          id: "item_3",
-          type: "command_execution",
-          command: "/bin/bash -lc 'exit 3'",
-          aggregated_output: "",
-          exit_code: 3,
-          status: "failed",
-        },
-      },
-      answers("item_4", "done"),
-      COMPLETED,
+  it("asks a build that takes no word against the history again without it (seen with 0.139.0)", async () => {
+    const { answers, refuses, said } = started({ resume: THREAD });
+    await answers("initialize", INITIALIZED);
+    await refuses(
+      "thread/resume",
+      "thread/resume.excludeTurns requires experimentalApi capability",
     );
-    first.exits(0);
-    expect((await said(12)).slice(3)).toEqual([
-      { type: "event", kind: "assistant", text: "I will check the notes, then patch them." },
-      {
-        type: "event",
-        kind: "tool_call",
-        text: "/bin/bash -lc 'cat notes.txt'",
-        data: { tool: "command_execution", id: "item_1" },
-      },
-      {
-        type: "event",
-        kind: "tool_result",
-        text: "hello\n",
-        data: { id: "item_1", error: false, exit: 0 },
-        pictures: [],
-      },
-      {
-        type: "event",
-        kind: "tool_call",
-        text: "add /home/mira/desk/a.txt\nupdate /home/mira/desk/notes.txt",
-        data: { tool: "file_change", id: "item_2" },
-      },
-      {
-        type: "event",
-        kind: "tool_result",
-        text: "",
-        data: { id: "item_2", error: false },
-        pictures: [],
-      },
-      {
-        type: "event",
-        kind: "tool_call",
-        text: "/bin/bash -lc 'exit 3'",
-        data: { tool: "command_execution", id: "item_3" },
-      },
-      {
-        type: "event",
-        kind: "tool_result",
-        text: "",
-        data: { id: "item_3", error: true, exit: 3 },
-        pictures: [],
-      },
-      { type: "event", kind: "assistant", text: "done" },
+    expect(await answers("thread/resume", opened())).toEqual({
+      threadId: THREAD,
+      cwd: DESK,
+      ...REVIEWED,
+    });
+    expect((await said(3)).at(0)).toEqual({ type: "conversation", id: THREAD });
+  });
+
+  it("begins a new conversation where the product has the one it had no more, and says so", async () => {
+    const another = "0199c4d8-0000-7000-8000-0000000000c2";
+    const { answers, refuses, said } = started({ resume: THREAD });
+    await answers("initialize", INITIALIZED);
+    // As the binary answered for a thread it does not keep (0.172.0).
+    await refuses("thread/resume", `no rollout found for thread id ${THREAD}`);
+    await answers("thread/start", opened({ thread: { id: another, cliVersion: "0.172.0" } }));
+    expect(shapes(await said(4)).slice(0, 2)).toEqual([
+      ["status", "The product could not go on with the conversation it had (no", undefined],
+      "conversation",
+    ]);
+    expect((await said(4)).at(1)).toEqual({ type: "conversation", id: another });
+  });
+
+  it("starts a turn with a message, and says it taken when the product says it back", async () => {
+    const { session, product, opens, answers, said, taken } = started({
+      model: "gpt-6-luna",
+      effort: "low",
+    });
+    await opens(opened({ model: "gpt-6-luna" }));
+    const told = "[console k3f9a2 #1 · tell · Jane · 14:02]\nSay hello.";
+    await session.send(message(told));
+    expect(await answers("turn/start", { turn: turnOf(TURN) })).toEqual({
+      threadId: THREAD,
+      clientUserMessageId: "m-1",
+      input: [textOf(told)],
+      model: "gpt-6-luna",
+      effort: "low",
+    });
+    // The effort the account's settings name is said with the turn, and the session says so.
+    expect((await said(4)).at(3)).toEqual({
+      type: "running",
+      model: "gpt-6-luna",
+      effort: "low",
+      version: "0.172.0",
+    });
+    // Handed over, and not taken until the product says so.
+    product.says(turnStarted(TURN));
+    await tick();
+    expect(taken.count).toBe(0);
+    product.says(...saidBack("m-1", told));
+    await until("the message to be taken", () => taken.count === 1);
+    product.says(answer("item-1", "Hello."), turnCompleted(TURN));
+    expect((await said(6)).slice(4)).toEqual([
+      { type: "event", kind: "assistant", text: "Hello." },
       { type: "turn_completed" },
+    ]);
+    // Said back at its beginning and at its end: taken once.
+    expect(taken.count).toBe(1);
+  });
+
+  it("hands a message its pictures as files of the desk, by the paths the runner wrote them at", async () => {
+    const picture = (path: string | undefined) => ({
+      name: "screen.png",
+      contentType: "image/png",
+      bytes: new Uint8Array([1, 2, 3]),
+      path,
+    });
+    const { session, product, opens, answers } = started({ cwd: `${DESK}/` });
+    await opens();
+    await session.send({
+      text: "Look at these.",
+      images: [
+        picture("work/inbox/8812/screen.png"),
+        picture("work/inbox/8812/second shot.png"),
+        // A picture a tool returned has no path, and what is no file the runner wrote is none
+        // the product is handed: another file of the machine, or a folder's own name.
+        picture(undefined),
+        picture("/etc/passwd"),
+        picture("work/inbox/8812/../../../secret.png"),
+        picture("work/inbox/8812/.."),
+        picture("work/inbox/0/zero.png"),
+        picture("--dangerously-bypass-approvals-and-sandbox"),
+      ],
+      priority: "next",
+    });
+    expect((await answers("turn/start", { turn: turnOf(TURN) })).input).toEqual([
+      textOf("Look at these."),
+      { type: "localImage", path: `${DESK}/work/inbox/8812/screen.png` },
+      { type: "localImage", path: `${DESK}/work/inbox/8812/second shot.png` },
+    ]);
+    // One put into the turn under way carries its pictures the same way.
+    product.says(turnStarted(TURN));
+    await session.send({
+      text: "And this.",
+      images: [picture("work/inbox/8813/third.png")],
+      priority: "next",
+    });
+    expect((await answers("turn/steer", { turnId: TURN })).input).toEqual([
+      textOf("And this."),
+      { type: "localImage", path: `${DESK}/work/inbox/8813/third.png` },
     ]);
   });
 
-  it("reads what the product prints as data, whatever it is, and runs none of it", async () => {
-    const { session, turn, said } = started();
+  it("reads what the product does as whole blocks, a message each, until the turn completes", async () => {
+    const { session, product, opens, answers, said } = started();
+    await opens();
+    await session.send(message("Cut the release."));
+    await answers("turn/start", { turn: turnOf(TURN) });
+    const command = {
+      type: "commandExecution",
+      id: "call_1",
+      command: "/bin/bash -lc 'cat notes.txt'",
+      cwd: DESK,
+      status: "inProgress",
+      aggregatedOutput: null,
+      exitCode: null,
+    };
+    const change = {
+      type: "fileChange",
+      id: "call_2",
+      changes: [
+        { path: `${DESK}/a.txt`, kind: { type: "add" }, diff: "+a\n" },
+        { path: `${DESK}/notes.txt`, kind: { type: "update", move_path: null }, diff: "@@\n" },
+      ],
+      status: "inProgress",
+    };
+    product.says(
+      turnStarted(TURN),
+      ...saidBack("m-1", "Cut the release."),
+      // A block as it begins says nothing: its end is the block.
+      itemOf("item/started", { type: "agentMessage", id: "item_0", text: "" }),
+      answer("item_0", "I will check the notes, then patch them."),
+      itemOf("item/completed", {
+        type: "reasoning",
+        id: "item_r",
+        summary: ["The notes are short."],
+        content: [],
+      }),
+      itemOf("item/started", command),
+      itemOf("item/completed", {
+        ...command,
+        status: "completed",
+        aggregatedOutput: "hello\n",
+        exitCode: 0,
+      }),
+      itemOf("item/started", change),
+      itemOf("item/completed", { ...change, status: "completed" }),
+      itemOf("item/started", { ...command, id: "call_3", command: "false" }),
+      itemOf("item/completed", {
+        ...command,
+        id: "call_3",
+        command: "false",
+        status: "failed",
+        aggregatedOutput: "",
+        exitCode: 1,
+      }),
+      // A call its sandbox or its reviewer did not let run.
+      itemOf("item/completed", {
+        ...command,
+        id: "call_4",
+        command: "rm -rf /",
+        status: "declined",
+      }),
+      itemOf("item/completed", {
+        type: "mcpToolCall",
+        id: "call_5",
+        server: "board",
+        tool: "search",
+        status: "completed",
+        arguments: { query: "release" },
+        result: { content: [{ type: "text", text: "Two tasks." }], structuredContent: null },
+        error: null,
+      }),
+      itemOf("item/completed", {
+        type: "mcpToolCall",
+        id: "call_6",
+        server: "board",
+        tool: "write",
+        status: "failed",
+        arguments: {},
+        result: null,
+        error: { message: "not allowed" },
+      }),
+      itemOf("item/completed", { type: "webSearch", id: "call_7", query: "release notes" }),
+      answer("item_9", "Done."),
+      turnCompleted(TURN),
+    );
+    expect(shapes((await said(20)).slice(3))).toEqual([
+      ["assistant", "I will check the notes, then patch them.", undefined],
+      ["thinking", "The notes are short.", undefined],
+      ["tool_call", "/bin/bash -lc 'cat notes.txt'", { tool: "command_execution", id: "call_1" }],
+      ["tool_result", "hello\n", { id: "call_1", error: false, exit: 0 }],
+      [
+        "tool_call",
+        `add ${DESK}/a.txt\nupdate ${DESK}/notes.txt`,
+        { tool: "file_change", id: "call_2" },
+      ],
+      ["tool_result", "", { id: "call_2", error: false }],
+      ["tool_call", "false", { tool: "command_execution", id: "call_3" }],
+      ["tool_result", "", { id: "call_3", error: true, exit: 1 }],
+      // A call the product wrote no beginning of is said with its end.
+      ["tool_call", "rm -rf /", { tool: "command_execution", id: "call_4" }],
+      ["tool_result", "", { id: "call_4", error: true }],
+      ["tool_call", '{"query":"release"}', { tool: "board.search", id: "call_5" }],
+      [
+        "tool_result",
+        '{"content":[{"type":"text","text":"Two tasks."}],"structured',
+        { id: "call_5", error: false },
+      ],
+      ["tool_call", "{}", { tool: "board.write", id: "call_6" }],
+      ["tool_result", "not allowed", { id: "call_6", error: true }],
+      ["tool_call", "release notes", { tool: "web_search", id: "call_7" }],
+      ["assistant", "Done.", undefined],
+      "turn_completed",
+    ]);
+  });
+
+  it("reads what the product writes as data, whatever it is, and runs none of it", async () => {
+    const { session, product, opens, answers, said, taken } = started();
+    await opens();
     await session.send(message("Go."));
-    const first = await turn(0);
-    first.says(
+    await answers("turn/start", { turn: turnOf(TURN) });
+    const elsewhere = "0199c4d8-0000-7000-8000-0000000000ff";
+    product.says(
       "",
       "not json at all",
       "[1,2,3]",
-      '{"type":42}',
-      '{"no":"type"}',
-      { type: "thread.started" },
-      { type: "item.completed" },
-      { type: "item.completed", item: "a string" },
-      { type: "item.completed", item: { type: "agent_message" } },
-      { type: "item.completed", item: { type: "something_new", text: "ignored" } },
-      { type: "item.started", item: { type: "agent_message", text: "not said twice" } },
-      { type: "something.else", text: "ignored" },
-      // In the shapes the product's documentation gives: its reasoning, a tool of a server, a search.
+      '{"method":42}',
+      '{"no":"method"}',
+      // An answer to nothing that was asked.
+      { id: 999, result: { turn: turnOf(NEXT_TURN) } },
+      { method: "item/completed" },
+      { method: "item/completed", params: "a string" },
+      { method: "item/completed", params: { threadId: THREAD } },
+      { method: "item/completed", params: { threadId: THREAD, item: "a string" } },
+      { method: "item/completed", params: { threadId: THREAD, item: { type: "agentMessage" } } },
+      itemOf("item/completed", { type: "agentMessage", id: "a", text: 42 }),
+      itemOf("item/completed", { type: "reasoning", id: "r", summary: "none", content: [7, null] }),
+      itemOf("item/completed", { type: "somethingNew", id: "n", text: "ignored" }),
+      itemOf("item/completed", { type: "__proto__", id: "p", text: "ignored" }),
+      { method: "something/else", params: { threadId: THREAD, text: "ignored" } },
+      { method: "turn/started", params: { threadId: THREAD } },
+      // A message said back that is none the driver handed over.
+      ...saidBack("someone-else", "Not mine."),
+      itemOf("item/completed", { type: "userMessage", id: "u", clientId: { $ne: null } }),
+      // Another thread of the product's, an agent's it started say: its blocks are not this
+      // session's, and its turn's end is not this turn's.
       {
-        type: "item.completed",
-        item: { id: "r1", type: "reasoning", text: "The notes are short." },
-      },
-      {
-        type: "item.completed",
-        item: {
-          id: "m1",
-          type: "mcp_tool_call",
-          server: "board",
-          tool: "search",
-          arguments: { query: "release" },
-          result: { content: [{ type: "text", text: "Two tasks." }] },
-          status: "completed",
+        method: "item/completed",
+        params: {
+          threadId: elsewhere,
+          turnId: TURN,
+          item: { type: "agentMessage", id: "x", text: "Said elsewhere." },
         },
       },
       {
-        type: "item.completed",
-        item: {
-          id: "m2",
-          type: "mcp_tool_call",
-          server: "board",
-          tool: "write",
-          error: { message: "not allowed" },
-          status: "failed",
-        },
+        method: "turn/completed",
+        params: { threadId: elsewhere, turn: turnOf(TURN, "completed") },
       },
-      { type: "item.completed", item: { id: "w1", type: "web_search", query: "release notes" } },
-      // A word of warning inside a turn, and a tool's input shown bounded.
-      {
-        type: "item.completed",
-        item: { id: "e1", type: "error", message: "A model's data is not found." },
-      },
-      {
-        type: "item.completed",
-        item: { type: "command_execution", command: "x".repeat(9000), exit_code: 0 },
-      },
-      COMPLETED,
+      { method: "turn/completed", params: { turn: turnOf(TURN, "completed") } },
+      // The end of a turn that is not the one under way.
+      turnCompleted(NEXT_TURN),
+      // A tool's input shown bounded, and markup kept as the text it is.
+      itemOf("item/completed", {
+        type: "commandExecution",
+        command: "x".repeat(9000),
+        exitCode: 0,
+      }),
+      answer("item_1", "<img src=x onerror=alert(1)>"),
     );
-    first.exits(0);
-    const events = (await said(12)).slice(1);
-    expect(
-      events.map((event) =>
-        event.type === "event" ? [event.kind, event.text.slice(0, 40), event.data] : event.type,
-      ),
-    ).toEqual([
-      // A conversation the product did not name is none to go on with.
-      [
-        "status",
-        "The product started.",
-        { model: null, effort: null, version: null, mode: "approve-for-me" },
-      ],
-      ["thinking", "The notes are short.", undefined],
-      ["tool_call", '{"query":"release"}', { tool: "board.search", id: "m1" }],
-      ["tool_result", '{"content":[{"type":"text","text":"Two t', { id: "m1", error: false }],
-      ["tool_call", "", { tool: "board.write", id: "m2" }],
-      ["tool_result", "not allowed", { id: "m2", error: true }],
-      ["tool_call", "release notes", { tool: "web_search", id: "w1" }],
-      ["error", "A model's data is not found.", undefined],
-      ["tool_call", "x".repeat(40), { tool: "command_execution", id: null }],
+    const events = (await said(6)).slice(3);
+    expect(shapes(events)).toEqual([
+      ["tool_call", "x".repeat(60), { tool: "command_execution", id: null }],
       ["tool_result", "", { id: null, error: false, exit: 0 }],
-      "turn_completed",
+      ["assistant", "<img src=x onerror=alert(1)>", undefined],
     ]);
     const long = events.find((event) => event.type === "event" && event.text.startsWith("xxx"));
     expect((long as { text: string }).text.length).toBeLessThan(4100);
+    // Nothing of it took the message, and nothing of it ended the turn.
+    expect(taken.count).toBe(0);
+    product.says(turnCompleted(TURN));
+    expect((await said(7)).at(6)).toEqual({ type: "turn_completed" });
+    // A turn began with its message, which is the product's from then on.
+    expect(taken.count).toBe(1);
   });
 
   it("cuts what it shows of a call with what it was handed to cut with, and never by itself first", async () => {
     // What the runner hands a session takes the account's secrets out before it cuts: the
     // driver hands it a command, a tool's arguments and what a tool answered whole.
     const asked: { length: number; most: number }[] = [];
-    const { session, turn, said } = started({
+    const { session, product, opens, answers, said } = started({
       cut: (text, most) => {
         asked.push({ length: text.length, most });
         return text.length > most ? `[cut to ${most} of ${text.length}]` : text;
       },
     });
+    await opens();
     await session.send(message("Go."));
-    const first = await turn(0);
-    first.says(
-      ...BEGAN,
-      {
-        type: "item.completed",
-        item: { type: "command_execution", command: "x".repeat(1_000_000), exit_code: 0 },
-      },
-      {
-        type: "item.completed",
-        item: {
-          id: "m1",
-          type: "mcp_tool_call",
-          server: "board",
-          tool: "search",
-          arguments: { query: "q".repeat(9000) },
-          result: { content: [{ type: "text", text: "r".repeat(9000) }] },
-          status: "completed",
-        },
-      },
-      COMPLETED,
+    await answers("turn/start", { turn: turnOf(TURN) });
+    product.says(
+      itemOf("item/completed", {
+        type: "commandExecution",
+        command: "x".repeat(1_000_000),
+        exitCode: 0,
+      }),
+      itemOf("item/completed", {
+        type: "mcpToolCall",
+        id: "m1",
+        server: "board",
+        tool: "search",
+        arguments: { query: "q".repeat(9000) },
+        result: { content: [{ type: "text", text: "r".repeat(9000) }] },
+        status: "completed",
+      }),
+      turnCompleted(TURN),
     );
-    first.exits(0);
-    const events = await said(7);
+    const events = await said(8);
     const texts = events.flatMap((event) => (event.type === "event" ? [event.text] : []));
     expect(texts).toContain("[cut to 4000 of 1000000]");
     expect(texts.filter((text) => text.startsWith("[cut to 4000 of 90"))).toHaveLength(2);
@@ -629,258 +755,599 @@ describe("the codex driver", () => {
     expect(asked.map((one) => one.length)).toContain(1_000_000);
   });
 
-  it("keeps the end of what the product wrote on its standard error with what it was handed to keep it with", async () => {
-    // What the process kept the end of begins with the mark of a cut: the runner is told so,
-    // and shows nothing of a secret its beginning may end.
-    const asked: { length: number; most: number; more: boolean | undefined }[] = [];
-    const { session, turn, said } = started({
-      cutEnd: (text, most, more) => {
-        asked.push({ length: text.length, most, more });
-        return `[the end, ${most} at most]`;
-      },
+  it("puts a message that arrives while a turn runs into that turn, and says it taken when the product reads it", async () => {
+    const { session, product, opens, answers, said, taken, count } = started();
+    await opens();
+    await session.send(message("Run the tests."));
+    await answers("turn/start", { turn: turnOf(TURN) });
+    product.says(
+      turnStarted(TURN),
+      ...saidBack("m-1", "Run the tests."),
+      itemOf("item/started", { type: "commandExecution", id: "call_1", command: "pnpm test" }),
+    );
+    await until("the first message to be taken", () => taken.count === 1);
+
+    // While the command runs, a supervisor says something, and then something more.
+    await session.send(message("Skip the slow ones."));
+    await session.send(message("And say how long it took."));
+    const steered = await answers("turn/steer", { turnId: TURN });
+    // Into the turn the driver knows to be under way, under an id the product says back.
+    expect(steered).toEqual({
+      threadId: THREAD,
+      expectedTurnId: TURN,
+      clientUserMessageId: "m-2",
+      input: [textOf("Skip the slow ones.")],
     });
-    await session.send(message("Go."));
-    const gone = await turn(0);
-    gone.says(...BEGAN);
-    gone.writes(`${String.fromCodePoint(0x2026)}${"e".repeat(16_000)}\n`);
-    gone.exits(101);
+    // One at a time, in the order they arrived: the second follows the first one's answer.
+    expect((await answers("turn/steer", { turnId: TURN })).clientUserMessageId).toBe("m-3");
+    // Put in is not read: the product reads them when the command is done, and says so.
+    await tick();
+    expect(taken.count).toBe(1);
+    product.says(
+      itemOf("item/completed", {
+        type: "commandExecution",
+        id: "call_1",
+        command: "pnpm test",
+        aggregatedOutput: "ok\n",
+        exitCode: 0,
+        status: "completed",
+      }),
+      ...saidBack("m-2", "Skip the slow ones."),
+    );
+    await until("the second message to be taken", () => taken.count === 2);
+    product.says(...saidBack("m-3", "And say how long it took."));
+    await until("the third message to be taken", () => taken.count === 3);
+    product.says(answer("item_2", "Skipped them: four seconds."), turnCompleted(TURN));
+    expect(shapes((await said(7)).slice(3))).toEqual([
+      ["tool_call", "pnpm test", { tool: "command_execution", id: "call_1" }],
+      ["tool_result", "ok\n", { id: "call_1", error: false, exit: 0 }],
+      ["assistant", "Skipped them: four seconds.", undefined],
+      // One turn took all three: the agent is done once, when nothing waits.
+      "turn_completed",
+    ]);
+    expect(count("turn/start")).toBe(1);
+    expect(count("turn/interrupt")).toBe(0);
+  });
+
+  it("keeps a message the product took into no turn for the turn after, first of what waits", async () => {
+    const { session, product, opens, answers, refuses, said, taken, count } = started();
+    await opens();
+    await session.send(message("Run the tests."));
+    await answers("turn/start", { turn: turnOf(TURN) });
+    product.says(turnStarted(TURN), ...saidBack("m-1", "Run the tests."));
+    await until("the first message to be taken", () => taken.count === 1);
+
+    // The turn was over when the message arrived, as the binary answers then (0.172.0).
+    await session.send(message("One more thing."));
+    await refuses("turn/steer", "no active turn to steer");
+    // Nothing more is put into a turn that took none: what arrives waits for its end.
+    await session.send(message("And another."));
+    await tick();
+    await tick();
+    expect(count("turn/steer")).toBe(1);
+    expect(count("turn/start")).toBe(1);
+    product.says(turnCompleted(TURN));
+    // Read together, in the order they arrived; the agent is not done while they wait.
+    expect(await answers("turn/start", { turn: turnOf(NEXT_TURN) })).toEqual({
+      threadId: THREAD,
+      clientUserMessageId: "m-3",
+      input: [textOf("One more thing.\n\nAnd another.")],
+    });
+    expect(await said(3)).toHaveLength(3);
+    product.says(
+      turnStarted(NEXT_TURN),
+      ...saidBack("m-3", "One more thing.\n\nAnd another.", NEXT_TURN),
+      turnCompleted(NEXT_TURN),
+    );
+    expect((await said(4)).at(3)).toEqual({ type: "turn_completed" });
+    expect(taken.count).toBe(3);
+  });
+
+  it("sends again a message that was put into a turn and never read, where the turn was stopped first (seen with 0.139.0)", async () => {
+    const { session, product, opens, answers, request, said, taken } = started();
+    await opens();
+    await session.send(message("Run the tests."));
+    await answers("turn/start", { turn: turnOf(TURN) });
+    product.says(turnStarted(TURN), ...saidBack("m-1", "Run the tests."));
+    await until("the first message to be taken", () => taken.count === 1);
+
+    // Put in, as the product answers, and not read yet: the step under way goes on.
+    await session.send(message("Skip the slow ones."));
+    await answers("turn/steer", { turnId: TURN });
+    // A message that is to be read now stops the turn: the product lets go of what it had
+    // not read, and says so in no word.
+    await session.send(message("Stop, and read this.", "now"));
+    expect((await request("turn/interrupt")).params).toEqual({ threadId: THREAD, turnId: TURN });
+    product.says(turnCompleted(TURN, "interrupted"));
     expect((await said(4)).at(3)).toEqual({
       type: "event",
-      kind: "error",
-      text: "The product's process ended with code 101 before the turn did.\n[the end, 4000 at most]",
+      kind: "status",
+      text: "The turn was stopped for a message.",
     });
-    expect(asked).toEqual([{ length: 16_000, most: 4000, more: true }]);
+    // The one that was never read goes first, and the one the turn was stopped for after it.
+    expect(await answers("turn/start", { turn: turnOf(NEXT_TURN) })).toEqual({
+      threadId: THREAD,
+      clientUserMessageId: "m-3",
+      input: [textOf("Skip the slow ones.\n\nStop, and read this.")],
+    });
+    // Neither was taken before the product said so.
+    expect(taken.count).toBe(1);
+    product.says(
+      ...saidBack("m-3", "Skip the slow ones.\n\nStop, and read this.", NEXT_TURN),
+      turnCompleted(NEXT_TURN),
+    );
+    expect((await said(5)).at(4)).toEqual({ type: "turn_completed" });
+    expect(taken.count).toBe(3);
   });
 
-  it("keeps a message that arrives while a turn runs for the turn after, and says the agent done when nothing waits", async () => {
-    const { session, turn, turns, said, taken } = started();
+  it("puts a message that arrives as a turn is being started into it once the product named the turn", async () => {
+    const { session, product, opens, answers, said, taken, count } = started();
+    await opens();
     await session.send(message("Run the tests."));
-    const first = await turn(0);
-    first.says(...BEGAN);
-    await until("the first message to be taken", () => taken.count === 1);
-    // The product takes no message in a turn: two that arrive wait, and no process is started.
-    await session.send(message("And say which failed."));
-    await session.send(message("Then stop."));
+    await session.send(message("Also the linter."));
     await tick();
-    expect(turns).toHaveLength(1);
-    expect(first.killed).toEqual([]);
-    // What waits is not said taken: the record has it where the agent comes to it.
-    expect(taken.count).toBe(1);
-    first.says(answers("item_0", "All passed."), COMPLETED);
-    first.exits(0);
-    // The first turn's end is not the agent done: what waited is the next turn's, read together.
-    const second = await turn(1);
-    await until("the message", () => second.ended);
-    expect(second.sent).toEqual(["And say which failed.\n\nThen stop."]);
-    expect(second.args.slice(0, 2)).toEqual(["exec", "resume"]);
-    expect(taken.count).toBe(1);
-    second.says(...BEGAN, answers("item_0", "None failed."), COMPLETED);
-    // Each of the two is said taken once the product says that their turn started.
-    await until("the two that waited to be taken", () => taken.count === 3);
-    second.exits(0);
-    expect((await said(6)).slice(3)).toEqual([
-      { type: "event", kind: "assistant", text: "All passed." },
-      { type: "event", kind: "assistant", text: "None failed." },
-      { type: "turn_completed" },
+    await tick();
+    // One request at a time, in order: the second waits for the first one's answer.
+    expect(count("turn/start")).toBe(1);
+    expect(count("turn/steer")).toBe(0);
+    expect((await answers("turn/start", { turn: turnOf(TURN) })).input).toEqual([
+      textOf("Run the tests."),
     ]);
+    expect(await answers("turn/steer", { turnId: TURN })).toEqual({
+      threadId: THREAD,
+      expectedTurnId: TURN,
+      clientUserMessageId: "m-2",
+      input: [textOf("Also the linter.")],
+    });
+    product.says(
+      ...saidBack("m-1", "Run the tests."),
+      ...saidBack("m-2", "Also the linter."),
+      turnCompleted(TURN),
+    );
+    expect((await said(4)).at(3)).toEqual({ type: "turn_completed" });
+    expect(taken.count).toBe(2);
   });
 
-  it("ends the turn's process for a message that is to be read now, and for an interrupt", async () => {
-    const { session, turn, said } = started();
-    await session.send(message("Run the tests."));
-    const first = await turn(0);
-    first.says(...BEGAN);
-    await session.send(message("Stop that.", "now"));
-    await until("the turn's process to be ended", () => first.killed.length === 1);
-    expect(first.killed).toEqual(["SIGTERM"]);
-    // One that arrives while it ends is not a reason to end it twice.
-    await session.send(message("And look here.", "now"));
-    expect(first.killed).toEqual(["SIGTERM"]);
-    first.exits(null, "SIGTERM");
-    const second = await turn(1);
-    await until("the message", () => second.ended);
-    expect(second.sent).toEqual(["Stop that.\n\nAnd look here."]);
-    expect(second.args.slice(-2)).toEqual([THREAD, "-"]);
-    second.says(...BEGAN, answers("item_0", "halted"), COMPLETED);
-    second.exits(0);
-    expect((await said(6)).slice(3)).toEqual([
-      { type: "event", kind: "status", text: "The turn was stopped for a message." },
-      { type: "event", kind: "assistant", text: "halted" },
-      { type: "turn_completed" },
-    ]);
+  it("puts a message into a turn the product began by itself, and says the agent done at its end", async () => {
+    const { session, product, opens, answers, said, taken, count } = started();
+    await opens();
+    product.says(turnStarted(TURN), answer("item_0", "Going on with what I was asked to finish."));
+    await said(4);
+    await session.send(message("Hold the release."));
+    expect((await answers("turn/steer", { turnId: TURN })).expectedTurnId).toBe(TURN);
+    expect(count("turn/start")).toBe(0);
+    product.says(...saidBack("m-1", "Hold the release."), turnCompleted(TURN));
+    expect((await said(5)).at(4)).toEqual({ type: "turn_completed" });
+    expect(taken.count).toBe(1);
+  });
 
-    // An interrupt with nothing to say: the turn is stopped, and the agent waits for more.
-    await session.send(message("Run them again."));
-    const third = await turn(2);
-    third.says(...BEGAN);
+  it("stops the turn under way for an interrupt, once the product named it, and nothing where none is under way", async () => {
+    const { session, product, opens, answers, request, said, taken, count } = started();
+    await opens();
+    await session.send(message("Run the tests."));
+    await answers("turn/start", { turn: turnOf(TURN) });
+    product.says(turnStarted(TURN));
     await session.interrupt();
-    await until("the turn's process to be ended", () => third.killed.length === 1);
-    third.exits(null, "SIGTERM");
-    expect((await said(8)).slice(6)).toEqual([
+    expect((await request("turn/interrupt")).params).toEqual({ threadId: THREAD, turnId: TURN });
+    // Asked once, however often it is said.
+    await session.interrupt();
+    await tick();
+    expect(count("turn/interrupt")).toBe(1);
+    // The product answers when the turn is over, and says so by itself (as seen, 0.172.0).
+    product.says(turnCompleted(TURN, "interrupted"));
+    expect((await said(5)).slice(3)).toEqual([
       { type: "event", kind: "status", text: "The turn was stopped." },
       { type: "turn_completed" },
     ]);
-    // With no turn under way there is nothing to stop.
+    // The turn began with its message, which was the product's from then on.
+    expect(taken.count).toBe(1);
+
+    // With nothing under way an interrupt stops nothing.
     await session.interrupt();
     await tick();
-    expect(third.killed).toEqual(["SIGTERM"]);
+    expect(count("turn/interrupt")).toBe(1);
+
+    // One that is asked before the product named the turn is said once it did.
+    await session.send(message("Run them again."));
+    await session.interrupt();
+    await tick();
+    expect(count("turn/interrupt")).toBe(1);
+    await answers("turn/start", { turn: turnOf(NEXT_TURN) });
+    expect((await request("turn/interrupt")).params).toEqual({
+      threadId: THREAD,
+      turnId: NEXT_TURN,
+    });
+    // A turn that completed all the same was not stopped, and is not said to have been.
+    product.says(turnCompleted(NEXT_TURN));
+    expect((await said(6)).at(5)).toEqual({ type: "turn_completed" });
   });
 
-  it("says how a turn failed: the product not there, a turn the service refused, a sign-in that ran out, a process that fell over", async () => {
-    const missing = started();
-    await missing.session.send(message("Go."));
-    (await missing.turn(0)).exits(null, null, "spawn codex ENOENT");
-    expect(await missing.said(2)).toEqual([
+  it("says a product that is not there to start, and one whose build has no app server", async () => {
+    const gone = started();
+    gone.product.exits(null, null, "spawn codex ENOENT");
+    await gone.read;
+    expect(gone.events).toEqual([
       {
         type: "event",
         kind: "error",
         text: "The product could not be started: its command codex was not found where the runner looks for programs. Install it, or put its folder on the PATH the runner is started with.",
       },
+      // Nothing was taken: the runner sends again what it sent.
       { type: "cannot_go_on", state: "failed", reason: "start" },
+      { type: "ended", how: "crashed" },
     ]);
-    // Tried again by the runner: a message after it starts a process again.
-    await missing.session.send(message("Go."));
-    expect((await missing.turn(1)).args[0]).toBe("exec");
 
-    // What failed a turn is written twice, and said once: a turn that ended, and the next is taken.
-    const refused = started({ model: "no-such-model" });
-    await refused.session.send(message("Go."));
-    const turn = await refused.turn(0);
-    const answer = JSON.stringify({
-      type: "error",
-      status: 400,
-      error: { type: "invalid_request_error", message: "The model is not supported." },
+    const old = started();
+    old.product.writes("error: unrecognized subcommand 'app-server'\n");
+    old.product.exits(2);
+    await old.read;
+    expect(old.events).toEqual([
+      {
+        type: "event",
+        kind: "error",
+        text: "The product's process ended with code 2 before it answered as its app server, which this driver speaks to (codex app-server).\nerror: unrecognized subcommand 'app-server'",
+      },
+      { type: "cannot_go_on", state: "failed", reason: "start" },
+      { type: "ended", how: "crashed" },
+    ]);
+  });
+
+  it("says a process that fell over, with the end of what it wrote on its standard error kept as it was handed to keep it", async () => {
+    // What the process kept the end of begins with the mark of a cut: the runner is told so,
+    // and shows nothing of a secret its beginning may end.
+    const asked: { length: number; most: number; more: boolean | undefined }[] = [];
+    const { session, product, opens, answers, read, events } = started({
+      cutEnd: (text, most, more) => {
+        asked.push({ length: text.length, most, more });
+        return `[the end, ${most} at most]`;
+      },
     });
-    turn.says(
-      { type: "thread.started", thread_id: THREAD },
-      { type: "turn.started" },
-      { type: "error", message: answer },
-      { type: "turn.failed", error: { message: answer } },
+    await opens();
+    await session.send(message("Go."));
+    await answers("turn/start", { turn: turnOf(TURN) });
+    product.writes(`${String.fromCodePoint(0x2026)}${"e".repeat(16_000)}\n`);
+    product.exits(null, "SIGKILL");
+    await read;
+    expect(events.slice(3)).toEqual([
+      {
+        type: "event",
+        kind: "error",
+        text: "The product's process ended on SIGKILL.\n[the end, 4000 at most]",
+      },
+      // What the turn was at is not known: nothing is sent again.
+      { type: "cannot_go_on", state: "failed", reason: "crashed" },
+      { type: "ended", how: "crashed" },
+    ]);
+    expect(asked).toEqual([{ length: 16_000, most: 4000, more: true }]);
+    // A process that is gone takes nothing: the runner keeps what it would have handed over.
+    await expect(session.send(message("More."))).rejects.toThrow("takes no more input");
+  });
+
+  it("says a product that is not signed in, as the binary said it signed out, and takes the next message after", async () => {
+    // What the binary wrote when it was spoken to signed out (0.172.0), each cut down: the
+    // tries it makes again, then the turn failed with the status the service answered.
+    const refused =
+      "unexpected status 401 Unauthorized: Missing bearer or basic authentication in header";
+    const failed = {
+      message: refused,
+      codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 401 } },
+      additionalDetails: null,
+    };
+    const { session, product, opens, answers, said, taken } = started();
+    await opens();
+    await session.send(message("Go."));
+    await answers("turn/start", { turn: turnOf(TURN) });
+    product.says(
+      turnStarted(TURN),
+      ...saidBack("m-1", "Go."),
+      {
+        method: "error",
+        params: {
+          error: {
+            message: "Reconnecting... 2/5",
+            codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: 401 } },
+            additionalDetails: refused,
+          },
+          willRetry: true,
+          threadId: THREAD,
+          turnId: TURN,
+        },
+      },
+      {
+        method: "warning",
+        params: { threadId: THREAD, message: "Falling back from WebSockets to HTTPS transport." },
+      },
+      {
+        method: "error",
+        params: { error: failed, willRetry: false, threadId: THREAD, turnId: TURN },
+      },
+      turnCompleted(TURN, "failed", failed),
     );
-    turn.exits(1);
-    expect((await refused.said(5)).slice(3)).toEqual([
-      { type: "event", kind: "error", text: "The model is not supported." },
-      { type: "turn_completed" },
-    ]);
-
-    // A sign-in that ran out, by pattern: the agent cannot go on, and what was sent is the runner's to send again.
-    const signedOut = started();
-    await signedOut.session.send(message("Go."));
-    await signedOut.session.send(message("And this."));
-    const out = await signedOut.turn(0);
-    out.says(...BEGAN, {
-      type: "turn.failed",
-      error: { message: "Not logged in. Run codex login." },
-    });
-    out.exits(1);
-    expect((await signedOut.said(5)).slice(3)).toEqual([
-      { type: "event", kind: "error", text: "Not logged in. Run codex login." },
+    expect((await said(6)).slice(3)).toEqual([
+      { type: "event", kind: "error", text: `Reconnecting... 2/5\n${refused}` },
+      // What failed the turn is written twice, and said once.
+      { type: "event", kind: "error", text: refused },
       { type: "cannot_go_on", state: "failed", reason: "sign_in" },
     ]);
-    await tick();
-    expect(signedOut.turns).toHaveLength(1);
+    expect(taken.count).toBe(1);
 
-    // A process that fell over in its turn, with no word of how the turn ended, says how it
-    // ended, with the end of what it wrote of it: the agent cannot go on by itself, and what the
-    // turn was at is not known, so nothing is sent again.
-    const crashed = started();
-    await crashed.session.send(message("Go."));
-    await crashed.session.send(message("And this."));
-    const gone = await crashed.turn(0);
-    gone.says(...BEGAN);
-    gone.writes("a stack trace\n");
-    gone.exits(101);
-    expect((await crashed.said(5)).slice(3)).toEqual([
-      {
-        type: "event",
-        kind: "error",
-        text: "The product's process ended with code 101 before the turn did.\na stack trace",
-      },
-      { type: "cannot_go_on", state: "failed", reason: "crashed" },
+    // The process is still there: what a supervisor says next is tried in the same session.
+    await session.send(message("Try again."));
+    expect((await answers("turn/start", { turn: turnOf(NEXT_TURN) })).input).toEqual([
+      textOf("Try again."),
     ]);
-    await tick();
-    expect(crashed.turns).toHaveLength(1);
+    product.says(...saidBack("m-2", "Try again.", NEXT_TURN), turnCompleted(NEXT_TURN));
+    expect((await said(7)).at(6)).toEqual({ type: "turn_completed" });
 
-    // One that ended before any turn started took nothing, a conversation it does not find
-    // again say, in the words the binary had for it: what was sent is the runner's to send again.
-    const lost = started({ resume: THREAD });
-    await lost.session.send(message("Go."));
-    const none = await lost.turn(0);
-    none.writes(
-      `Error: thread/resume: thread/resume failed: no rollout found for thread id ${THREAD} (code -32600)\n`,
+    // The product's own word for it, and its words, are read the same.
+    for (const error of [
+      { message: "Your session ended.", codexErrorInfo: "unauthorized" },
+      { message: "Not logged in. Run codex login.", codexErrorInfo: "other" },
+    ]) {
+      const other = started();
+      await other.opens();
+      await other.session.send(message("Go."));
+      await other.answers("turn/start", { turn: turnOf(TURN) });
+      other.product.says(turnCompleted(TURN, "failed", error));
+      expect((await other.said(5)).at(4)).toEqual({
+        type: "cannot_go_on",
+        state: "failed",
+        reason: "sign_in",
+      });
+    }
+  });
+
+  it("takes a turn the product itself says failed as a turn that ended", async () => {
+    const { session, product, opens, answers, said } = started();
+    await opens();
+    await session.send(message("Go."));
+    await answers("turn/start", { turn: turnOf(TURN) });
+    // The words of the service it asked, a line of JSON inside its line, are read out of it.
+    const failed = {
+      message: JSON.stringify({ error: { message: "The model is overloaded.", code: 529 } }),
+      codexErrorInfo: "serverOverloaded",
+      additionalDetails: null,
+    };
+    product.says(
+      {
+        method: "error",
+        params: { error: failed, willRetry: false, threadId: THREAD, turnId: TURN },
+      },
+      turnCompleted(TURN, "failed", failed),
     );
-    none.exits(1);
-    expect(await lost.said(2)).toEqual([
+    expect((await said(5)).slice(3)).toEqual([
+      { type: "event", kind: "error", text: "The model is overloaded." },
+      { type: "turn_completed" },
+    ]);
+
+    // One that says nothing of why is said all the same.
+    await session.send(message("Again."));
+    await answers("turn/start", { turn: turnOf(NEXT_TURN) });
+    product.says(turnCompleted(NEXT_TURN, "failed"));
+    expect((await said(7)).slice(5)).toEqual([
+      { type: "event", kind: "error", text: "The turn ended with an error." },
+      { type: "turn_completed" },
+    ]);
+  });
+
+  it("says a turn the product refuses to start, and goes on with what waits", async () => {
+    const { session, opens, answers, refuses, said, taken } = started();
+    await opens();
+    await session.send(message("x".repeat(40)));
+    await session.send(message("And this."));
+    await refuses("turn/start", "Input exceeds the maximum length of 1048576 characters.", -32602);
+    expect((await said(4)).at(3)).toEqual({
+      type: "event",
+      kind: "error",
+      text: "The product refused the turn: Input exceeds the maximum length of 1048576 characters.",
+    });
+    // A turn that ended: the message is not sent again, and the next one is the next turn's.
+    expect((await answers("turn/start", { turn: turnOf(TURN) })).input).toEqual([
+      textOf("And this."),
+    ]);
+    expect(taken.count).toBe(1);
+
+    // Refused for the sign-in, nothing was taken: the runner sends again what it sent.
+    const out = started();
+    await out.opens();
+    await out.session.send(message("Go."));
+    await out.refuses("turn/start", "Not logged in: run codex login.");
+    expect((await out.said(5)).slice(3)).toEqual([
       {
         type: "event",
         kind: "error",
-        text: `The product's process ended with code 1 before the turn did.\nError: thread/resume: thread/resume failed: no rollout found for thread id ${THREAD} (code -32600)`,
+        text: "The product refused the turn: Not logged in: run codex login.",
+      },
+      { type: "cannot_go_on", state: "failed", reason: "sign_in" },
+    ]);
+    expect(out.taken.count).toBe(0);
+  });
+
+  it("says a conversation that does not open, ends the process, and takes nothing after", async () => {
+    const refused = started();
+    await refused.answers("initialize", INITIALIZED);
+    await refused.session.send(message("Waits for the conversation."));
+    await refused.refuses("thread/start", "invalid thread settings override: sandbox");
+    expect(await refused.said(2)).toEqual([
+      {
+        type: "event",
+        kind: "error",
+        text: "The product did not open a conversation: invalid thread settings override: sandbox",
       },
       { type: "cannot_go_on", state: "failed", reason: "start" },
     ]);
-    // A supervisor's next word is tried at once, in a process of its own.
-    await lost.session.send(message("Go."));
-    expect((await lost.turn(1)).args).toContain("resume");
-  });
+    await until("the process to be ended", () => refused.product.ended);
+    await expect(refused.session.send(message("More."))).rejects.toThrow("takes no more input");
+    expect(refused.count("turn/start")).toBe(0);
+    refused.product.exits(0);
+    await refused.read;
+    expect(refused.events.at(-1)).toEqual({ type: "ended", how: "exited" });
 
-  it("takes the model and the effort from the next turn on, and says so when it runs with them", async () => {
-    const { session, turn, said } = started({ model: "gpt-6-luna" });
-    await session.send(message("Go."));
-    const first = await turn(0);
-    first.says(...BEGAN, COMPLETED);
-    first.exits(0);
-    await said(4);
-    expect(await session.set({ model: "gpt-6-sol", effort: "high" })).toBe(true);
-    await session.send(message("Again."));
-    const second = await turn(1);
-    expect(second.args).toEqual(
-      codexArguments({
-        model: "gpt-6-sol",
-        effort: "high",
-        permissions: undefined,
-        conversation: THREAD,
-      }),
-    );
-    second.says(...BEGAN, COMPLETED);
-    second.exits(0);
-    expect((await said(6)).slice(4)).toEqual([
-      { type: "running", model: "gpt-6-sol", effort: "high", version: null },
-      { type: "turn_completed" },
+    const out = started();
+    await out.refuses("initialize", "401 Unauthorized");
+    expect((await out.said(2)).slice(0, 2)).toEqual([
+      { type: "event", kind: "error", text: "The product is not signed in: 401 Unauthorized" },
+      { type: "cannot_go_on", state: "failed", reason: "sign_in" },
     ]);
-    // The product's own choice again: nothing named.
-    expect(await session.set({ model: null, effort: null })).toBe(true);
-    await session.send(message("Once more."));
-    expect((await turn(2)).args).not.toContain("-m");
+
+    const nameless = started();
+    await nameless.answers("initialize", INITIALIZED);
+    await nameless.answers("thread/start", { thread: { id: "../not an id" }, model: "gpt-6-sol" });
+    expect((await nameless.said(2)).at(0)).toEqual({
+      type: "event",
+      kind: "error",
+      text: "The product opened a conversation and did not say which.",
+    });
   });
 
-  it("stops by ending the turn under way, and takes nothing after", async () => {
-    const { session, turn, said, read } = started();
+  it("refuses what the product asks of a person, with nobody at its terminal, and records it", async () => {
+    const { session, product, opens, answers, said, sent } = started();
+    await opens();
+    await session.send(message("Go."));
+    await answers("turn/start", { turn: turnOf(TURN) });
+    const where = { threadId: THREAD, turnId: TURN, itemId: "call_1" };
+    product.says(
+      {
+        id: "ask-1",
+        method: "item/commandExecution/requestApproval",
+        params: { ...where, command: "git push --force", reason: "outside the sandbox" },
+      },
+      {
+        id: "ask-2",
+        method: "item/fileChange/requestApproval",
+        params: { ...where, itemId: "call_2", reason: "writes outside the desk" },
+      },
+      {
+        id: "ask-3",
+        method: "item/permissions/requestApproval",
+        params: { ...where, itemId: "call_3", reason: null, permissions: { network: {} } },
+      },
+      {
+        id: "ask-4",
+        method: "item/tool/requestUserInput",
+        params: { ...where, itemId: "call_4", questions: [{ id: "q", question: "Which?" }] },
+      },
+      {
+        id: "ask-5",
+        method: "mcpServer/elicitation/request",
+        params: { threadId: THREAD, turnId: TURN, serverName: "board", message: "Your name?" },
+      },
+      // What the runner offered none of: a tool of its own, a sign-in of its own.
+      { id: "ask-6", method: "item/tool/call", params: { ...where, tool: "anything" } },
+      { id: 7, method: "account/chatgptAuthTokens/refresh", params: {} },
+    );
+    expect(shapes((await said(8)).slice(3))).toEqual([
+      [
+        "permission",
+        "Denied, with nobody at the terminal to ask: git push --force",
+        { tool: "command_execution", answer: "denied", id: "call_1" },
+      ],
+      [
+        "permission",
+        "Denied, with nobody at the terminal to ask: writes outside t",
+        { tool: "file_change", answer: "denied", id: "call_2" },
+      ],
+      [
+        "permission",
+        "Denied, with nobody at the terminal to ask: more than the mo",
+        { tool: "permissions", answer: "denied", id: "call_3" },
+      ],
+      [
+        "permission",
+        "Denied, with nobody at the terminal to ask: a question for a",
+        { tool: "request_user_input", answer: "denied", id: "call_4" },
+      ],
+      [
+        "permission",
+        "Denied, with nobody at the terminal to ask: Your name?",
+        { tool: "board.elicitation", answer: "denied" },
+      ],
+    ]);
+    await until("every request to be answered", () => sent().some((one) => one.id === 7));
+    expect(sent().filter((one) => one.method === undefined)).toEqual([
+      { id: "ask-1", result: { decision: "decline" } },
+      { id: "ask-2", result: { decision: "decline" } },
+      // No leave to do more than the mode allows.
+      { id: "ask-3", result: { permissions: {}, scope: "turn" } },
+      { id: "ask-4", result: { answers: {} } },
+      { id: "ask-5", result: { action: "decline", content: null, _meta: null } },
+      { id: "ask-6", error: { code: -32601, message: "item/tool/call is not offered" } },
+      {
+        id: 7,
+        error: { code: -32601, message: "account/chatgptAuthTokens/refresh is not offered" },
+      },
+    ]);
+  });
+
+  it("says the model and the effort with the next turn, and says so when it runs with them", async () => {
+    const { session, product, opens, answers, said } = started();
+    await opens();
+    await session.send(message("One."));
+    // Neither is named: the conversation runs with the product's own.
+    expect(await answers("turn/start", { turn: turnOf(TURN) })).toEqual({
+      threadId: THREAD,
+      clientUserMessageId: "m-1",
+      input: [textOf("One.")],
+    });
+    // Taken in a running session: no session is ended for it.
+    expect(await session.set({ model: "gpt-6-luna", effort: "high" })).toBe(true);
+    product.says(turnCompleted(TURN));
+    await said(4);
+    await session.send(message("Two."));
+    expect(await answers("turn/start", { turn: turnOf(NEXT_TURN) })).toEqual({
+      threadId: THREAD,
+      clientUserMessageId: "m-2",
+      input: [textOf("Two.")],
+      model: "gpt-6-luna",
+      effort: "high",
+    });
+    expect((await said(5)).at(4)).toEqual({
+      type: "running",
+      model: "gpt-6-luna",
+      effort: "high",
+      version: "0.172.0",
+    });
+    product.says(turnCompleted(NEXT_TURN));
+    await said(6);
+
+    // A choice left at the product's own is not said, and one left as it is stays: the
+    // conversation goes on with what it ran with, and nothing new is said of it.
+    expect(await session.set({ effort: null })).toBe(true);
+    await session.send(message("Three."));
+    expect(await answers("turn/start", { turn: turnOf(TURN) })).toEqual({
+      threadId: THREAD,
+      clientUserMessageId: "m-3",
+      input: [textOf("Three.")],
+      model: "gpt-6-luna",
+    });
+    product.says(turnCompleted(TURN));
+    expect((await said(7)).slice(6)).toEqual([{ type: "turn_completed" }]);
+  });
+
+  it("stops by closing the product's input, which ends it, and takes nothing after", async () => {
+    const { session, product, opens, answers, read, events, count } = started();
+    await opens();
     await session.send(message("Run the tests."));
-    const first = await turn(0);
-    first.says(...BEGAN);
-    await session.send(message("And this."));
+    await answers("turn/start", { turn: turnOf(TURN) });
     const stopping = session.stop();
-    await until("the turn's process to be ended", () => first.killed.length === 1);
-    first.exits(null, "SIGTERM");
+    // As the binary ends when its input closes, a turn under way or none (0.172.0).
+    await until("the product's input to be closed", () => product.ended);
+    product.exits(0);
     await stopping;
     await read;
-    // Nothing of the turn that was ended is an error, and what waited starts no turn.
-    expect((await said(4)).slice(3)).toEqual([{ type: "ended", how: "exited" }]);
-    await expect(session.send(message("More."))).rejects.toThrow();
-
-    // A session with no turn under way ends at once.
-    const idle = started();
-    await idle.session.stop();
-    await idle.read;
-    expect(idle.events).toEqual([{ type: "ended", how: "exited" }]);
-    expect(idle.turns).toEqual([]);
+    expect(events.at(-1)).toEqual({ type: "ended", how: "exited" });
+    expect(product.killed).toEqual([]);
+    await expect(session.send(message("More."))).rejects.toThrow("takes no more input");
+    expect(count("turn/start")).toBe(1);
+    // Stopped twice, it is ended once.
+    await session.stop();
   });
 
-  it("asks the installed product what it is and what it offers, without starting a turn", async () => {
+  it("asks the installed product what it is and what it offers, without starting a session", async () => {
     const calls: (readonly string[])[] = [];
-    const answer = (args: readonly string[]): string[] => {
+    const answerOf = (args: readonly string[]): string[] => {
       if (args[0] === "--version") {
-        return ["codex-cli 0.164.0-alpha.11.1"];
+        return ["codex-cli 0.172.0"];
       }
       // The product's own list, as it prints it: a line of JSON, each model with much else.
       return [
@@ -915,14 +1382,14 @@ describe("the codex driver", () => {
       spawn: (_command, args, options) => {
         calls.push(args);
         const fake = fakeChild(args, options);
-        fake.says(...answer(args));
+        fake.says(...answerOf(args));
         fake.exits(0);
         return fake.child;
       },
       cwd: "/home/mira/desk",
     });
     expect(await driver.probe()).toEqual({
-      version: "0.164.0-alpha.11.1",
+      version: "0.172.0",
       models: ["gpt-6-sol", "gpt-6-luna"],
       efforts: ["low", "medium", "high", "max"],
     });
