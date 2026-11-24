@@ -64,7 +64,7 @@ Add the source to `wake` in the desk's `runner.json`, and commit it:
 { "wake": ["console", "slack"] }
 ```
 
-The runner reads `runner.json` when it starts, so the change is taken when the runner is next started: when the agent's OS account next logs in, or when whoever administers the machine starts its service again. A supervisor's restart of the agent starts its session again, not its runner. The runner's lines then say `the slack wake source is connected`, and a direct message or a mention of the agent arrives as a wake from the messenger, with the thread as its key.
+The runner takes the change by itself once the agent's turn is over, with the same conversation ([ADR-0144](/docs/adr/0144-a-runner-takes-its-runner-json-as-it-changes-and-says-how-its-wake-sources-stand.md)): nothing is restarted. `console agent <handle>` then says the source is connected, as the runner's lines do (`the slack wake source is connected`), and a direct message, a mention of the agent or what a person says in a group conversation it is in arrives as a wake from the messenger, with the thread as its key.
 
 A channel the agent is to follow without being named each time, one it works in say, is named in `channels`, by the id the messenger gives it (in the channel's details, or the last part of its link), never by its name:
 
