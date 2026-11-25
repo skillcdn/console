@@ -68,11 +68,6 @@ export function asObject(word: string): string {
   return `${word}${endingOf(word) === "vowel" ? "를" : "을"}`;
 }
 
-/** The word as what stands beside another: 과 after a consonant, 와 after a vowel. */
-export function asBeside(word: string): string {
-  return `${word}${endingOf(word) === "vowel" ? "와" : "과"}`;
-}
-
 /** The word as who or what acts: 이 after a consonant, 가 after a vowel. */
 export function asSubject(word: string): string {
   return `${word}${endingOf(word) === "vowel" ? "가" : "이"}`;
