@@ -78,6 +78,7 @@ import {
 import { Board, BoardFilters, byDue, columnStateOf, edgeScrollOf, filterTasks } from "./board.js";
 import {
   Calendar,
+  daysOf,
   placeTip,
   TaskTip,
   tasksOn,
@@ -5930,6 +5931,238 @@ describe("a task planned across days", () => {
     expect(bare).not.toContain("<dt>Goal</dt>");
     expect(bare).not.toContain("<dt>Plan</dt>");
     expect(bare).toContain("Nobody");
+  });
+});
+
+describe("a task with no day of its plan (ADR-0159)", () => {
+  /** A moment of a day by this machine's clock, as the board keeps one. */
+  const at = (day: string, hour = 10): string =>
+    new Date(`${day}T${String(hour).padStart(2, "0")}:00:00`).toISOString();
+  const web = { key: "web", name: "The web app", color: null, symbol: null, icon: null };
+  const n = (tasks: readonly RestTask[]) => tasks.map((one) => one.number);
+
+  it("lies where it was worked, by the moments the board keeps, and a planned one on its plan", () => {
+    const on = (day: string) => ({ from: day, to: day });
+    // Written and taken at once: on the day it was started.
+    expect(daysOf(task({ state: "in_progress", startedAt: at(TODAY) }), TODAY)).toEqual(on(TODAY));
+    // Still at work days later: from that day through today, whatever run of it ended.
+    for (const lastRunEndedAt of [null, at("2026-10-09")]) {
+      expect(
+        daysOf(task({ state: "in_progress", startedAt: at("2026-10-08"), lastRunEndedAt }), TODAY),
+      ).toEqual({ from: "2026-10-08", to: TODAY });
+    }
+    // Its work ended with its last run, whatever became of it since: it waits for its review,
+    // was given back, dropped, or passed days later.
+    for (const state of ["idea", "ready", "in_review", "done", "dropped"] as const) {
+      expect(
+        daysOf(
+          task({
+            state,
+            startedAt: at("2026-10-05"),
+            lastRunEndedAt: at("2026-10-06"),
+            doneAt: state === "done" ? at("2026-10-10") : null,
+          }),
+          TODAY,
+        ),
+      ).toEqual({ from: "2026-10-05", to: "2026-10-06" });
+    }
+    // A run left open by hand ended after the task was done: the work ended as it was done.
+    expect(
+      daysOf(
+        task({
+          state: "done",
+          startedAt: at("2026-10-05"),
+          doneAt: at("2026-10-07"),
+          lastRunEndedAt: at("2026-10-09"),
+        }),
+        TODAY,
+      ),
+    ).toEqual({ from: "2026-10-05", to: "2026-10-07" });
+    // Worked with no run, a card moved by hand, or said by a console of before, which names no
+    // run's end: done, through the day it was done.
+    expect(
+      daysOf(task({ state: "done", startedAt: at("2026-10-05"), doneAt: at("2026-10-07") }), TODAY),
+    ).toEqual({ from: "2026-10-05", to: "2026-10-07" });
+    // The day is this machine's: the first and the last hour of a day are that day.
+    expect(
+      daysOf(
+        task({ state: "done", startedAt: at("2026-10-07", 0), doneAt: at("2026-10-07", 23) }),
+        TODAY,
+      ),
+    ).toEqual(on("2026-10-07"));
+    // With no run that ended, given back, dropped or waiting for its review, nobody is at it:
+    // the day it was started, alone.
+    for (const state of ["idea", "ready", "in_review", "dropped"] as const) {
+      expect(daysOf(task({ state, startedAt: at("2026-10-08") }), TODAY)).toEqual(on("2026-10-08"));
+    }
+    // Neither planned nor started, it lies nowhere, as before.
+    expect(daysOf(task(), TODAY)).toBeUndefined();
+    expect(daysOf(task({ state: "dropped" }), TODAY)).toBeUndefined();
+    // Done before the board kept when it was started: the day it was done.
+    expect(daysOf(task({ state: "done", doneAt: at("2026-10-07") }), TODAY)).toEqual(
+      on("2026-10-07"),
+    );
+    // A reader whose clock is behind the board's sees it on their today, never on days turned round.
+    expect(daysOf(task({ state: "in_progress", startedAt: at("2026-10-12") }), TODAY)).toEqual(
+      on(TODAY),
+    );
+    // What is no moment places nothing.
+    for (const startedAt of ["", "yesterday", "2026-13-45T99:00:00Z"]) {
+      expect(daysOf(task({ state: "in_progress", startedAt }), TODAY)).toBeUndefined();
+    }
+    // A day of the plan decides where the task lies, whatever happened and when.
+    const worked = {
+      state: "done",
+      startedAt: at("2026-10-05"),
+      doneAt: at("2026-10-07"),
+    } as const;
+    expect(daysOf(task({ ...worked, dueOn: "2026-10-20" }), TODAY)).toEqual(on("2026-10-20"));
+    expect(daysOf(task({ ...worked, startsOn: "2026-10-14" }), TODAY)).toEqual(on("2026-10-14"));
+    expect(daysOf(task({ ...worked, startsOn: "2026-10-14", dueOn: "2026-10-16" }), TODAY)).toEqual(
+      { from: "2026-10-14", to: "2026-10-16" },
+    );
+    expect(daysOf(task({ startsOn: "2026-10-14", dueOn: "2026-10-14" }), TODAY)).toEqual(
+      on("2026-10-14"),
+    );
+  });
+
+  const taken = task({
+    id: "0199c4d8-0000-7000-8000-000000000051",
+    number: 21,
+    title: "Taken at once",
+    state: "in_progress",
+    startedAt: at(TODAY),
+  });
+  const waiting = task({
+    id: "0199c4d8-0000-7000-8000-000000000052",
+    number: 22,
+    title: "Worked for days",
+    state: "in_review",
+    startedAt: at("2026-10-07"),
+    lastRunEndedAt: at("2026-10-09"),
+    category: engineering,
+  });
+  const finished = task({
+    id: "0199c4d8-0000-7000-8000-000000000053",
+    number: 23,
+    title: "Finished last week",
+    state: "done",
+    startedAt: at("2026-10-01"),
+    doneAt: at("2026-10-02"),
+  });
+  const untouched = task({
+    id: "0199c4d8-0000-7000-8000-000000000054",
+    number: 24,
+    title: "Not begun",
+  });
+  const all = [taken, waiting, finished, untouched];
+
+  it("is on a project's month on the days it was worked: a dot on one day, a bar across several, never late", () => {
+    // The week of today, begun on a Monday: the 5th through the 11th.
+    const week = weekOf(TODAY, 1).map((day) => ({ day, inMonth: true }));
+    expect(
+      weekSegments(week, all, TODAY).map((segment) => [
+        segment.task.number,
+        segment.from,
+        segment.to,
+        segment.begins,
+        segment.ends,
+      ]),
+    ).toEqual([[22, 2, 4, true, true]]);
+    expect(n(tasksOn("2026-10-09", all, TODAY))).toEqual([22]);
+    // It waits for its review since, which is no day it was worked.
+    expect(n(tasksOn(TODAY, all, TODAY))).toEqual([21]);
+    expect(n(tasksOn("2026-10-02", all, TODAY))).toEqual([23]);
+    // Through today and no further: the plan is not written, and tomorrow is nobody's yet.
+    expect(tasksOn("2026-10-12", all, TODAY)).toEqual([]);
+    const html = renderToStaticMarkup(
+      <Calendar
+        tasks={all}
+        month="2026-10"
+        today={TODAY}
+        weekStart="monday"
+        taskHref={href}
+        monthHref={(month) => month}
+      />,
+    );
+    expect(html).toMatch(/class="sc-calendar-task"[^>]*>[\s\S]{0,400}?Taken at once/);
+    expect(html.match(/sc-calendar-dot/g)).toHaveLength(1);
+    expect(html).toContain("sc-calendar-bar sc-category-blue sc-calendar-bar-begins");
+    expect(html).toContain("Worked for days");
+    // What is done reads as what was, on the days it was worked.
+    expect(html).toMatch(
+      /class="sc-calendar-bar[^"]*sc-calendar-over"[^>]*>[\s\S]{0,400}?Finished/,
+    );
+    expect(html).not.toContain("Not begun");
+    // No due day, so none is late; and the month is not empty.
+    expect(html).not.toContain("sc-calendar-late");
+    expect(html).not.toContain("Nothing is due this month");
+    // The month after holds none of them: nothing is laid past today.
+    const after = renderToStaticMarkup(
+      <Calendar
+        tasks={all}
+        month="2026-12"
+        today={TODAY}
+        weekStart="monday"
+        taskHref={href}
+        monthHref={(month) => month}
+      />,
+    );
+    expect(after).toContain("Nothing is due this month");
+  });
+
+  it("is on the week of a plate the same way, a person's and an agent account's, and still among what has no day set", () => {
+    const closed = task({
+      id: "0199c4d8-0000-7000-8000-000000000055",
+      number: 25,
+      title: "Finished today",
+      state: "done",
+      startedAt: at(TODAY, 9),
+      doneAt: at(TODAY, 11),
+    });
+    const html = renderToStaticMarkup(
+      <WorkList
+        work={{
+          tasks: [taken, waiting, untouched].map((one) => ({ project: web, task: one })),
+          closed: [{ project: web, task: closed }],
+        }}
+        today={TODAY}
+        weekStart="monday"
+        taskHref={(key, item) => `/projects/${key}/tasks/${item.number}`}
+        decisionHref={() => "#"}
+        weekHref={(day) => `/work?week=${day}`}
+      />,
+    );
+    const week = html.slice(0, html.indexOf("sc-work-lists"));
+    expect(week).toMatch(/class="sc-calendar-task"[^>]*>[\s\S]{0,400}?Taken at once/);
+    expect(week).toContain("sc-calendar-bar sc-category-blue sc-calendar-bar-begins");
+    expect(week).toContain("Worked for days");
+    expect(week).toMatch(
+      /class="sc-calendar-task[^"]*sc-calendar-over[^"]*"[^>]*>[\s\S]{0,400}?Finished today/,
+    );
+    expect(week).not.toContain("Not begun");
+    expect(week).not.toContain("Nothing is planned this week.");
+    // The plan is as it was: all three open tasks have no day set, and the list says so.
+    const lists = html.slice(html.indexOf("sc-work-lists"));
+    expect(lists).toContain('aria-label="No day set"');
+    for (const title of ["Taken at once", "Worked for days", "Not begun"]) {
+      expect(lists).toContain(title);
+    }
+    expect(lists).not.toContain("Finished today");
+    // The week before today's holds what was worked then, and not what was begun since.
+    const before = renderToStaticMarkup(
+      <Week
+        tasks={[...all, closed]}
+        day="2026-10-02"
+        today={TODAY}
+        weekStart="monday"
+        taskHref={href}
+        weekHref={(day) => day}
+      />,
+    );
+    expect(before).toContain("Finished last week");
+    expect(before).not.toContain("Taken at once");
+    expect(before).not.toContain("Worked for days");
   });
 });
 

@@ -449,7 +449,9 @@ async function seedBoard(
 
 /**
  * The day each task done in the weeks before was done on, written back in time: the board
- * dates a task done as it is moved there, which here is the moment the preview starts.
+ * dates a task done as it is moved there, which here is the moment the preview starts. Its
+ * start is written two days before that, since the calendars lay a task with no day of its
+ * plan across the days it was worked (ADR-0159), and no task is started after it was done.
  */
 async function dateDoneTasks(
   harness: Harness,
@@ -463,9 +465,12 @@ async function dateDoneTasks(
     if (task.doneAgo === undefined || id === undefined) {
       continue;
     }
-    const done = new Date(now.getTime() - task.doneAgo * 86_400_000).toISOString();
+    const done = now.getTime() - task.doneAgo * 86_400_000;
+    const started = new Date(done - 2 * 86_400_000).toISOString();
     await handle.execute(sql`
-      update tasks set done_at = ${done}::timestamptz where id = ${id}::uuid
+      update tasks
+      set started_at = ${started}::timestamptz, done_at = ${new Date(done).toISOString()}::timestamptz
+      where id = ${id}::uuid
     `);
   }
 }

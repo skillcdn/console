@@ -1,0 +1,3 @@
+# A plugin's commands
+
+When the rules carry a section `## Plugins`, read each plugin named there before its first command: `console plugin <key>` says what it is for and lists its commands, and `console plugin <key> skills` its own skills, read as the pack's are. Its commands run on the run, `console plugin <key> <command> [args]`. What one wrote on the board (a task, a decision, a page) is reported as the run's work; one that raised a decision exits with `3` and names it, which is waited for as any decision is. A plugin the rules do not name, or one the person holds no role in (`plugin.forbidden`), is not used, and the step goes back to the person.

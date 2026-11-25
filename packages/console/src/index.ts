@@ -29,6 +29,8 @@ export {
 export {
   Calendar,
   type CalendarProps,
+  daysOf,
+  type TaskDays,
   Week,
   type WeekProps,
   type WeekSegment,

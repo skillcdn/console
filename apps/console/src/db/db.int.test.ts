@@ -1526,6 +1526,46 @@ describe("the schedule", () => {
     ]);
   });
 
+  it("says of a task when the last of its runs to end ended, read from the runs (ADR-0159)", async () => {
+    const task = await createTask(database, {
+      scope,
+      actor: alice,
+      task: { title: "Worked twice" },
+      now: minutes(48),
+    });
+    expect(task.lastRunEndedAt).toBeUndefined();
+    const run = async (from: number, to: number | undefined) => {
+      const begun = await startRun(database, {
+        scope,
+        actor: bob,
+        tokenId: undefined,
+        agent: "Claude Code",
+        taskId: task.id,
+
+        now: minutes(from),
+      });
+      if (to !== undefined) {
+        await endRun(database, {
+          scope,
+          actor: bob,
+          runId: begun.id,
+          status: "finished",
+          summary: undefined,
+          now: minutes(to),
+        });
+      }
+    };
+    const read = async () =>
+      (await listTasks(database, scope, { limit: 200 })).items.find((one) => one.id === task.id);
+    await run(49, 50);
+    expect((await read())?.lastRunEndedAt).toEqual(minutes(50));
+    // A run still open ends nothing; once it ends, it is the last.
+    await run(51, undefined);
+    expect((await read())?.lastRunEndedAt).toEqual(minutes(50));
+    await run(52, 53);
+    expect((await read())?.lastRunEndedAt).toEqual(minutes(53));
+  });
+
   it("refuses a due day before the start, a category that is not one, and a goal that is not the project's", async () => {
     const write = (task: Parameters<typeof createTask>[1]["task"]) =>
       createTask(database, { scope, actor: alice, task, now: T0 });

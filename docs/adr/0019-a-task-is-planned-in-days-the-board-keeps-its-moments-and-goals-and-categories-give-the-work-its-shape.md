@@ -1,6 +1,6 @@
 # ADR-0019: A task is planned in days, the board keeps its moments, and goals and categories give the work its shape
 
-- Status: Accepted; what a goal carries and how the roadmap is seen are amended by [ADR-0026](0026-a-goal-is-planned-in-days-and-sorted-into-a-category-and-the-roadmap-is-read-as-months.md), and who is on a task by [ADR-0037](0037-a-task-has-one-owner-and-any-number-of-workers-and-a-parent-or-a-goal-is-found-by-search.md)
+- Status: Accepted; what a goal carries and how the roadmap is seen are amended by [ADR-0026](0026-a-goal-is-planned-in-days-and-sorted-into-a-category-and-the-roadmap-is-read-as-months.md), who is on a task by [ADR-0037](0037-a-task-has-one-owner-and-any-number-of-workers-and-a-parent-or-a-goal-is-found-by-search.md), and where a calendar lays a task with no day of its plan by [ADR-0159](0159-a-task-with-no-day-of-its-plan-lies-on-the-calendar-where-it-was-worked.md)
 - Date: 2026-10-11
 
 ## Context

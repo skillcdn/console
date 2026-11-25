@@ -194,7 +194,8 @@ export const reconcile = task(12, "Reconcile the three differences of the Februa
 /**
  * A month of Acme's work: bars across days and across a week's end, tasks on one day each, one
  * late, one done, one dropped, a day with more than a cell shows, and the days a badge reads as
- * today, tomorrow, within the week and further off.
+ * today, tomorrow, within the week and further off; last, two with no day of their plan, which
+ * lie where they were worked (ADR-0159): one done across two days, one taken today.
  */
 export const tasks: readonly RestTask[] = [
   reconcile,
@@ -257,6 +258,21 @@ export const tasks: readonly RestTask[] = [
       dueOn: "2026-03-20",
     }),
   ),
+  // Noon by the UTC clock, so that the day is the same one nearly wherever the page is read.
+  task(27, "Find the receipt the bank sent back", {
+    state: "done",
+    workers: [juno],
+    category: categoryOf("audit"),
+    startedAt: "2026-03-02T12:00:00.000Z",
+    doneAt: "2026-03-03T12:00:00.000Z",
+  }),
+  task(28, "Answer the tax office's letter", {
+    state: "in_progress",
+    workers: [carol],
+    category: categoryOf("tax"),
+    startedAt: `${TODAY}T12:00:00.000Z`,
+    openRuns: 1,
+  }),
 ];
 
 /** The project the marks are drawn for, and one with a symbol and a colour of its own. */

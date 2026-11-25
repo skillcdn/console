@@ -10,6 +10,7 @@ import {
 import {
   addDays,
   addMonths,
+  dayOf,
   daysBetween,
   deviceLanguage,
   firstDayOfWeek,
@@ -31,17 +32,59 @@ import { CategoryBadge, cx, PersonChip, personName, StateBadge, Time, Workers } 
 // The calendar of a project (ADR-0019): the month as a grid, or one week on its own. A task
 // planned from a start to a due day lies across its days as a bar, in a lane of its own within
 // each week so that the bars of one week never cross; a task with one day alone, a due day or
-// a start, sits on that day as a dot. On a project's calendar the person who has a task stands
-// before its title, since the days hold several people's work. Who has what says whether the
-// work is on its days. The task under the pointer is shown in full within its item, with the
-// facts its own page lists, above or below it where there is more room. Takes its data as props
-// and nothing from the network; the month or the week shown is the address's (ADR-0010).
+// a start, sits on that day as a dot. A task with no day of its plan lies where it was worked,
+// by the moments the board keeps, a bar or a dot the same way (ADR-0159). On a project's
+// calendar the person who has a task stands before its title, since the days hold several
+// people's work. Who has what says whether the work is on its days. The task under the pointer
+// is shown in full within its item, with the facts its own page lists, above or below it where
+// there is more room. Takes its data as props and nothing from the network; the month or the
+// week shown is the address's (ADR-0010).
 
 const isOpen = (task: RestTaskBrief): boolean => OPEN_TASK_STATES.includes(task.state);
 
-/** Whether a task lies across days: a start and a due day, and the due day after the start. */
-const spans = (task: RestTaskBrief): boolean =>
-  task.startsOn !== null && task.dueOn !== null && task.startsOn < task.dueOn;
+/** The day a moment fell on, by this machine's clock, as the calendar spells a day. */
+function dayOfMoment(moment: string | null): string | undefined {
+  if (moment === null) {
+    return undefined;
+  }
+  const date = new Date(moment);
+  return Number.isNaN(date.getTime()) ? undefined : dayOf(date);
+}
+
+/** The days a task lies on, on a calendar: the first and the last, one day where it lies on one. */
+export interface TaskDays {
+  readonly from: string;
+  readonly to: string;
+}
+
+/**
+ * Where a task lies on a calendar, counted from `today`, or nowhere. A task with a day of its
+ * plan lies on its plan (ADR-0019): from its start to its due day, or on the one day it has. A
+ * task with none lies where it was worked, by the moments the board keeps (ADR-0159): from the
+ * day it was started through today while it is in progress, and else through the day its last
+ * run ended, which is where its work ended however long it waits for its review; with no run
+ * that ended, through the day it was done, or on the day it was started alone. The plan is read
+ * and never written: a task neither planned nor started lies nowhere.
+ */
+export function daysOf(task: RestTaskBrief, today: string): TaskDays | undefined {
+  const planned = task.dueOn ?? task.startsOn;
+  if (planned !== null) {
+    const begins = task.startsOn !== null && task.startsOn < planned ? task.startsOn : planned;
+    return { from: begins, to: planned };
+  }
+  const done = dayOfMoment(task.doneAt);
+  // A task done before the board kept when it was started has the day it was done alone.
+  const from = dayOfMoment(task.startedAt) ?? done;
+  if (from === undefined) {
+    return undefined;
+  }
+  const ended = dayOfMoment(task.lastRunEndedAt ?? null);
+  // A run left open by hand may end after the task was done, which ended the work.
+  const over = ended !== undefined && done !== undefined && done < ended ? done : (ended ?? done);
+  const to = task.state === "in_progress" ? today : (over ?? from);
+  // The reader's clock may be behind the board's: such a task sits on the day it reaches.
+  return to < from ? { from: to, to } : { from, to };
+}
 
 export interface CalendarProps<T extends RestTaskBrief = RestTaskBrief> {
   readonly tasks: readonly T[];
@@ -77,11 +120,14 @@ export interface WeekSegment<T extends RestTaskBrief = RestTaskBrief> {
 /**
  * The bars of one week: every task lying across days that touches the week, cut to it, each
  * in the first lane where it crosses nothing that was laid before it. The longest and earliest
- * go first, so that the lanes stay few.
+ * go first, so that the lanes stay few. A task with no day of its plan lies across the days it
+ * was worked, through `today` while it is at work ({@link daysOf}); the browser's today when left
+ * out.
  */
 export function weekSegments<T extends RestTaskBrief>(
   week: readonly GridDay[],
   tasks: readonly T[],
+  today: string = todayOf(),
 ): WeekSegment<T>[] {
   const first = week[0]?.day;
   const last = week[week.length - 1]?.day;
@@ -89,16 +135,14 @@ export function weekSegments<T extends RestTaskBrief>(
     return [];
   }
   const cut = tasks
-    .filter(spans)
     .flatMap((task) => {
-      const startsOn = task.startsOn ?? first;
-      const dueOn = task.dueOn ?? last;
-      if (dueOn < first || startsOn > last) {
+      const days = daysOf(task, today);
+      if (days === undefined || days.from === days.to || days.to < first || days.from > last) {
         return [];
       }
-      const from = startsOn < first ? 0 : daysBetween(first, startsOn);
-      const to = dueOn > last ? week.length - 1 : daysBetween(first, dueOn);
-      return [{ task, from, to, begins: startsOn >= first, ends: dueOn <= last }];
+      const from = days.from < first ? 0 : daysBetween(first, days.from);
+      const to = days.to > last ? week.length - 1 : daysBetween(first, days.to);
+      return [{ task, from, to, begins: days.from >= first, ends: days.to <= last }];
     })
     .sort(
       (a, b) => a.from - b.from || b.to - b.from - (a.to - a.from) || a.task.number - b.task.number,
@@ -125,16 +169,19 @@ function push<T extends RestTaskBrief>(map: Map<string, T[]>, day: string, task:
   }
 }
 
-/** The tasks that sit on one day each, by day: due on it, or beginning on it with no due day yet. */
-function onDays<T extends RestTaskBrief>(tasks: readonly T[]): ReadonlyMap<string, readonly T[]> {
+/**
+ * The tasks that sit on one day each, by day: due on it, beginning on it with no due day yet,
+ * or, with no day of its plan, worked on it alone ({@link daysOf}).
+ */
+function onDays<T extends RestTaskBrief>(
+  tasks: readonly T[],
+  today: string,
+): ReadonlyMap<string, readonly T[]> {
   const on = new Map<string, T[]>();
   for (const task of tasks) {
-    if (spans(task)) {
-      continue;
-    }
-    const day = task.dueOn ?? task.startsOn;
-    if (day !== null) {
-      push(on, day, task);
+    const days = daysOf(task, today);
+    if (days !== undefined && days.from === days.to) {
+      push(on, days.from, task);
     }
   }
   // Within a day, what is still open comes first; the rest reads as what was.
@@ -144,14 +191,20 @@ function onDays<T extends RestTaskBrief>(tasks: readonly T[]): ReadonlyMap<strin
   return on;
 }
 
-/** The tasks of one day: those on it alone and those lying across it, the open ones first. */
-export function tasksOn<T extends RestTaskBrief>(day: string, tasks: readonly T[]): T[] {
+/**
+ * The tasks of one day: those on it alone and those lying across it, the open ones first;
+ * counted from `today` as {@link daysOf} counts, the browser's today when left out.
+ */
+export function tasksOn<T extends RestTaskBrief>(
+  day: string,
+  tasks: readonly T[],
+  today: string = todayOf(),
+): T[] {
   return tasks
-    .filter((task) =>
-      spans(task)
-        ? (task.startsOn ?? day) <= day && day <= (task.dueOn ?? day)
-        : (task.dueOn ?? task.startsOn) === day,
-    )
+    .filter((task) => {
+      const days = daysOf(task, today);
+      return days !== undefined && days.from <= day && day <= days.to;
+    })
     .sort((a, b) => Number(isOpen(b)) - Number(isOpen(a)) || a.number - b.number);
 }
 
@@ -595,11 +648,14 @@ export function Calendar<T extends RestTaskBrief>(props: CalendarProps<T>) {
   const now = props.today ?? todayOf();
   const firstDay = firstDayOfWeek(deviceLanguage(tag), props.weekStart);
   const weeks = monthGrid(props.month, firstDay);
-  const onPicked = picked === null ? [] : tasksOn(picked, props.tasks);
-  const on = onDays(props.tasks);
+  const onPicked = picked === null ? [] : tasksOn(picked, props.tasks, now);
+  const on = onDays(props.tasks, now);
   const goalsOn = props.goalHref === undefined ? undefined : goalsOnDays(props.goals ?? []);
   const inMonth = (day: string) => monthOf(day) === props.month;
-  const monthWeeks = weeks.map((week) => ({ week, segments: weekSegments(week, props.tasks) }));
+  const monthWeeks = weeks.map((week) => ({
+    week,
+    segments: weekSegments(week, props.tasks, now),
+  }));
   const nothing =
     [...on.keys()].every((day) => !inMonth(day)) &&
     monthWeeks.every(({ week, segments }) =>
@@ -732,8 +788,8 @@ export function Week<T extends RestTaskBrief>(props: WeekProps<T>) {
   const first = days[0] ?? now;
   const last = days[days.length - 1] ?? now;
   const week: GridDay[] = days.map((day) => ({ day, inMonth: true }));
-  const on = onDays(props.tasks);
-  const segments = weekSegments(week, props.tasks);
+  const on = onDays(props.tasks, now);
+  const segments = weekSegments(week, props.tasks, now);
   const nothing = segments.length === 0 && days.every((day) => !on.has(day));
   return (
     <div className="sc-calendar sc-week">

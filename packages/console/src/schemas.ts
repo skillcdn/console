@@ -1786,6 +1786,8 @@ export const restTaskSchema = z.object({
   /** What happened: when the task was first moved past ready, and when it was moved to done; each or `null`. The board keeps both. */
   startedAt: z.nullable(instant),
   doneAt: z.nullable(instant),
+  /** When the last of its runs to end ended, or `null` where none has (ADR-0159). Left out by an older console. */
+  lastRunEndedAt: z.optional(z.nullable(instant)),
   /** When the task was put away (ADR-0029): out of the listings, the board and the calendar, open by its number; `null` while current. */
   archivedAt: z.nullable(instant),
   links: z.array(restTaskLinkSchema),

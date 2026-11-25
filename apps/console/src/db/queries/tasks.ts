@@ -82,6 +82,8 @@ export interface TaskRecord {
   /** What happened: when the task was first moved past ready, and when it was moved to done. */
   readonly startedAt: Date | undefined;
   readonly doneAt: Date | undefined;
+  /** When the last of its runs to end ended, read from the runs (ADR-0159); none where none has. */
+  readonly lastRunEndedAt: Date | undefined;
   /** When the task was put away (ADR-0029): out of the listings and the board, open by its number; none while current. */
   readonly archivedAt: Date | undefined;
   readonly links: readonly RestTaskLink[];
@@ -169,6 +171,8 @@ const STARTED_STATES: readonly TaskState[] = ["in_progress", "in_review", "done"
 const openDecisionsOf = sql<number>`(select count(*) from ${decisions} where ${decisions.taskId} = ${tasks.id} and ${decisions.answeredAt} is null)`;
 const openRunsOf = sql<number>`(select count(*) from ${runs} where ${runs.taskId} = ${tasks.id} and ${runs.status} in ('running', 'waiting'))`;
 
+const lastRunEndedOf = sql<Date | null>`(select max(${runs.endedAt}) from ${runs} where ${runs.taskId} = ${tasks.id})`;
+
 /**
  * The workers of the task being read, in the order they came to it, as one JSON array: a page of
  * tasks stays one query, however many people are on each.
@@ -190,6 +194,7 @@ const taskColumns = {
   dueOn: tasks.dueOn,
   startedAt: tasks.startedAt,
   doneAt: tasks.doneAt,
+  lastRunEndedAt: lastRunEndedOf.mapWith(runs.endedAt),
   archivedAt: tasks.archivedAt,
   links: tasks.links,
   createdAt: tasks.createdAt,
@@ -243,6 +248,7 @@ function toTask(row: TaskRow): TaskRecord {
     dueOn: row.dueOn ?? undefined,
     startedAt: row.startedAt ?? undefined,
     doneAt: row.doneAt ?? undefined,
+    lastRunEndedAt: row.lastRunEndedAt ?? undefined,
     archivedAt: row.archivedAt ?? undefined,
     links: row.links,
     openDecisions: row.openDecisions,

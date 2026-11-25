@@ -2467,7 +2467,7 @@ const sections: ReactElement<{ readonly children: ReactNode }> = (
       use="A month as a grid of days, with bars across days, dots, a legend and a head."
       ground="field"
     >
-      <Specimen label="A month: bars across days and weeks, tasks on their day, goals on their target, a late task, a day with more than it shows, today; press a day's number for its list">
+      <Specimen label="A month: bars across days and weeks, tasks on their day, goals on their target, a late task, a day with more than it shows, today, and two tasks with no day of their plan on the days they were worked; press a day's number for its list">
         <Calendar
           tasks={tasks}
           month={MONTH}
