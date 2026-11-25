@@ -73,6 +73,12 @@ function sentenceOf(event: RestEvent, words: Messages): string {
     case "person.email_changed":
       return data.set === true ? feed.event.emailChanged(login) : feed.event.emailCleared(login);
     case "person.updated": {
+      // An account at a messenger said to be the member's, or theirs no longer (ADR-0164).
+      if (data.account !== undefined && data.messenger !== undefined) {
+        return data.set === true
+          ? feed.event.accountLinked(login, data.messenger, data.account)
+          : feed.event.accountUnlinked(login, data.messenger, data.account);
+      }
       const of = (data.fields ?? []).map(
         (field) => feed.personField[field] ?? feed.field[field] ?? field,
       );

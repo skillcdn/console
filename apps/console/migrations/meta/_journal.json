@@ -484,6 +484,13 @@
       "when": 1795567345945,
       "tag": "0068_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1795608058935,
+      "tag": "0069_messenger_accounts",
+      "breakpoints": true
     }
   ]
 }

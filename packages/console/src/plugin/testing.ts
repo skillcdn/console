@@ -38,6 +38,7 @@ import { PluginRefusal } from "./refusals.js";
 export interface TestConsoleOptions {
   readonly workspace?: PluginConsole["workspace"];
   readonly people?: Partial<PluginConsole["people"]>;
+  readonly accounts?: Partial<PluginConsole["accounts"]>;
   readonly notifications?: Partial<PluginConsole["notifications"]>;
   readonly teams?: Partial<PluginConsole["teams"]>;
   readonly projects?: Partial<PluginConsole["projects"]>;
@@ -540,6 +541,7 @@ function refusingConsole(given: TestConsoleOptions | undefined): PluginConsole {
     workspace:
       given?.workspace ?? (async () => forbidden("console.workspace", "console.workspace")),
     people: fill("people", ["list", "get", "granted"], given?.people),
+    accounts: fill("accounts", ["list", "put", "remove"], given?.accounts),
     notifications: fill("notifications", ["settings"], given?.notifications),
     teams: fill("teams", ["list", "get"], given?.teams),
     projects: fill("projects", ["list", "get", "members"], given?.projects),

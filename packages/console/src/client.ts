@@ -156,6 +156,8 @@ import {
   type RestWorkspace,
   type RestWorkspacePackConnect,
   type RestWorkspacePatch,
+  type RestWriters,
+  type RestWritersInput,
   restAgentInvitationMadeSchema,
   restAgentInvitationStateSchema,
   restAgentProposalsSchema,
@@ -250,6 +252,7 @@ import {
   restWorkSchema,
   restWorkspacePackConnectSchema,
   restWorkspaceSchema,
+  restWritersSchema,
 } from "./schemas.js";
 import { readSse } from "./sse.js";
 import type { GoalState, TaskState } from "./vocabulary.js";
@@ -838,6 +841,12 @@ export interface ConsoleClient {
   signalStream(after: number, signal: AbortSignal): AsyncIterable<RestSignal>;
   /** Raises a wake of the runner's own, from a wake source on its machine: it comes back in order on the stream. */
   raiseWake(input: Omit<RestRunnerWake, "kind">): Promise<RestSignal>;
+  /**
+   * Who accounts at a messenger are to the agent account that asks (ADR-0164): the member each
+   * is, as a plugin that holds `people:accounts` said it, and whether they supervise the
+   * account. A console older than the route answers that there is none (`404`).
+   */
+  writers(input: RestWritersInput, signal?: AbortSignal): Promise<RestWriters>;
   /** An agent account raises a wake for itself (ADR-0145), by its own command: now, or kept for a moment to come. */
   raiseOwnWake(input: RestOwnWakeInput): Promise<RestOwnWakeRaised>;
   /** The wakes an agent account keeps for later, the soonest first; for its supervisors, and as `me` for the account. */
@@ -1803,6 +1812,8 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
         { kind: "wake", ...input },
         restSignalSchema,
       ),
+    writers: (input, signal) =>
+      request("POST", `${base}${agentPath("me", "writers")}`, input, restWritersSchema, signal),
     raiseOwnWake: (input) =>
       request("POST", `${base}${agentPath("me", "wakes")}`, input, restOwnWakeRaisedSchema),
     ownWakes: (handle, signal) =>

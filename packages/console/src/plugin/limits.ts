@@ -50,6 +50,13 @@ export const PLUGIN_EVENT_DAYS = 90;
 export const MAX_PLUGIN_RETENTION_DAYS = 3650;
 /** How many records one page of a list carries at most. */
 export const PLUGIN_LIST_LIMIT = 200;
+/**
+ * How many accounts at a messenger a workspace keeps as its members' (ADR-0164), of every
+ * messenger and every plugin together, and the characters of a messenger's id for a workspace or
+ * an account there.
+ */
+export const MAX_MESSENGER_ACCOUNTS = 20_000;
+export const MAX_MESSENGER_ID_LENGTH = 64;
 /** How long plugin code may run: a command; a query or an endpoint; a hook; a job; `onEnable`, `onDisable` and an upgrade. */
 export const PLUGIN_COMMAND_MS = 30_000;
 export const PLUGIN_QUERY_MS = 10_000;

@@ -471,6 +471,11 @@ export const en = {
         opens:
           "Reads the work email of the people it may read, to match them to accounts elsewhere.",
       },
+      "people:accounts": {
+        name: "Accounts at a messenger",
+        opens:
+          "Says which account at a messenger is which member's. An agent account is told by it that a supervisor of its own wrote there, whose word it takes as an instruction.",
+      },
       "people:act": {
         name: "Acting for a person",
         opens:
@@ -1395,6 +1400,7 @@ export const en = {
       name: "the name",
       avatar: "the avatar",
       kind: "the kind of account",
+      account: "the account at a messenger",
     } as Readonly<Record<string, string>>,
     event: {
       personJoined: () => "joined the board",
@@ -1408,6 +1414,10 @@ export const en = {
       managerCleared: (login: string) => `cleared ${login}'s manager`,
       emailChanged: (login: string) => `changed ${login}'s work email`,
       emailCleared: (login: string) => `cleared ${login}'s work email`,
+      accountLinked: (login: string, messenger: string, account: string) =>
+        `said that the account ${account} at ${messenger} is ${login}'s`,
+      accountUnlinked: (login: string, messenger: string, account: string) =>
+        `said that the account ${account} at ${messenger} is ${login}'s no longer`,
       personUpdated: (fields: string, login: string) => `changed ${fields} of ${login}`,
       /** How an agent account stands now (ADR-0085): said by the account itself, or of `agent` by another. */
       agentRunning: (agent: string | undefined) =>

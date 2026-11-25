@@ -2260,6 +2260,67 @@ describe("the runner", () => {
     expect(uncommitted.gitted).not.toContain("push --quiet");
   });
 
+  it("asks the console who wrote for a wake source, of the messenger the source is named for, and hands a source nothing to ask where the console has no such question (ADR-0164)", async () => {
+    const answered: unknown[] = [];
+    const offered: boolean[] = [];
+    const source: WakeSource = {
+      name: "chat",
+      async run(host, signal) {
+        offered.push(host.writers !== undefined);
+        answered.push(await host.writers?.([{ workspace: "T0ACME", account: "U0ALICE" }], signal));
+        await host.wait(60_000, signal);
+      },
+    };
+    const asked: unknown[] = [];
+    const first = setup({
+      sources: [source],
+      before: (made) => {
+        made.client.writers = async (input) => {
+          asked.push(input);
+          return {
+            items: input.accounts.map((one) => ({
+              ...one,
+              told: true,
+              member: {
+                login: "alice",
+                kind: "person" as const,
+                supervisor: true,
+                administrator: true,
+                line: "manager" as const,
+              },
+            })),
+          };
+        };
+      },
+    });
+    await until("the source to ask", () => answered.length === 1);
+    expect(asked).toEqual([
+      { messenger: "chat", accounts: [{ workspace: "T0ACME", account: "U0ALICE" }] },
+    ]);
+    expect(answered[0]).toEqual([
+      {
+        workspace: "T0ACME",
+        account: "U0ALICE",
+        told: true,
+        member: {
+          login: "alice",
+          kind: "person",
+          supervisor: true,
+          administrator: true,
+          line: "manager",
+        },
+      },
+    ]);
+    first.runner.stop();
+    await first.done;
+    // A client that has no such question: the source is offered nothing to ask.
+    const second = setup({ sources: [source] });
+    await until("the source to run again", () => offered.length === 2);
+    expect(offered).toEqual([true, false]);
+    second.runner.stop();
+    await second.done;
+  });
+
   it("keeps a wake source listening, and carries what it raises to the agent as someone else's words", async () => {
     const seen: (string | undefined)[] = [];
     const listened: string[] = [];

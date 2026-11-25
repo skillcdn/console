@@ -418,6 +418,11 @@ export const ko: Messages = {
         name: "업무 이메일",
         opens: "읽을 수 있는 사람의 업무 이메일을 읽습니다. 다른 서비스의 계정과 맞추는 데 씁니다.",
       },
+      "people:accounts": {
+        name: "메신저 계정 연결",
+        opens:
+          "메신저의 어느 계정이 어느 구성원의 것인지 콘솔에 알립니다. 에이전트 계정은 이 연결로 메신저에서 자기 감독자가 썼다고 듣고, 그 말을 지시로 받습니다.",
+      },
       "people:act": {
         name: "사람 대신 실행",
         opens:
@@ -1310,6 +1315,7 @@ export const ko: Messages = {
       name: "이름",
       avatar: "아바타",
       kind: "계정 종류",
+      account: "메신저 계정",
     },
     event: {
       personJoined: () => "보드에 들어왔습니다",
@@ -1323,6 +1329,10 @@ export const ko: Messages = {
       managerCleared: (login) => `${login}의 매니저 지정을 해제했습니다`,
       emailChanged: (login) => `${login}의 업무 이메일을 바꿨습니다`,
       emailCleared: (login) => `${login}의 업무 이메일을 지웠습니다`,
+      accountLinked: (login, messenger, account) =>
+        `${messenger} 계정 ${account}을(를) ${login}의 계정으로 연결했습니다`,
+      accountUnlinked: (login, messenger, account) =>
+        `${messenger} 계정 ${account}과(와) ${login}의 연결을 풀었습니다`,
       personUpdated: (fields, login) => `${login}의 ${asObject(fields)} 바꿨습니다`,
       agentRunning: (agent) =>
         agent === undefined ? "실행 중입니다" : `${asSubject(agent)} 실행 중임을 확인했습니다`,

@@ -22,6 +22,8 @@ import {
 import {
   type CollectionDescription,
   isCalendarDay,
+  MAX_MESSENGER_ACCOUNTS,
+  MAX_MESSENGER_ID_LENGTH,
   PLUGIN_LIST_LIMIT,
   type PluginCaller,
   type PluginManifest,
@@ -43,6 +45,13 @@ import {
 } from "../db/queries/decisions.js";
 import { getDocument, listDocuments, writeDocument } from "../db/queries/documents.js";
 import type { Actor, Scope } from "../db/queries/events.js";
+import {
+  ACCOUNTS_CAPABILITY,
+  listMessengerAccounts,
+  type MessengerAccountRecord,
+  putMessengerAccount,
+  removeMessengerAccount,
+} from "../db/queries/messenger-accounts.js";
 import { chosenNotificationsOf } from "../db/queries/notifications.js";
 import {
   findPerson,
@@ -189,6 +198,21 @@ const forbidden = (message: string): PluginRefusal =>
   new PluginRefusal("plugin.forbidden", message);
 const invalid = (message: string): PluginRefusal =>
   new PluginRefusal("plugin.invalid_args", message);
+
+/** A messenger's id for a workspace or an account there: what it gives, letters, digits and little else, bounded. */
+const messengerId = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+  .max(MAX_MESSENGER_ID_LENGTH);
+/** What a call on `ctx.console.accounts` names: read as data, each part held to its shape before the database is asked. */
+const accountInput = z.strictObject({
+  messenger: z.string().regex(/^[a-z][a-z0-9-]{1,31}$/),
+  workspace: messengerId,
+  account: messengerId.optional(),
+  personId: z.string().regex(UUID).optional(),
+  after: z.string().regex(UUID).optional(),
+  limit: z.number().int().min(1).max(READ_LIMIT).optional(),
+});
 
 /** Whether a caller acts as a person: a person themselves, or a plugin for one (ADR-0072); the console and a plugin as itself do not. */
 function actsAsPerson(caller: PluginCaller): boolean {
@@ -348,6 +372,96 @@ export class PluginBoard {
             )
             .slice(0, READ_LIMIT)
             .map(shape);
+        }
+        break;
+      }
+      case "console.accounts": {
+        // Which account at a messenger is a member's (ADR-0164). An agent account's runner asks
+        // by it whether a supervisor wrote, so it is the capability that opens it and nothing
+        // less, whoever calls: a person's call carries no more than a job's.
+        needs(ACCOUNTS_CAPABILITY);
+        const given = accountInput.safeParse(args[0]);
+        if (!given.success) {
+          throw invalid(
+            "an account is named by its messenger, a lowercase name, and by the messenger's ids for the workspace and the account",
+          );
+        }
+        const { messenger, workspace: team } = given.data;
+        const shape = (record: MessengerAccountRecord) => ({
+          id: record.id,
+          personId: record.personId,
+          messenger: record.messenger,
+          workspace: record.team,
+          account: record.account,
+          since: record.createdAt.toISOString(),
+        });
+        if (method === "list") {
+          const limit = given.data.limit ?? READ_LIMIT;
+          const found = await listMessengerAccounts(this.options.database, {
+            workspaceId: workspace.id,
+            plugin: context.key,
+            messenger,
+            team,
+            after: given.data.after,
+            limit: limit + 1,
+          });
+          const items = found.slice(0, limit);
+          return {
+            items: items.map(shape),
+            after: found.length > limit ? (items.at(-1)?.id ?? null) : null,
+          };
+        }
+        const personId = given.data.personId;
+        if (personId === undefined) {
+          throw invalid("the person's id is an id");
+        }
+        // A change a person's call made names them, and their agent (ADR-0056); one of a job, a
+        // hook or a plugin as itself is the plugin's own.
+        const actor = actsAsPerson(context.caller)
+          ? await this.actorOf(context, workspace)
+          : undefined;
+        if (method === "put") {
+          if (given.data.account === undefined) {
+            throw invalid("the account is the messenger's id for it");
+          }
+          const said = await putMessengerAccount(this.options.database, {
+            workspaceId: workspace.id,
+            plugin: context.key,
+            messenger,
+            team,
+            account: given.data.account,
+            personId,
+            actor,
+            most: MAX_MESSENGER_ACCOUNTS,
+            now: this.options.clock.now(),
+          });
+          if (said === "not_a_person") {
+            throw new PluginRefusal("plugin.not_found", "no active person of that id");
+          }
+          if (said === "another_plugins") {
+            throw new PluginRefusal(
+              "plugin.conflict",
+              "another plugin said whose that account is, or which account that person has there",
+            );
+          }
+          if (said === "too_many") {
+            throw new PluginRefusal(
+              "plugin.too_many",
+              `the workspace keeps ${MAX_MESSENGER_ACCOUNTS} accounts at messengers already`,
+            );
+          }
+          return shape(said);
+        }
+        if (method === "remove") {
+          return removeMessengerAccount(this.options.database, {
+            workspaceId: workspace.id,
+            plugin: context.key,
+            messenger,
+            team,
+            personId,
+            actor,
+            now: this.options.clock.now(),
+          });
         }
         break;
       }

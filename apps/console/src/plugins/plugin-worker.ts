@@ -195,6 +195,11 @@ function contextOf(
         get: group("console.people")("get") as never,
         granted: group("console.people")("granted") as never,
       },
+      accounts: {
+        list: group("console.accounts")("list") as never,
+        put: group("console.accounts")("put") as never,
+        remove: group("console.accounts")("remove") as never,
+      },
       notifications: {
         settings: group("console.notifications")("settings") as never,
       },

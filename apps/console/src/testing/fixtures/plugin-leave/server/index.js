@@ -211,6 +211,30 @@ export default {
         },
       };
     }),
+    accounts: command(
+      "Says, takes back or lists whose an account at a messenger is (ADR-0164); a refusal by its code.",
+      {
+        act: argument("text"),
+        workspace: argument("text"),
+        person: argument("text", { optional: true }),
+        account: argument("text", { optional: true }),
+        messenger: argument("text", { optional: true }),
+      },
+      async (ctx, args) => {
+        const named = {
+          messenger: args.messenger ?? "slack",
+          workspace: args.workspace,
+          ...(args.person === undefined ? {} : { personId: args.person }),
+          ...(args.account === undefined ? {} : { account: args.account }),
+        };
+        try {
+          const answer = await ctx.console.accounts[args.act](named);
+          return { text: "done", data: { answer } };
+        } catch (error) {
+          return { text: "refused", data: { refused: error.code } };
+        }
+      },
+    ),
     notices: command(
       "Says what the caller chose to be told of (ADR-0165); a refusal by its code.",
       {},

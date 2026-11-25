@@ -1049,6 +1049,51 @@ export const taskFollows = pgTable(
 );
 
 /**
+ * Which account at a messenger is a member's (ADR-0164), as a plugin that holds
+ * `people:accounts` said it: the messenger by its name (`slack`), the workspace there and the
+ * account by the ids the messenger gives them. One member for an account, and one account of a
+ * member in a workspace. The plugin that said it is kept with it, and it counts only while that
+ * plugin is enabled and still holds the capability: an agent account's runner asks by it whether
+ * a supervisor wrote, so nothing else writes a row here, a person, a message or a name least of
+ * all. Every change is an event of the workspace.
+ */
+export const messengerAccounts = pgTable(
+  "messenger_accounts",
+  {
+    id: id(),
+    workspaceId: uuid()
+      .notNull()
+      .references(() => workspaces.id),
+    messenger: text().notNull(),
+    /** The workspace at the messenger, by the messenger's id for it. */
+    team: text().notNull(),
+    /** The account there, by the messenger's id for it. */
+    account: text().notNull(),
+    personId: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    /** The plugin that said it, by key. */
+    plugin: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("messenger_accounts_account_key").on(
+      table.workspaceId,
+      table.messenger,
+      table.team,
+      table.account,
+    ),
+    uniqueIndex("messenger_accounts_person_key").on(
+      table.workspaceId,
+      table.messenger,
+      table.team,
+      table.personId,
+    ),
+    index("messenger_accounts_person_idx").on(table.personId),
+  ],
+);
+
+/**
  * A notification (ADR-0157): one event of the feed that one member is told of, under the kind
  * that says why, made by the worker as it reads the feed, once for a member and an event.
  * What happened is the event's own; the row names the thing it is of, so that it is read only

@@ -17,12 +17,14 @@ import {
   type RestRunnerHeartbeat,
   type RestSignal,
   type RestSignals,
+  type RestWriters,
   restFileInputSchema,
   restOwnResetInputSchema,
   restOwnWakeInputSchema,
   restRunnerHeartbeatInputSchema,
   restRunnerWakeSchema,
   restSignalInputSchema,
+  restWritersInputSchema,
   SIGNALS_PAGE_LIMIT,
 } from "@skillcdn/console/api";
 import type { Context, Hono } from "hono";
@@ -48,6 +50,8 @@ import {
   type OwnWakeRecord,
 } from "../db/queries/agent-wakes.js";
 import type { Actor } from "../db/queries/events.js";
+import { writersFor } from "../db/queries/messenger-accounts.js";
+import { readWorkspaceSettings } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
@@ -348,6 +352,52 @@ export function registerAgentRunnerRest(
       throw error;
     }
     return c.json(restSignal(sent), 201);
+  });
+
+  // Who wrote at a messenger, for the account that asks (ADR-0164): of each account there, the
+  // member it is, as a plugin that holds `people:accounts` said it, and whether that member
+  // supervises the account. Asked by the account itself, of nobody's supervisors but its own;
+  // it reads the login of whoever the account may see or has in its line, and changes nothing.
+  app.post(`${OWN}/writers`, tooLarge, async (c) => {
+    const caller = await own(c);
+    if (caller instanceof Response) {
+      return caller;
+    }
+    let json: unknown;
+    try {
+      json = await c.req.json();
+    } catch {
+      return invalid(c, "The request body is not readable JSON.");
+    }
+    const parsed = restWritersInputSchema.safeParse(json);
+    if (!parsed.success) {
+      return invalid(c, problemOf(parsed.error.issues));
+    }
+    const found = await writersFor(
+      database,
+      caller.person,
+      await readWorkspaceSettings(database, caller.person.workspaceId),
+      parsed.data.messenger,
+      parsed.data.accounts,
+    );
+    const answer: RestWriters = {
+      items: found.map((one) => ({
+        workspace: one.workspace,
+        account: one.account,
+        told: one.told,
+        member:
+          one.member === undefined
+            ? null
+            : {
+                login: one.member.seen ? one.member.person.login : null,
+                kind: one.member.person.kind,
+                supervisor: one.member.supervisor,
+                administrator: one.member.administrator,
+                line: one.member.line ?? null,
+              },
+      })),
+    };
+    return c.json(answer);
   });
 
   // The account's own record of what it was told.

@@ -346,6 +346,18 @@ export interface DecisionAsk {
   readonly about: { readonly collection: string; readonly id: string };
 }
 
+/** An account at a messenger said to be a member's (ADR-0164): the messenger by its name, the workspace there and the account by the messenger's ids. */
+export interface PluginMessengerAccount {
+  /** What `list` reads on from. */
+  readonly id: string;
+  readonly personId: string;
+  readonly messenger: string;
+  readonly workspace: string;
+  readonly account: string;
+  /** When it was said, an instant as text. */
+  readonly since: string;
+}
+
 /** The console's board, as a plugin reaches it with the `board:*` capabilities, each read the caller's own. */
 export interface PluginConsole {
   workspace(): Promise<PluginWorkspace>;
@@ -359,6 +371,45 @@ export interface PluginConsole {
      * listed only where they were granted it or manage someone.
      */
     granted(role: string): Promise<readonly RestPerson[]>;
+  };
+  /**
+   * Which account at a messenger is a member's (ADR-0164), with `people:accounts`: said by a
+   * plugin that matched the member to the account by something the messenger and the console
+   * both hold, an address say, and never by a name or by what a message says. An agent account's
+   * wake from that messenger says by it who wrote, and whether a supervisor of the account did,
+   * whose word there instructs it; so a plugin says an account only as surely as it would let
+   * that person instruct, and takes it back when the match no longer holds. What a plugin said
+   * is its own to list and to take back, and counts while the plugin is enabled and holds the
+   * capability. Left out by a console older than the capability.
+   */
+  accounts: {
+    /** What this plugin said of a workspace of a messenger, in the order it was said: a page, and `after` to read on from where there is more. */
+    list(where: {
+      readonly messenger: string;
+      readonly workspace: string;
+      readonly after?: string;
+      readonly limit?: number;
+    }): Promise<{
+      readonly items: readonly PluginMessengerAccount[];
+      readonly after: string | null;
+    }>;
+    /**
+     * Says that the account is the person's. What this plugin said before of the account, or of
+     * the person in that workspace, gives way; what another plugin said of either stands
+     * (`plugin.conflict`). The person is active (`plugin.not_found` otherwise).
+     */
+    put(account: {
+      readonly personId: string;
+      readonly messenger: string;
+      readonly workspace: string;
+      readonly account: string;
+    }): Promise<PluginMessengerAccount>;
+    /** Takes back what this plugin said of the person's account in that workspace; whether it had said one. */
+    remove(account: {
+      readonly personId: string;
+      readonly messenger: string;
+      readonly workspace: string;
+    }): Promise<boolean>;
   };
   /**
    * What the caller chose to be told of (ADR-0165), for a plugin that carries notifications

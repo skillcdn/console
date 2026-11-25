@@ -155,7 +155,9 @@ export type RunnerClient = Pick<
   | "secret"
   | "readSignalFile"
   | "raiseWake"
->;
+> &
+  // Who wrote at a messenger (ADR-0164): asked where the client has it, by a wake source.
+  Partial<Pick<ConsoleClient, "writers">>;
 
 /** What the runner keeps between its own restarts. No secret is in it. */
 export interface RunnerState {
@@ -2541,6 +2543,16 @@ export function createRunner(options: RunnerOptions): Runner {
       fetch: wakes.fetch,
       socket: wakes.socket,
       wait: pause,
+      // Who wrote, as the console answers the account's own sign-in (ADR-0164), of the
+      // messenger the source is named for. A console that does not know the question, or does
+      // not answer, says nothing, and the source says of an account what the messenger does.
+      ...(client.writers === undefined
+        ? {}
+        : {
+            writers: async (accounts, signal) =>
+              (await client.writers?.({ messenger: source.name, accounts: [...accounts] }, signal))
+                ?.items ?? [],
+          }),
     };
     sourceStands(source.name, "waiting");
     let wait = timing.reconnectMs;

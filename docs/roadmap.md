@@ -35,7 +35,7 @@ What exists, what is being built and what comes next, at a glance. This page say
 - **Ideas and intake:** from a thought to a task, with the questions a person is asked on the way.
 - **Hooks that report an agent's events** without being asked ([the command](specs/cli.md#not-yet)).
 
-The open questions of the design are kept with it, under [Open questions](architecture.md#open-questions): among them a runner for a person's own agent, a stronger boundary than an OS account for each agent, which member an account at a messenger is, a second workspace, signing in where no identity provider is reached, a token's renewal, and for plugins a sandbox of their own, a store, settings per project and widgets on a project's pages.
+The open questions of the design are kept with it, under [Open questions](architecture.md#open-questions): among them a runner for a person's own agent, a stronger boundary than an OS account for each agent, a second workspace, signing in where no identity provider is reached, a token's renewal, and for plugins a sandbox of their own, a store, settings per project and widgets on a project's pages.
 
 ## What exists
 

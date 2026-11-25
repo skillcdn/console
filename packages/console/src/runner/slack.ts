@@ -2,7 +2,7 @@ import * as z from "zod/mini";
 import { MAX_SIGNAL_LENGTH } from "../limits.js";
 import { withoutForbiddenCodePoints } from "../text.js";
 import { wakeTextOf } from "./message.js";
-import type { WakeHost, WakePart, WakeRead, WakeSource } from "./types.js";
+import type { WakeAccount, WakeHost, WakePart, WakeRead, WakeSource, WakeWriter } from "./types.js";
 
 // The `slack` wake source (ADR-0085): one app for one agent account, which receives over its
 // Socket Mode connection the events the agent's own member of the workspace can see, and raises
@@ -12,7 +12,9 @@ import type { WakeHost, WakePart, WakeRead, WakeSource } from "./types.js";
 // carries the words as someone else's: what the message shows, a table, a list and code among
 // it, read from its blocks where it has them. Its first line is the source's own, and says of
 // the account that wrote what the event says of it: its id, its workspace where that is
-// another than the agent's (ADR-0160), and that it wrote through an app where it did. A wake is
+// another than the agent's (ADR-0160), that it wrote through an app where it did, and, where the
+// console knows which member the account is (ADR-0164), that member and whether they supervise
+// the agent. A wake is
 // raised in parts (ADR-0163): the source's own lines, which nothing a message holds reaches,
 // and what was written, a message someone passed on apart from the words of whoever passed it
 // on. With the member's own token, where the account keeps it, the source reads what was said
@@ -63,6 +65,8 @@ const MAX_WAITING = 5;
 const REOPEN_WAIT_MS = 1000;
 /** How many others that write through an app a wake names. */
 const MAX_OTHERS = 5;
+/** Of so many accounts the console is asked at once who they are: what one asking takes. */
+const MAX_WRITERS_ASKED = 100;
 /** What the command reads of a conversation where nothing says how much, and at the most. */
 export const SLACK_READ_DEFAULT = 20;
 export const SLACK_READ_MOST = 100;
@@ -542,13 +546,9 @@ const EVERYONE_CALLED = /<!(here|channel|everyone)(?:\|[^<>]{0,40})?>/;
  * proof of a colleague.
  */
 function writerOf(
-  message: {
-    readonly user?: string | undefined;
-    readonly bot_id?: string | undefined;
-    readonly team?: unknown;
-    readonly user_team?: unknown;
-  },
+  message: Written,
   own: readonly (string | undefined)[],
+  who: Who = NOBODY,
 ): string {
   if (message.user === undefined) {
     const app = workspaceOf(message.bot_id);
@@ -559,11 +559,164 @@ function writerOf(
     theirs === undefined || own.includes(theirs) || own.every((one) => one === undefined)
       ? undefined
       : theirs;
-  return `the member ${message.user}${elsewhere === undefined ? "" : ` of another workspace (${elsewhere})`}${message.bot_id === undefined ? "" : " through an app"}`;
+  return `the member ${message.user}${elsewhere === undefined ? "" : ` of another workspace (${elsewhere})`}${message.bot_id === undefined ? "" : " through an app"}${who(message)}`;
 }
 
-/** What an event of the messenger means to the agent: the wake as it stands with nothing read of the conversation, and where it was said. */
-interface Heard extends SlackWake {
+/** What a message says of whoever wrote it. */
+interface Written {
+  readonly user?: string | undefined;
+  readonly bot_id?: string | undefined;
+  readonly team?: unknown;
+  readonly user_team?: unknown;
+}
+
+/**
+ * What the console says of the account that wrote a message, as a line of the source's says it
+ * after the account (ADR-0164), or nothing where the console says nothing of it.
+ */
+type Who = (message: Written) => string;
+const NOBODY: Who = () => "";
+
+/** Why what was asked came to nothing as the signal ended: by the word it was ended with, or because the wait for it was over. */
+const endedBy = (until: AbortSignal): string =>
+  typeof until.reason === "string" ? until.reason : "no_answer";
+
+/** What is answered before the signal ends, or that it ended: an answer that comes or fails after that is nobody's to hear. */
+const ENDED = Symbol("ended");
+async function unlessEnded<T>(until: AbortSignal, answer: Promise<T>): Promise<T | typeof ENDED> {
+  answer.catch(() => undefined);
+  let stop = (): void => undefined;
+  const ended = new Promise<typeof ENDED>((resolve) => {
+    stop = () => resolve(ENDED);
+    until.addEventListener("abort", stop, { once: true });
+  });
+  try {
+    return await Promise.race([answer, ended]);
+  } finally {
+    until.removeEventListener("abort", stop);
+  }
+}
+
+/** A login as a line of the source's carries one: a name of the console's, and never anything a line could be made of. */
+const LOGIN = /^[A-Za-z0-9][A-Za-z0-9._@+-]{0,99}$/;
+
+/**
+ * The account a message names as its writer, as the console is asked of it: with the workspace
+ * the message itself says the account is of, and none where it says none. The agent's own
+ * workspace is never taken for it: the same id at another workspace is another account, and an
+ * account whose workspace nothing says is nobody the console knows.
+ */
+function accountOf(message: Written): WakeAccount | undefined {
+  const workspace = workspaceOf(message.user_team) ?? workspaceOf(message.team);
+  return message.user === undefined || workspace === undefined
+    ? undefined
+    : { workspace, account: message.user };
+}
+
+/**
+ * How a member stands to the agent, as a line says it after who they are: a supervisor of its
+ * own or none, and where the console says more, how: its manager, anyone above its manager or
+ * an administrator, who supervises from outside the line and may stand in it too; and of
+ * anyone below the agent in its line, that they report to it, themselves or through others.
+ * A console that says only whether a member supervises is said as it was.
+ */
+function standsOf(member: NonNullable<WakeWriter["member"]>): string {
+  const reports =
+    member.line === "report"
+      ? "reports to you"
+      : member.line === "below"
+        ? "reports to you through others"
+        : undefined;
+  // A supervisor only where the console says so in so many words: how it is one says more of
+  // it, and never makes one.
+  if (member.supervisor !== true) {
+    return `no supervisor of yours${reports === undefined ? "" : `, ${reports}`}`;
+  }
+  const how = [
+    member.line === "manager"
+      ? "your manager"
+      : member.line === "above"
+        ? "above your manager"
+        : undefined,
+    member.administrator === true ? "an administrator" : undefined,
+  ].filter((one) => one !== undefined);
+  return `a supervisor of yours${how.length === 0 ? "" : `: ${how.join(" and ")}`}${reports === undefined ? "" : `, who ${reports}`}`;
+}
+
+/**
+ * Asks the console who wrote (ADR-0164), of so many messages at once, and answers what a line
+ * says of each writer after the account:
+ *
+ * - the member it is, by their login in the console, an agent account said as one, and whether
+ *   they supervise the agent: `(@kim in the console, a supervisor of yours: your manager)`,
+ *   with how, its manager, anyone above its manager or an administrator, and of anyone below
+ *   the agent in its line that they report to it, themselves or through others (`standsOf`);
+ * - that it is no member the console knows, where the console is told the accounts of that
+ *   workspace and not this one: what it is told may be short of one, so a supervisor's tell that
+ *   names the account still tells whose it is;
+ * - nothing, where the console is told no account of that workspace, where it does not answer
+ *   before the signal ends, or where it is older than the question: the line is then as the
+ *   messenger alone has it. Where the signal has ended already, the console is not asked.
+ *
+ * It is the console's answer and nothing else's: no word of a message, no name the messenger
+ * shows and no id alone makes an account a supervisor's, and a login that is not shaped as one
+ * is left out. An agent takes a supervisor's own word at the messenger as an instruction
+ * (ADR-0160), and this is how a wake says that one wrote.
+ */
+async function whoOf(
+  host: Pick<WakeHost, "writers">,
+  messages: readonly Written[],
+  until: AbortSignal,
+): Promise<Who> {
+  const keyOf = (one: WakeAccount): string => `${one.workspace} ${one.account}`;
+  const asked = new Map<string, WakeAccount>();
+  for (const message of messages) {
+    const one = accountOf(message);
+    if (one !== undefined && asked.size < MAX_WRITERS_ASKED) {
+      asked.set(keyOf(one), one);
+    }
+  }
+  if (host.writers === undefined || asked.size === 0 || until.aborted) {
+    return NOBODY;
+  }
+  try {
+    const answered = await unlessEnded(until, host.writers([...asked.values()], until));
+    if (answered === ENDED) {
+      return NOBODY;
+    }
+    const known = new Map<string, string>();
+    for (const one of answered) {
+      // Only what was asked of is heard, and only an answer of the shape one has.
+      if (!asked.has(keyOf(one)) || one.told !== true) {
+        continue;
+      }
+      const member = one.member;
+      // A login that is not shaped as one is not written into a line: the member is said, unnamed.
+      const named =
+        member !== null && typeof member.login === "string" && LOGIN.test(member.login)
+          ? `@${member.login} in the console`
+          : "a member of the console";
+      known.set(
+        keyOf(one),
+        member === null
+          ? " (no member the console knows)"
+          : ` (${named}${member.kind === "agent" ? ", an agent account" : ""}, ${standsOf(member)})`,
+      );
+    }
+    return (message) => {
+      const one = accountOf(message);
+      return one === undefined ? "" : (known.get(keyOf(one)) ?? "");
+    };
+  } catch {
+    return NOBODY;
+  }
+}
+
+/** What an event of the messenger means to the agent: the wake's key, its parts with nothing read of the conversation, and where it was said. */
+interface Heard {
+  readonly key: string;
+  /** The line of the source's own, with what the console says of who wrote, then the message and what hangs under it. */
+  readonly saying: (who: Who) => readonly WakePart[];
   readonly channel: string;
   /** The message's own moment, and the thread it was written in where it was written in one. */
   readonly ts: string;
@@ -576,6 +729,8 @@ interface Heard extends SlackWake {
   readonly group: boolean;
   /** The agent's own workspace and organization, as the event names them. */
   readonly own: readonly (string | undefined)[];
+  /** What the event says of whoever wrote, for the console to be asked who that is. */
+  readonly from: Written;
 }
 
 /**
@@ -644,38 +799,41 @@ function heardOf(payload: unknown, channels: readonly string[]): Heard | undefin
       ? "A message in a group conversation at Slack"
       : undefined;
   const own = [installed?.team_id, installed?.enterprise_id].map(workspaceOf);
-  const from = `from ${writerOf(event, own)}`;
   // A conversation shared with another organization is said to be one, whoever wrote in it:
   // what is said there, people outside read.
   const shared = parsed.data.is_ext_shared_channel === true ? "externally shared " : "";
-  const first =
-    where === undefined
-      ? `${mentioned ? "A mention" : called !== undefined ? `A call of everyone (@${called})` : "A message"} in the ${shared}channel ${event.channel} at Slack, ${from}, in the thread ${thread}`
-      : event.thread_ts === undefined
-        ? `${where}, ${from}, in the ${shared}conversation ${event.channel}`
-        : `${where}, ${from}, in the thread ${thread} of the ${shared}conversation ${event.channel}`;
   const whole = saidOf(event);
-  // A cut is said in the source's own line, with the message to read whole by its moment: said
-  // after the words, it would read as theirs.
-  const carried = (most: number): WakePart[] => {
-    const said = carriedOf(whole, most);
-    const cut =
-      said.length > most
-        ? ` (cut in this wake after ${most} of its ${said.length} characters: read the message ${event.ts} whole with the messenger's own tool)`
-        : "";
-    return [{ says: `${first}${cut}` }, ...partsOf(said)];
+  const saying = (who: Who): readonly WakePart[] => {
+    const from = `from ${writerOf(event, own, who)}`;
+    const first =
+      where === undefined
+        ? `${mentioned ? "A mention" : called !== undefined ? `A call of everyone (@${called})` : "A message"} in the ${shared}channel ${event.channel} at Slack, ${from}, in the thread ${thread}`
+        : event.thread_ts === undefined
+          ? `${where}, ${from}, in the ${shared}conversation ${event.channel}`
+          : `${where}, ${from}, in the thread ${thread} of the ${shared}conversation ${event.channel}`;
+    // A cut is said in the source's own line, with the message to read whole by its moment: said
+    // after the words, it would read as theirs.
+    const carried = (most: number): WakePart[] => {
+      const said = carriedOf(whole, most);
+      const cut =
+        said.length > most
+          ? ` (cut in this wake after ${most} of its ${said.length} characters: read the message ${event.ts} whole with the messenger's own tool)`
+          : "";
+      return [{ says: `${first}${cut}` }, ...partsOf(said)];
+    };
+    // So much of the message as a wake carries, and less where its lines are so many that, begun
+    // as a signal's text begins them, they would leave no room for anything else.
+    let most = MAX_WAKE_TEXT;
+    let parts = carried(most);
+    while (most > 250 && wakeTextOf(parts, Number.MAX_SAFE_INTEGER).length > MAX_LEAD_LENGTH) {
+      most = Math.floor(most / 2);
+      parts = carried(most);
+    }
+    return parts;
   };
-  // So much of the message as a wake carries, and less where its lines are so many that, begun
-  // as a signal's text begins them, they would leave no room for anything else.
-  let most = MAX_WAKE_TEXT;
-  let parts = carried(most);
-  while (most > 250 && wakeTextOf(parts, Number.MAX_SAFE_INTEGER).length > MAX_LEAD_LENGTH) {
-    most = Math.floor(most / 2);
-    parts = carried(most);
-  }
   return {
     key: `slack:${event.channel}:${thread}`,
-    parts,
+    saying,
     channel: event.channel,
     ts: event.ts,
     thread: event.thread_ts,
@@ -684,6 +842,12 @@ function heardOf(payload: unknown, channels: readonly string[]): Heard | undefin
     direct,
     group,
     own,
+    from: {
+      user: event.user,
+      bot_id: event.bot_id,
+      team: event.team,
+      user_team: event.user_team,
+    },
   };
 }
 
@@ -698,7 +862,7 @@ export function slackWakeOf(
   channels: readonly string[] = [],
 ): SlackWake | undefined {
   const heard = heardOf(payload, channels);
-  return heard === undefined ? undefined : { key: heard.key, parts: heard.parts };
+  return heard === undefined ? undefined : { key: heard.key, parts: heard.saying(NOBODY) };
 }
 
 /** Whether one moment of the messenger's is before another: by the seconds, then by the counter. */
@@ -754,10 +918,6 @@ function wordsOfSomeone(message: unknown): HeardMessage | undefined {
     : undefined;
 }
 
-/** Why a read that was ended came to nothing: by the word it was ended with, or because the wait for it was over. */
-const endedBy = (until: AbortSignal): string =>
-  typeof until.reason === "string" ? until.reason : "no_answer";
-
 /**
  * Does what one wake reads, all of it within one wait: the signal handed to the work ends once
  * the wait is over (`no_answer`), or before that with the one given, and what is asked under it
@@ -809,26 +969,18 @@ async function pageOf(
   if (until.aborted) {
     return { ok: false, why: endedBy(until) };
   }
-  const ended = Symbol("ended");
-  let stop = (): void => undefined;
   try {
-    const read = host
-      .fetch(`${url}?${new URLSearchParams(asked).toString()}`, {
-        method: "GET",
-        headers: { authorization: `Bearer ${token}` },
-        signal: until,
-      })
-      .then((answered) => answered.json());
-    // Whichever loses is let go: a read that fails after the wait is over is nobody's to hear.
-    read.catch(() => undefined);
-    const answered = await Promise.race([
-      read,
-      new Promise<typeof ended>((resolve) => {
-        stop = () => resolve(ended);
-        until.addEventListener("abort", stop, { once: true });
-      }),
-    ]);
-    if (answered === ended) {
+    const answered = await unlessEnded(
+      until,
+      host
+        .fetch(`${url}?${new URLSearchParams(asked).toString()}`, {
+          method: "GET",
+          headers: { authorization: `Bearer ${token}` },
+          signal: until,
+        })
+        .then((answered) => answered.json()),
+    );
+    if (answered === ENDED) {
       return { ok: false, why: endedBy(until) };
     }
     const parsed = readSchema.safeParse(answered);
@@ -848,8 +1000,6 @@ async function pageOf(
     };
   } catch {
     return { ok: false, why: until.aborted ? endedBy(until) : "failed" };
-  } finally {
-    until.removeEventListener("abort", stop);
   }
 }
 
@@ -947,6 +1097,7 @@ const readWith = (channel: string, thread: string | undefined, after?: string): 
 function earlierOf(
   message: HeardMessage,
   heard: Pick<Heard, "ts" | "own">,
+  who: Who = NOBODY,
 ): readonly [WakePart, WakePart] {
   const said = saidOf(message);
   const words = [
@@ -963,7 +1114,7 @@ function earlierOf(
       : "";
   return [
     {
-      says: `${stretchOf(secondsOf(heard.ts) - secondsOf(message.ts))} before it, from ${writerOf(message, heard.own)}${cut}`,
+      says: `${stretchOf(secondsOf(heard.ts) - secondsOf(message.ts))} before it, from ${writerOf(message, heard.own, who)}${cut}`,
     },
     { words: cut === "" ? words : `${firstOf(words, MAX_BEFORE_TEXT)}…` },
   ];
@@ -1021,8 +1172,9 @@ interface Prior {
  * conversation outside its threads.
  */
 async function beforeOf(
-  host: Pick<WakeHost, "secret" | "fetch" | "kept">,
+  host: Pick<WakeHost, "secret" | "fetch" | "kept" | "writers">,
   heard: Heard,
+  writer: Promise<Who>,
   until: AbortSignal,
 ): Promise<Prior> {
   const token = await host.secret(SLACK_USER_TOKEN);
@@ -1083,27 +1235,12 @@ async function beforeOf(
     }
   }
   const others = writers.filter((one) => one !== heard.member);
-  const named = writers
-    .slice(0, MAX_OTHERS + 1)
-    .map((one) => (one === heard.member ? "you" : one))
-    .join(", ");
   // Where the event does not say which member it was delivered for, the agent's own account
   // cannot be told from another's, and nobody is named: it would be told to leave it to itself.
-  const answering: WakePart[] =
+  const shown =
     heard.direct || heard.member === undefined || others.length === 0
       ? []
-      : [
-          {
-            says: `Others here that write through an app, as agents do, the last to write first: ${named}${writers.length > MAX_OTHERS + 1 ? ` and ${writers.length - MAX_OTHERS - 1} more` : ""}. Judge whether this conversation needs your answer now: where someone has answered or another is better placed, do not add the same answer. Before you send, read what was said since: ${
-              // A message of a channel is answered in its thread, where one that began none is read as the channel.
-              readWith(
-                heard.channel,
-                heard.thread ?? (heard.group ? undefined : heard.ts),
-                heard.ts,
-              )
-            }`,
-          },
-        ];
+      : writers.slice(0, MAX_OTHERS + 1);
   const wrote =
     heard.member === undefined
       ? -1
@@ -1117,6 +1254,53 @@ async function beforeOf(
   const since = earlier
     .slice(last + 1)
     .filter((message) => !host.kept.has(carriedAs(heard.channel, message.ts)));
+  const latest = since.toReversed().slice(0, MAX_BEFORE);
+  // Who wrote each, as the console says it (ADR-0164), asked at once for all whose account is
+  // another than that of the message that woke, which is asked of beside the read: said of an
+  // earlier message as of the one that woke, and information all the same, whoever wrote it;
+  // and said of each of the others named, by a message of theirs, since how one stands to the
+  // agent, a supervisor of its own say, is among what it judges by whether to answer.
+  const theirs = new Map<string, Written>();
+  for (const one of shown) {
+    const written = earlier.findLast(
+      (message) => message.user === one && message.bot_id !== undefined,
+    );
+    if (one !== heard.member && written !== undefined) {
+      theirs.set(one, written);
+    }
+  }
+  const first = await writer;
+  const known = accountOf(heard.from);
+  const rest = await whoOf(
+    host,
+    [...latest, ...theirs.values()].filter((message) => {
+      const one = accountOf(message);
+      return one?.account !== known?.account || one?.workspace !== known?.workspace;
+    }),
+    until,
+  );
+  const who: Who = (message) => first(message) || rest(message);
+  const named = shown
+    .map((one) => {
+      const written = theirs.get(one);
+      return one === heard.member ? "you" : `${one}${written === undefined ? "" : who(written)}`;
+    })
+    .join(", ");
+  const answering: WakePart[] =
+    shown.length === 0
+      ? []
+      : [
+          {
+            says: `Others here that write through an app, as agents do, the last to write first: ${named}${writers.length > MAX_OTHERS + 1 ? ` and ${writers.length - MAX_OTHERS - 1} more` : ""}. Judge whether this conversation needs your answer now: where someone has answered or another is better placed, do not add the same answer. Before you send, read what was said since: ${
+              // A message of a channel is answered in its thread, where one that began none is read as the channel.
+              readWith(
+                heard.channel,
+                heard.thread ?? (heard.group ? undefined : heard.ts),
+                heard.ts,
+              )
+            }`,
+          },
+        ];
   if (since.length === 0) {
     return { parts: answering, read: true, carried: [] };
   }
@@ -1138,13 +1322,13 @@ async function beforeOf(
     Math.min(
       MAX_BEFORE_LENGTH,
       MAX_SIGNAL_LENGTH -
-        wakeTextOf([...heard.parts, { says: leads(1) }, ...answering]).length -
+        wakeTextOf([...heard.saying(first), { says: leads(1) }, ...answering]).length -
         200,
     ) - 1;
   const carried: { readonly ts: string; readonly parts: readonly [WakePart, WakePart] }[] = [];
   let length = 0;
-  for (const message of since.toReversed().slice(0, MAX_BEFORE)) {
-    const parts = earlierOf(message, heard);
+  for (const message of latest) {
+    const parts = earlierOf(message, heard, who);
     const takes = wakeTextOf(parts).length + 1;
     if (length + takes > room) {
       break;
@@ -1164,8 +1348,8 @@ async function beforeOf(
 }
 
 /**
- * Raises the wake of one message, with what it carries of its conversation, all of it read
- * within one wait, and keeps what the agent was brought by it, once the console took it:
+ * Raises the wake of one message, with who wrote it and what it carries of its conversation, all
+ * of it asked within one wait, and keeps what the agent was brought by it, once the console took it:
  *
  * - the message itself, and each message it carries of what was said before. A message that woke
  *   is not raised again where its event comes again, after a connection that ended before it
@@ -1183,16 +1367,22 @@ async function raiseOf(host: WakeHost, heard: Heard, reading: AbortSignal): Prom
   if (host.kept.get(message) === "woke") {
     return;
   }
-  // A read that fails in a way of its own costs the wake nothing: it goes as it stands.
-  const prior = await within(host, reading, (until) => beforeOf(host, heard, until)).catch(
-    (): Prior => ({
-      parts: [{ says: "What was said there before it could not be read (failed)" }],
-      read: false,
-      carried: [],
-    }),
-  );
+  const { parts, prior } = await within(host, reading, async (until) => {
+    // Who wrote, as the console says it (ADR-0164), is asked beside the read of the conversation
+    // and not after it: a messenger that does not answer costs the wake's first line nothing.
+    const writer = whoOf(host, [heard.from], until);
+    // A read that fails in a way of its own costs the wake nothing: it goes as it stands.
+    const prior = await beforeOf(host, heard, writer, until).catch(
+      (): Prior => ({
+        parts: [{ says: "What was said there before it could not be read (failed)" }],
+        read: false,
+        carried: [],
+      }),
+    );
+    return { parts: heard.saying(await writer), prior };
+  });
   const taken = await host
-    .raise({ key: heard.key, parts: [...heard.parts, ...prior.parts] })
+    .raise({ key: heard.key, parts: [...parts, ...prior.parts] })
     .catch((error: unknown) => {
       host.log(
         `a wake from slack was not raised (${error instanceof Error ? error.name : "error"})`,
@@ -1226,7 +1416,7 @@ const NAMED = /^([A-Z0-9]{1,24})(?::([0-9]{1,12}\.[0-9]{1,9}))?$/;
  * newest kept, and the first line says how many were left out.
  */
 async function readOf(
-  host: Pick<WakeHost, "secret" | "fetch">,
+  host: Pick<WakeHost, "secret" | "fetch" | "writers">,
   where: string,
   options: Parameters<NonNullable<WakeSource["read"]>>[2],
 ): Promise<WakeRead> {
@@ -1272,6 +1462,7 @@ async function readOf(
       : read.messages.filter((message) => before(after, message.ts));
   const latest = said.slice(-limit);
   const now = Math.floor(options.now / 1000);
+  const who = await whoOf(host, latest, options.signal);
   // The newest first, for as long as there is room: the oldest are what is left out.
   const shown: WakePart[][] = [];
   let length = 0;
@@ -1279,7 +1470,7 @@ async function readOf(
     const carried = carriedOf(saidOf(message), MAX_WAKE_TEXT);
     const parts: WakePart[] = [
       {
-        says: `${stretchOf(Math.max(0, now - secondsOf(message.ts)))} ago, from ${writerOf(message, [])}, the message ${message.ts}${
+        says: `${stretchOf(Math.max(0, now - secondsOf(message.ts)))} ago, from ${writerOf(message, [], who)}, the message ${message.ts}${
           carried.length > MAX_WAKE_TEXT
             ? ` (cut after ${MAX_WAKE_TEXT} of its ${carried.length} characters)`
             : ""

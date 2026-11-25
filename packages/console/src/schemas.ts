@@ -921,6 +921,59 @@ export const restOwnWakeRaisedSchema = z.object({
 });
 export type RestOwnWakeRaised = z.infer<typeof restOwnWakeRaisedSchema>;
 
+/** How many accounts at a messenger one asking names. */
+export const MAX_WRITERS_ASKED = 100;
+const messengerId = z.string().check(z.regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/), z.maxLength(64));
+
+/**
+ * What `POST /api/v1/agents/me/writers` is sent, by an agent account for itself (ADR-0164):
+ * accounts at a messenger, each by the messenger's ids for its workspace and for itself, as a
+ * message there names whoever wrote it.
+ */
+export const restWritersInputSchema = z.object({
+  messenger: z.string().check(z.regex(/^[a-z][a-z0-9-]{1,31}$/)),
+  accounts: z
+    .array(z.object({ workspace: messengerId, account: messengerId }))
+    .check(z.minLength(1), z.maxLength(MAX_WRITERS_ASKED)),
+});
+export type RestWritersInput = z.infer<typeof restWritersInputSchema>;
+
+/**
+ * Who an account at a messenger is to the agent account that asks (ADR-0164). `told` is whether
+ * the console is told the accounts of that workspace at all, by a plugin that is enabled and
+ * holds `people:accounts`: where it is not, nothing is known there, and `member` is `null` for
+ * every account. `member` is the active member whose account it is, by their login, `null` for
+ * one the account that asks may not see (ADR-0035), with what kind of member they are and
+ * whether they supervise the account; `null` itself for an account that is no member's as far as
+ * the console is told.
+ *
+ * `supervisor` is the whole of ADR-0084, point 5: an administrator, or anyone above the asker
+ * in the reporting line, its manager and every level above. `administrator` and `line` say
+ * which, and the other way too: `line` is where the member stands in the asker's line,
+ * `manager` whom it reports to, `above` anyone further up, `report` whoever reports to it,
+ * `below` anyone further down, `null` nowhere in it. An administrator may stand anywhere in
+ * the line, below the asker too, and supervises it all the same.
+ */
+export const restWriterSchema = z.object({
+  workspace: z.string(),
+  account: z.string(),
+  told: z.boolean(),
+  member: z.nullable(
+    z.object({
+      login: z.nullable(z.string()),
+      kind: z.enum(PERSON_KINDS),
+      supervisor: z.boolean(),
+      administrator: z.boolean(),
+      line: z.nullable(z.enum(["manager", "above", "report", "below"])),
+    }),
+  ),
+});
+export type RestWriter = z.infer<typeof restWriterSchema>;
+
+/** What `POST /api/v1/agents/me/writers` answers: the accounts asked of, in the order asked. */
+export const restWritersSchema = z.object({ items: z.array(restWriterSchema) });
+export type RestWriters = z.infer<typeof restWritersSchema>;
+
 /** `GET /api/v1/agents/<handle>/wakes`: the wakes the account keeps for later, the soonest first. */
 export const restOwnWakesSchema = z.object({ items: z.array(restOwnWakeSchema) });
 export type RestOwnWakes = z.infer<typeof restOwnWakesSchema>;
@@ -2270,6 +2323,15 @@ export const restEventDataSchema = z.object({
   team: z.optional(z.string()),
   /** For `person.email_changed`: whether the person has an address now; never the address itself. */
   set: z.optional(z.boolean()),
+  /**
+   * For a `person.updated` whose `fields` are `account` (ADR-0164), which says that a plugin
+   * said an account at a messenger is the member's (`set`) or is theirs no longer: the messenger
+   * by its name, the workspace there and the account, by the ids the messenger gives them; the
+   * member is `login`, and the plugin that said it the event's own `plugin`.
+   */
+  messenger: z.optional(z.string()),
+  workspace: z.optional(z.string()),
+  account: z.optional(z.string()),
   /** For `person.updated` of an agent account and for `agent.state_changed`: the account's handle. */
   handle: z.optional(z.string()),
   /**

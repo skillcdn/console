@@ -5795,6 +5795,15 @@ const agentMessages = async (args: readonly string[], io: CliIo): Promise<number
         }
       },
       fetch: (url, init) => io.fetch(url, { ...init, headers: { ...init.headers } }),
+      // Who wrote each message, as the console says it (ADR-0164): where it says nothing, a
+      // console older than the question say, the lines are as the messenger alone has them.
+      writers: async (accounts, signal) =>
+        (
+          await session.client.writers(
+            { messenger: named[1] ?? "", accounts: [...accounts] },
+            signal,
+          )
+        ).items,
     },
     named[2],
     {

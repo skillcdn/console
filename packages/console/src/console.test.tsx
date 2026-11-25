@@ -604,6 +604,7 @@ describe("createConsole", () => {
     runnerHeartbeat: never,
     raiseWake: never,
     raiseOwnWake: never,
+    writers: never,
     sendOwnReset: never,
     ownWakes: never,
     cancelOwnWake: never,

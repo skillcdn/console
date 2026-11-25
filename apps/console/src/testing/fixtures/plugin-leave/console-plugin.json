@@ -19,6 +19,7 @@
   "optionalCapabilities": [
     "notifications:read",
     "outbound:api.example.test",
+    "people:accounts",
     "people:read:email",
     "projects:read",
     "projects:read:all"

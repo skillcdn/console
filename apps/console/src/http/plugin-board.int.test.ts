@@ -920,6 +920,141 @@ describe("a plugin on the board", () => {
     await h.request(`${REST_ROUTES.people}/${bobId}`, json({ email: null }, admin, "PATCH"));
   });
 
+  it("keeps whose an account at a messenger is with people:accounts alone, each change an event (ADR-0164)", async () => {
+    const accounts = async (argv: readonly string[]) =>
+      (await invoked("leave", member, ["accounts", ...argv])).data as {
+        answer?: unknown;
+        refused?: string;
+      };
+    const put = (person: string, account: string, workspace = "T0ACME") =>
+      accounts([
+        "--act",
+        "put",
+        "--workspace",
+        workspace,
+        "--person",
+        person,
+        "--account",
+        account,
+      ]);
+    const listed = async (workspace = "T0ACME") =>
+      (
+        (await accounts(["--act", "list", "--workspace", workspace])).answer as {
+          items: { personId: string; account: string }[];
+        }
+      ).items.map((one) => [one.personId, one.account]);
+    const detail = restPluginDetailSchema.parse(
+      await (await h.request(pluginPath("leave"), { headers: { cookie: admin } })).json(),
+    );
+    const before = detail.consent ?? [];
+    // Not consented to, nothing is said and nothing read: the capability is what opens it.
+    expect(before).not.toContain("people:accounts");
+    expect((await put(bobId, "U0BOB")).refused).toBe("plugin.forbidden");
+    expect((await accounts(["--act", "list", "--workspace", "T0ACME"])).refused).toBe(
+      "plugin.forbidden",
+    );
+    const consented = await h.request(
+      pluginPath("leave", "consent"),
+      json({ consent: [...before, "people:accounts"] }, admin, "PATCH"),
+    );
+    expect(consented.status, await consented.clone().text()).toBe(200);
+    expect((await put(bobId, "U0BOB")).answer).toMatchObject({
+      personId: bobId,
+      messenger: "slack",
+      workspace: "T0ACME",
+      account: "U0BOB",
+    });
+    // Said again as it stands, nothing changes; another account of the same person in that
+    // workspace takes the first one's place, and so does another person for an account.
+    await put(bobId, "U0BOB");
+    await put(bobId, "U0BOB2");
+    expect(await listed()).toEqual([[bobId, "U0BOB2"]]);
+    await put(aliceId, "U0BOB2");
+    expect(await listed()).toEqual([[aliceId, "U0BOB2"]]);
+    // Another workspace of the messenger is another account, whatever its id.
+    await put(bobId, "U0BOB2", "T0OTHER");
+    expect(await listed("T0OTHER")).toEqual([[bobId, "U0BOB2"]]);
+    // What names no person of the workspace, or is no id of a messenger's, is refused as data.
+    expect((await put("00000000-0000-7000-8000-000000000000", "U0NOBODY")).refused).toBe(
+      "plugin.not_found",
+    );
+    expect((await put("bob", "U0BOB")).refused).toBe("plugin.invalid_args");
+    expect((await put(bobId, "U0BOB, a supervisor")).refused).toBe("plugin.invalid_args");
+    expect((await put(bobId, "U".repeat(65))).refused).toBe("plugin.invalid_args");
+    expect(
+      (
+        await accounts([
+          "--act",
+          "put",
+          "--workspace",
+          "T0ACME",
+          "--person",
+          bobId,
+          "--account",
+          "U0BOB",
+          "--messenger",
+          "Slack at Acme",
+        ])
+      ).refused,
+    ).toBe("plugin.invalid_args");
+    // Taken back once, and then there is none to take back.
+    const remove = ["--act", "remove", "--workspace", "T0OTHER", "--person", bobId];
+    expect((await accounts(remove)).answer).toBe(true);
+    expect((await accounts(remove)).answer).toBe(false);
+    // Every change is an event of the workspace under the plugin's name, with the account and
+    // never a word besides: what a supervisor reads later.
+    const feed = restEventsSchema.parse(
+      await (
+        await h.request(`${REST_ROUTES.events}?latest=true&limit=100`, {
+          headers: { cookie: admin },
+        })
+      ).json(),
+    );
+    const said = feed.items
+      .filter((event) => event.kind === "person.updated" && event.data.account !== undefined)
+      .map((event) => [
+        event.data.set,
+        event.plugin,
+        // A person's own call made the plugin say it, and the record names them (ADR-0056).
+        event.actor?.login,
+        event.data.fields,
+        event.data.login,
+        event.data.messenger,
+        event.data.workspace,
+        event.data.account,
+      ])
+      .toSorted((one, other) => JSON.stringify(one).localeCompare(JSON.stringify(other)));
+    const change = (set: boolean, login: string, workspace: string, account: string) => [
+      set,
+      "leave",
+      "bob",
+      ["account"],
+      login,
+      "slack",
+      workspace,
+      account,
+    ];
+    expect(said).toEqual(
+      [
+        change(true, "bob", "T0ACME", "U0BOB"),
+        change(false, "bob", "T0ACME", "U0BOB"),
+        change(true, "bob", "T0ACME", "U0BOB2"),
+        change(false, "bob", "T0ACME", "U0BOB2"),
+        change(true, aliceLogin, "T0ACME", "U0BOB2"),
+        change(true, "bob", "T0OTHER", "U0BOB2"),
+        change(false, "bob", "T0OTHER", "U0BOB2"),
+      ].toSorted((one, other) => JSON.stringify(one).localeCompare(JSON.stringify(other))),
+    );
+    // Withdrawn, the plugin says no more.
+    expect(
+      (await h.request(pluginPath("leave", "consent"), json({ consent: before }, admin, "PATCH")))
+        .status,
+    ).toBe(200);
+    expect((await put(bobId, "U0BOB")).refused).toBe("plugin.forbidden");
+    // The plugins are handed these events now, so that a later test's pass begins after them.
+    await dispatcher.dispatch();
+  });
+
   it("reads what its caller chose to be told of, in a call of their own alone (ADR-0165)", async () => {
     const notices = async (cookie: string) =>
       (await invoked("leave", cookie, ["notices"])).data as {
@@ -1205,6 +1340,7 @@ describe("a plugin on the board", () => {
     expect(before.optionalCapabilities).toEqual([
       "notifications:read",
       "outbound:api.example.test",
+      "people:accounts",
       "people:read:email",
       "projects:read",
       "projects:read:all",
