@@ -1,9 +1,16 @@
 import { en, type Messages } from "./i18n/en.js";
 import type { RestEvent } from "./schemas.js";
+import type { AgentState, AgentStateReason } from "./vocabulary.js";
 
 // What an event of the feed says, as a sentence a person reads at a glance, in a language's
 // words (ADR-0012). Apart from the component that shows the feed, which is a page's, so that
 // the command says an event in the same sentence and loads nothing of a page for it.
+
+/** The reason that says no more than the sentence of its state does, and is not said after it. */
+const SAID_BY_THE_STATE: Readonly<Partial<Record<AgentState, AgentStateReason>>> = {
+  refused: "model_refused",
+  unheard: "no_heartbeat",
+};
 
 /** What an event says, without its actor: the words after the name, in the words given; a board's event a plugin caused says so (ADR-0052). */
 export function describeEvent(event: RestEvent, words: Messages = en): string {
@@ -99,7 +106,13 @@ function sentenceOf(event: RestEvent, words: Messages): string {
               : data.state === "unheard"
                 ? feed.event.agentUnheard(agent)
                 : feed.event.agentRunning(agent);
-      return data.detail === undefined ? said : `${said}: ${data.detail}`;
+      if (data.detail === undefined || data.detail === SAID_BY_THE_STATE[data.state ?? "running"]) {
+        return said;
+      }
+      // Why, in the language's words; one the list has no word for is said as it came.
+      const reasons: Readonly<Record<string, string>> = words.agents.page.state.reasons;
+      const why = Object.hasOwn(reasons, data.detail) ? reasons[data.detail] : data.detail;
+      return `${said}: ${why}`;
     }
     case "team.created":
       return feed.event.teamCreated(data.team ?? feed.aTeam);

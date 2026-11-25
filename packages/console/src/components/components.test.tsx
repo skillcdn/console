@@ -21,8 +21,10 @@ import type {
   RestWork,
 } from "../api.js";
 import { addDays, deviceLanguage, firstDayOfWeek, today, weekOf } from "../dates.js";
+import { en, type Messages } from "../i18n/en.js";
 import { KOREAN, LanguageContext } from "../i18n/index.js";
 import { setupGuideOf } from "../setup-guide.js";
+import { AGENT_STATE_REASONS } from "../vocabulary.js";
 import {
   AgentChoice,
   AgentControls,
@@ -947,13 +949,18 @@ describe("the feed", () => {
     // A member's title is not a task's: the Korean pack words the two apart.
     expect(describeEvent(titled, KOREAN.messages)).toBe("bob의 직함을 바꿨습니다");
     const mira = { ...alice, login: "mira@acme.example", kind: "agent" as const, handle: "mira" };
-    const state = (data: RestEvent["data"], actor: RestEvent["actor"] = mira) =>
+    const state = (
+      data: RestEvent["data"],
+      actor: RestEvent["actor"] = mira,
+      words: Messages = en,
+    ) =>
       describeEvent(
         event({
           kind: "agent.state_changed",
           actor,
           data: { login: mira.login, handle: "mira", ...data },
         }),
+        words,
       );
     // The account says so itself, through its runner.
     expect(state({ state: "running", was: "refused" })).toBe("is running");
@@ -964,6 +971,31 @@ describe("the feed", () => {
     expect(state({ state: "stopped" })).toBe("stopped");
     // The console says it of an account it has not heard from, and names it.
     expect(state({ state: "unheard", was: "running" }, null)).toBe("has not heard from @mira");
+
+    // Why, in the reader's words and not in the list's: a notification of it is read by a person.
+    expect(state({ state: "failed", detail: "usage_limit" })).toBe(
+      "could not start, and waits: its product's usage limit is reached",
+    );
+    expect(state({ state: "failed", detail: "usage_limit" }, mira, KOREAN.messages)).toBe(
+      "시작하지 못해 기다리고 있습니다: 제품의 사용량 한도에 닿았습니다",
+    );
+    expect(state({ state: "running", detail: "reset" }, mira, KOREAN.messages)).toBe(
+      "실행 중입니다: 새 대화를 시작했습니다",
+    );
+    for (const detail of AGENT_STATE_REASONS) {
+      expect(state({ state: "running", detail }, mira, KOREAN.messages)).not.toContain(detail);
+    }
+    // What the sentence says already is not said twice.
+    expect(state({ state: "refused", detail: "model_refused" })).toBe(
+      "was refused by its model, and waits",
+    );
+    expect(state({ state: "unheard", detail: "no_heartbeat" }, null)).toBe(
+      "has not heard from @mira",
+    );
+    // A reason of a later console, or a name every object has, is said as it came.
+    expect(state({ state: "failed", detail: "toString" })).toBe(
+      "could not start, and waits: toString",
+    );
   });
 
   it("says what happened in a sentence, per kind", () => {
