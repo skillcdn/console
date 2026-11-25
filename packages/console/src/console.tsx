@@ -3068,17 +3068,13 @@ const AGENTS_AGAIN_MS = 30_000;
  */
 function AgentsKept(props: { readonly data: ConsoleData }) {
   const { refreshAgents } = props.data.actions;
-  const loaded = useRef(props.data.loaded);
   useEffect(() => {
     const again = () => {
       if (document.visibilityState === "visible") {
         refreshAgents().catch(() => undefined);
       }
     };
-    // What the workspace was just loaded with is read once, not twice.
-    if (loaded.current) {
-      again();
-    }
+    again();
     const timer = setInterval(again, AGENTS_AGAIN_MS);
     document.addEventListener("visibilitychange", again);
     return () => {
