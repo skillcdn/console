@@ -10,7 +10,7 @@ import { recordEvent } from "../db/queries/events.js";
 import { makeNotification } from "../db/queries/notifications.js";
 import { emitPluginEvent } from "../db/queries/plugin-board.js";
 import { ensureWorkspace, type WorkspaceRecord } from "../db/queries/workspaces.js";
-import { people, pluginEvents } from "../db/schema.js";
+import { people, pluginEvents, projects } from "../db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "../db/testing.js";
 import type { Logger } from "../logger.js";
 import { type Dispatching, type DispatchTarget, PluginDispatcher } from "./dispatcher.js";
@@ -417,6 +417,63 @@ describe("the dispatcher", () => {
     finish();
     await running;
     expect(heard).toEqual([`plugin:${id}`]);
+    expect(warnings()).toEqual([]);
+  });
+});
+
+describe("the projects a plugin is on", () => {
+  it("are those the administrator named, and it hears what happens there with no page of its own in one", async () => {
+    const database = testDatabase.database;
+    const made = await drizzleOf(database)
+      .insert(projects)
+      .values(
+        ["placed-on", "elsewhere"].map((key) => ({
+          workspaceId: workspace.id,
+          key,
+          name: key,
+        })),
+      )
+      .returning({ id: projects.id, key: projects.key });
+    const idOf = (key: string) => made.find((project) => project.key === key)?.id ?? "";
+    const heard = new Map<string, string[]>();
+    const { logger, warnings } = capture();
+    // A target names no page and no collection: where the plugin is placed is all there is.
+    const listener = (key: string, on: DispatchTarget["projects"]): DispatchTarget => ({
+      key,
+      hooks: ["console:task.created"],
+      consent: ["events:console"],
+      boardProjectId: undefined,
+      projects: on,
+    });
+    const dispatcher = dispatcherOn(
+      database,
+      plugins(
+        [listener("on-all", "all"), listener("on-one", ["placed-on"]), listener("on-none", [])],
+        async (key, event) => {
+          heard.set(key, [...(heard.get(key) ?? []), event.id]);
+          return delivered;
+        },
+      ),
+      logger,
+    );
+    await dispatcher.dispatch();
+    const created = (key: string) =>
+      drizzleOf(database).transaction((tx) =>
+        recordEvent(tx, {
+          workspaceId: workspace.id,
+          projectId: idOf(key),
+          kind: "task.created",
+          actor: undefined,
+          data: {},
+          now: new Date(),
+        }),
+      );
+    const here = await created("placed-on");
+    const there = await created("elsewhere");
+    await dispatcher.dispatch();
+    expect(heard.get("on-all")).toEqual([`console:${here}`, `console:${there}`]);
+    expect(heard.get("on-one")).toEqual([`console:${here}`]);
+    expect(heard.get("on-none")).toBeUndefined();
     expect(warnings()).toEqual([]);
   });
 });

@@ -194,6 +194,9 @@ describe("createTestContext", () => {
       plugin: { settings: { daysPerYear: 15 } },
     });
     await expect(ctx.console.people.list()).rejects.toMatchObject({ code: "plugin.forbidden" });
+    await expect(ctx.console.notifications.settings()).rejects.toMatchObject({
+      code: "plugin.forbidden",
+    });
     await expect(ctx.console.tasks.update("web", 1, {})).rejects.toMatchObject({
       code: "plugin.forbidden",
     });

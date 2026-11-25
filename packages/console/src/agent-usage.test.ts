@@ -56,6 +56,59 @@ describe("the windows of an allowance that still stand", () => {
   });
 });
 
+describe("the order of the windows", () => {
+  const order = (...names: readonly string[]) =>
+    usageStanding(
+      names.map((name) => ({ name, resetsAt: null })),
+      NOW,
+    ).map((window) => window.name);
+
+  it("is the short window, the week, then the week of a model, however they were said", () => {
+    const shown = ["5-hour", "weekly", "weekly fable"];
+    expect(order("5-hour", "weekly", "weekly fable")).toEqual(shown);
+    // The short window reset, and was said again after those that did not.
+    expect(order("weekly", "weekly fable", "5-hour")).toEqual(shown);
+    expect(order("weekly fable", "5-hour", "weekly")).toEqual(shown);
+    expect(order("weekly fable", "weekly")).toEqual(["weekly", "weekly fable"]);
+  });
+
+  it("is by how long a window lasts, the plan's own before those of a part of it", () => {
+    expect(order("30-day", "weekly", "90-minute", "1-day", "5-hour")).toEqual([
+      "90-minute",
+      "5-hour",
+      "1-day",
+      "weekly",
+      "30-day",
+    ]);
+    expect(order("weekly spark", "weekly", "5-hour spark", "5-hour")).toEqual([
+      "5-hour",
+      "weekly",
+      "5-hour spark",
+      "weekly spark",
+    ]);
+    // Two of one length, by their names: the week of one model and that of another.
+    expect(order("weekly opus", "weekly fable")).toEqual(["weekly fable", "weekly opus"]);
+  });
+
+  it("puts a window whose name says no length last, and reads a name as data", () => {
+    expect(order("secondary", "primary", "weekly")).toEqual(["weekly", "primary", "secondary"]);
+    expect(order("constructor", "-hour", "5-hours", "", "1-hour")).toEqual([
+      "1-hour",
+      "",
+      "-hour",
+      "5-hours",
+      "constructor",
+    ]);
+    // What was handed in is left as it was.
+    const given = [
+      { name: "weekly", resetsAt: null },
+      { name: "5-hour", resetsAt: null },
+    ];
+    usageStanding(given, NOW);
+    expect(given.map((window) => window.name)).toEqual(["weekly", "5-hour"]);
+  });
+});
+
 describe("when the windows were said", () => {
   const at = (iso: string) => ({ at: iso });
 

@@ -276,6 +276,33 @@ export interface WakeSocket {
   close(): void;
 }
 
+/**
+ * A part of a wake a source raises (ADR-0163): a line of the source's own, or what someone else
+ * wrote. The runner hands the agent each line under the session's mark and the words in a block
+ * of their own, so that nothing a message holds reads as a line of the source's. A line holds
+ * what the source says itself, an id and a moment among it, and never a word someone else wrote.
+ */
+export type WakePart = { readonly says: string } | { readonly words: string };
+
+/**
+ * A wake as a wake source raises one: `parts` where the source says something itself, who wrote
+ * and where say, beside what was written; `text` where all of it is someone else's words.
+ */
+export type RaisedWake =
+  | { readonly key: string; readonly parts: readonly WakePart[] }
+  | { readonly key: string; readonly text: string };
+
+/**
+ * What a source read of where one of its wakes was raised, for the account's own command
+ * (`console agent messages`): the parts to print, as a wake carries them, or why it read
+ * nothing, in a short name: `no_token` where the account keeps nothing to read with,
+ * `not_a_conversation` and `not_a_moment` where what was named is none, and otherwise the
+ * messenger's own word.
+ */
+export type WakeRead =
+  | { readonly ok: true; readonly parts: readonly WakePart[] }
+  | { readonly ok: false; readonly why: string };
+
 /** What a wake source is given of the runner and of the machine. */
 export interface WakeHost {
   /** A secret of the account's store, by name; nothing where it keeps none. */
@@ -285,8 +312,19 @@ export interface WakeHost {
    * they are of: what a person says in one wakes the agent, named or not.
    */
   readonly channels: readonly string[];
-  /** Raises a wake: the console records it, and it reaches the agent in order, as someone else's words. */
-  raise(wake: { readonly key: string; readonly text: string }): Promise<void>;
+  /**
+   * Raises a wake: the console records it, and it reaches the agent in order, the source's own
+   * lines under the session's mark and everything else as someone else's words. Answers
+   * whether the console took it: a wake raised past what the console takes within an hour is
+   * let go, and reaches nobody.
+   */
+  raise(wake: RaisedWake): Promise<boolean>;
+  /**
+   * What the source keeps from one run of its own to the next, under names of its own, for as
+   * long as the runner runs: a runner started again begins with nothing. Never a secret, and
+   * never a word of a message.
+   */
+  readonly kept: Map<string, string>;
   /** A line for whoever reads the runner's own output: never what a message says. */
   log(line: string): void;
   /**
@@ -315,6 +353,24 @@ export interface WakeSource {
    * source that ended is started again by the runner, after a while. `console` has none.
    */
   run?(host: WakeHost, signal: AbortSignal): Promise<void>;
+  /**
+   * Reads the latest of what was said where a wake of the source's was raised, named as the
+   * wake's key names it after the source's own name: for the account's own command, where a wake
+   * carried less than the agent needs. Left out by a source that reads nothing.
+   */
+  read?(
+    host: Pick<WakeHost, "secret" | "fetch">,
+    where: string,
+    options: {
+      /** How many of the latest messages are asked for, held to the source's own bounds; its own number where none is said. */
+      readonly limit?: number | undefined;
+      /** The moment of a message, as the messenger spells one: what was written after it alone is read. */
+      readonly after?: string | undefined;
+      /** The moment the read is asked at, in milliseconds since the epoch: how long ago a message was written is said by it. */
+      readonly now: number;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<WakeRead>;
 }
 
 /** What a service is told of the runner it keeps running. */

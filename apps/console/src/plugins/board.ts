@@ -43,6 +43,7 @@ import {
 } from "../db/queries/decisions.js";
 import { getDocument, listDocuments, writeDocument } from "../db/queries/documents.js";
 import type { Actor, Scope } from "../db/queries/events.js";
+import { chosenNotificationsOf } from "../db/queries/notifications.js";
 import {
   findPerson,
   listPeople,
@@ -74,6 +75,7 @@ import {
   restDocument,
   restDocumentSummary,
   restMember,
+  restNotificationSettings,
   restPerson,
   restPersonWithEmail,
   restProject,
@@ -346,6 +348,29 @@ export class PluginBoard {
             )
             .slice(0, READ_LIMIT)
             .map(shape);
+        }
+        break;
+      }
+      case "console.notifications": {
+        // What the caller themselves chose to be told of (ADR-0165), for a plugin that carries
+        // notifications elsewhere: theirs to read, through their agent too, and nobody else's. A
+        // call a plugin makes for a person, the console's and a plugin's own read none.
+        needs("notifications:read");
+        if (method === "settings") {
+          if (context.caller.kind !== "person") {
+            throw forbidden(
+              "a member's notification settings are read in a call of their own, and in no other",
+            );
+          }
+          const person = await this.actingPerson(context, workspace);
+          const chosen = await chosenNotificationsOf(this.options.database, person.id);
+          const seen = await listProjectsFor(this.options.database, workspace.id, person);
+          // Of the projects turned off, those the plugin is on: it reaches no other.
+          return restNotificationSettings(
+            person,
+            chosen,
+            seen.filter((project) => this.withinReach(context, project)),
+          );
         }
         break;
       }

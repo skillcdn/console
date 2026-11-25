@@ -74,6 +74,7 @@ import {
   deskWebTitleOf,
   personDeskFiles,
 } from "../runner/desk.js";
+import { quotedLines } from "../runner/message.js";
 import { ownRunnerModules } from "../runner/modules.js";
 import {
   createRunner,
@@ -5751,6 +5752,77 @@ const agentSignals = async (args: readonly string[], io: CliIo): Promise<number>
   return EXIT.ok;
 };
 
+const AGENT_MESSAGES_USAGE =
+  "Say where, as a wake's header names it after messenger: console agent messages <source>:<conversation>[:<thread>] [--limit <n>] [--after <moment>]";
+
+// What was said where a wake from the messenger was raised (ADR-0163): the latest messages of the
+// conversation, or of the thread, that the wake's key names, read by the wake source the key
+// begins with, with a secret of the account's own store, which nobody else reads. For the
+// account itself, where a wake carried less than the agent needs, and before it answers where
+// others may have answered meanwhile. What a source's line says is printed as it is, and what
+// someone wrote behind `>`, a line each, so that no word of a message reads as a line.
+const agentMessages = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const { values, positionals } = parse(args, {
+    limit: { type: "string" },
+    after: { type: "string" },
+  });
+  const key = theOne(positionals, AGENT_MESSAGES_USAGE);
+  const named = /^([a-z][a-z0-9-]{0,39}):(.+)$/.exec(key);
+  const source =
+    named?.[1] === undefined ? undefined : ownRunnerModules({ user: "" }).wakeSources.get(named[1]);
+  if (named?.[2] === undefined || source?.read === undefined) {
+    throw misuse(
+      `No wake source of this command reads ${key.includes(":") ? `what ${key.slice(0, key.indexOf(":"))} names` : "that"}. ${AGENT_MESSAGES_USAGE}`,
+    );
+  }
+  const limit = text(values, "limit");
+  if (limit !== undefined && !(Number.isSafeInteger(Number(limit)) && Number(limit) >= 1)) {
+    throw misuse(`Not a number of messages: ${limit}`);
+  }
+  const after = text(values, "after");
+  const session = await open(io, values);
+  const read = await source.read(
+    {
+      // A secret the account does not keep is none, and the source says what it lacks.
+      secret: async (name) => {
+        try {
+          return (await session.client.secret(name)).value;
+        } catch (error) {
+          if (error instanceof ApiError && error.code === "secret.not_found") {
+            return undefined;
+          }
+          throw error;
+        }
+      },
+      fetch: (url, init) => io.fetch(url, { ...init, headers: { ...init.headers } }),
+    },
+    named[2],
+    {
+      ...(limit === undefined ? {} : { limit: Number(limit) }),
+      ...(after === undefined ? {} : { after }),
+      now: io.now(),
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
+  if (!read.ok) {
+    throw failed(
+      read.why === "no_token"
+        ? `Nothing was read: this account keeps no secret the ${named[1]} wake source reads a conversation with (no_token). The skill running-an-agent says which to keep.`
+        : read.why === "not_a_conversation"
+          ? `Nothing was read: ${named[2]} names no conversation as a wake of the ${named[1]} wake source does (not_a_conversation). ${AGENT_MESSAGES_USAGE}`
+          : read.why === "not_a_moment"
+            ? `Nothing was read: ${after} is the moment of no message, as a wake of the ${named[1]} wake source says one (not_a_moment).`
+            : `Nothing was read: the messenger did not answer the ${named[1]} wake source with the conversation (${read.why}).`,
+    );
+  }
+  answer(io, session, { key, parts: read.parts }, () =>
+    read.parts
+      .map((part) => ("says" in part ? part.says : quotedLines(part.words).join("\n")))
+      .join("\n"),
+  );
+  return EXIT.ok;
+};
+
 // The invitation that leads a machine to an agent account (ADR-0088): made, made again in place
 // of the one before, or taken away, by a supervisor. Its code is no credential: it says which
 // account a setup is for and opens the guide, and the account is entered through its own sign-in.
@@ -6732,6 +6804,9 @@ const agent: Command = async (args, io) => {
   }
   if (args[0] === "signals") {
     return agentSignals(args.slice(1), io);
+  }
+  if (args[0] === "messages") {
+    return agentMessages(args.slice(1), io);
   }
   if (args[0] === "invite") {
     return agentInvite(args.slice(1), io);

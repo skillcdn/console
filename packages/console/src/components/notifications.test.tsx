@@ -295,7 +295,7 @@ describe("a task's own bell", () => {
         <TaskBell on={false} onChange={() => undefined} />
       </LanguageContext.Provider>,
     );
-    expect(korean).toContain('aria-label="이 작업의 알림 켜기"');
+    expect(korean).toContain('aria-label="이 작업의 알림 활성화"');
   });
 });
 

@@ -26,7 +26,6 @@ import {
   MAX_TEAM_KEY_LENGTH,
   MAX_URL_LENGTH,
   MAX_VERSIONS_PER_DOCUMENT,
-  NOTIFICATION_DEFAULTS,
   NOTIFICATION_KINDS,
   NOTIFICATIONS_PAGE,
   normalizeConnectCode,
@@ -342,6 +341,7 @@ import {
   restGoal,
   restListing,
   restMember,
+  restNotificationSettings,
   restPerson,
   restPersonWithEmail,
   restProject,
@@ -1942,21 +1942,9 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
   const notificationSettingsOfPerson = async (
     person: PersonRecord,
   ): Promise<RestNotificationSettings> => {
-    const member = person.kind === "agent" ? "agent" : "person";
-    const settings = notificationSettingsOf(
-      member,
-      await chosenNotificationsOf(database, person.id),
-    );
+    const chosen = await chosenNotificationsOf(database, person.id);
     const seen = await listProjectsFor(database, person.workspaceId, person);
-    return {
-      kinds: settings.kinds,
-      defaults: NOTIFICATION_DEFAULTS[member],
-      // A project they may no longer see is named to nobody; it stays turned off all the same.
-      projectsOff: seen
-        .filter((project) => settings.projectsOff.includes(project.id))
-        .map((project) => ({ key: project.key, name: project.name })),
-      ownAgents: settings.ownAgents,
-    };
+    return restNotificationSettings(person, chosen, seen);
   };
 
   app.get(`${REST_ROUTES.notifications}/settings`, async (c) => {

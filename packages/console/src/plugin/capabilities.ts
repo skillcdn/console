@@ -107,7 +107,7 @@ export const CAPABILITY_WORDS: Readonly<Record<PluginCapability, CapabilityWords
   },
   "notifications:read": {
     opens:
-      "with a console event it hears, whom the console told of it and under which kind, to carry it to them elsewhere",
+      "with a console event it hears, whom the console told of it and under which kind, to carry it to them elsewhere; and of whoever calls it, what they chose to be told of",
     reach: "who is told of what on those boards, and so what each member chose to be told of",
   },
   jobs: {

@@ -2435,6 +2435,7 @@ export class Plugins {
       }
       case "console.workspace":
       case "console.people":
+      case "console.notifications":
       case "console.teams":
       case "console.projects":
       case "console.tasks":

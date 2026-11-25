@@ -23,6 +23,7 @@ import {
   makeMark,
   type Slept,
   sleptOf,
+  wakeTextOf,
 } from "./message.js";
 import { cutShown, cutShownEnd, type Redactor, redactorOf } from "./redact.js";
 import type {
@@ -2399,10 +2400,14 @@ export function createRunner(options: RunnerOptions): Runner {
         // past that, what the sources raise is let go for a while, longer each time, and said
         // once, so that a source that repeats itself costs the console nothing more.
         if (wakesHeld !== undefined && options.now() < wakesHeld.until) {
-          return;
+          return false;
         }
+        // Written in parts whatever the source handed over (ADR-0163): its own lines apart from
+        // what someone else wrote, and a text with no line of the source's as words whole, so
+        // that no word of a message reads as a line of the source's when the signal returns.
+        const text = wakeTextOf("parts" in raised ? raised.parts : [{ words: raised.text }]);
         try {
-          await client.raiseWake({ source: "messenger", key: raised.key, text: raised.text });
+          await client.raiseWake({ source: "messenger", key: raised.key, text });
         } catch (error) {
           if (codeOf(error) !== "signal.too_many") {
             throw error;
@@ -2413,13 +2418,15 @@ export function createRunner(options: RunnerOptions): Runner {
             "wakes",
             "the console takes no more wakes of this runner's within the hour (signal.too_many); what its wake sources raise is let go for a while",
           );
-          return;
+          return false;
         }
         if (wakesHeld !== undefined) {
           wakesHeld = undefined;
           sayOver("wakes", "the console takes the wakes of this runner's wake sources again");
         }
+        return true;
       },
+      kept: new Map(),
       log,
       stands: (state, why) => sourceStands(source.name, state, why),
       fetch: wakes.fetch,

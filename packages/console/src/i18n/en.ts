@@ -512,7 +512,7 @@ export const en = {
       "notifications:read": {
         name: "Notifications",
         opens:
-          "Reads whom the console tells of what happens in its board projects, to carry it to them elsewhere.",
+          "Reads whom the console tells of what happens in its board projects, to carry it to them elsewhere, and what whoever uses it chose to be told of.",
       },
       jobs: { name: "Schedule", opens: "Runs at the times it names." },
       endpoints: {

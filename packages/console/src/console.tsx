@@ -3057,6 +3057,38 @@ function MyDecisionsPage(props: { readonly data: ConsoleData }) {
   );
 }
 
+/** How often the agents are read again while a page that says how they stand is in view. */
+const AGENTS_AGAIN_MS = 30_000;
+
+/**
+ * Keeps the agent accounts as they stand while a page shows them, how each stands and what its
+ * allowance has used (ADR-0156): read again as the page is opened, every half a minute while its
+ * window is in view, as often as a runner says how it stands, and when the person comes back to
+ * it. A window nobody looks at asks nothing.
+ */
+function AgentsKept(props: { readonly data: ConsoleData }) {
+  const { refreshAgents } = props.data.actions;
+  const loaded = useRef(props.data.loaded);
+  useEffect(() => {
+    const again = () => {
+      if (document.visibilityState === "visible") {
+        refreshAgents().catch(() => undefined);
+      }
+    };
+    // What the workspace was just loaded with is read once, not twice.
+    if (loaded.current) {
+      again();
+    }
+    const timer = setInterval(again, AGENTS_AGAIN_MS);
+    document.addEventListener("visibilitychange", again);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", again);
+    };
+  }, [refreshAgents]);
+  return null;
+}
+
 function WorkPage(props: {
   readonly data: ConsoleData;
   readonly components: ConsoleComponents;
@@ -3067,7 +3099,12 @@ function WorkPage(props: {
   return (
     <PlatePage
       components={props.components}
-      under={<AgentsNeedingYou agents={props.data.agents} me={props.data.me?.person?.id} />}
+      under={
+        <>
+          <AgentsKept data={props.data} />
+          <AgentsNeedingYou agents={props.data.agents} me={props.data.me?.person?.id} />
+        </>
+      }
       load={plate}
       remember={`work:${props.data.me?.person?.id ?? ""}`}
       early="work"
@@ -3635,6 +3672,7 @@ function WorkspacePage(props: {
         {error !== undefined && <Callout tone="danger">{error}</Callout>}
         {view !== "connected" ? (
           <>
+            <AgentsKept data={data} />
             <section className="sc-people-group" aria-label={agents.views.mine}>
               <p className="sc-lead">{accounts.intro}</p>
               <components.AgentAccountList

@@ -222,7 +222,7 @@ export const ko: Messages = {
     "picture.refused": "표시할 수 없는 이미지입니다.",
     "picture.unavailable": "이미지를 불러오지 못했습니다. 잠시 후 다시 시도하세요.",
     "plugin.conflict": "이미 처리되었거나 그사이에 바뀌었습니다.",
-    "plugin.disabled": "꺼져 있는 플러그인입니다.",
+    "plugin.disabled": "비활성 상태인 플러그인입니다.",
     "plugin.failed": "플러그인에 문제가 생겼습니다.",
     "plugin.forbidden": "플러그인이 할 수 없는 작업입니다.",
     "plugin.invalid_args": "입력한 내용을 확인한 뒤 다시 시도하세요.",
@@ -230,8 +230,8 @@ export const ko: Messages = {
     "plugin.not_found": "플러그인을 찾을 수 없습니다.",
     "plugin.rate_limited": "플러그인의 요청이 너무 많습니다. 잠시 후 다시 시도하세요.",
     "plugin.required_by":
-      "이 플러그인이 필요한 다른 플러그인이 있습니다. 그 플러그인을 먼저 끄세요.",
-    "plugin.requires": "이 플러그인에 필요한 다른 플러그인이 켜져 있지 않습니다.",
+      "이 플러그인이 필요한 다른 플러그인이 있습니다. 그 플러그인을 먼저 비활성화하세요.",
+    "plugin.requires": "이 플러그인에 필요한 다른 플러그인이 비활성 상태입니다.",
     "plugin.timeout": "플러그인의 응답이 너무 늦습니다.",
     "plugin.too_many": "플러그인이 한도에 도달했습니다.",
     "plugin.unavailable": "지금은 플러그인을 쓸 수 없습니다.",
@@ -319,9 +319,9 @@ export const ko: Messages = {
       nothing: "없음",
       capabilities: "권한",
       required: "필수",
-      requiredHint: "플러그인이 동작하려면 꼭 필요해서 끌 수 없습니다.",
+      requiredHint: "플러그인이 동작하려면 꼭 필요해서 비활성화할 수 없습니다.",
       optional: "선택",
-      optionalHint: "쓰려는 것만 켜세요. 나중에 바꿀 수 있습니다.",
+      optionalHint: "쓰려는 것만 활성화하세요. 나중에 바꿀 수 있습니다.",
       newCapability: "새 권한",
       board: "보드 프로젝트",
       boardHint: "플러그인의 결정, 작업, 문서가 가는 곳입니다.",
@@ -365,10 +365,11 @@ export const ko: Messages = {
       grantPlugin: (plugin) => `플러그인 ${plugin}`,
       asks: "다른 플러그인에 요청한 역할",
       asksHint:
-        "이 플러그인이 다른 플러그인에서 자기 이름으로 쓰려고 요청한 역할입니다. 관리자가 여기서, 또는 켤 때 부여합니다.",
+        "이 플러그인이 다른 플러그인에서 자기 이름으로 쓰려고 요청한 역할입니다. 관리자가 여기서, 또는 활성화할 때 부여합니다.",
       askGranted: "부여됨",
       askUngranted: "부여되지 않음",
-      askUnavailable: (plugin) => `${asSubject(plugin)} 꺼져 있습니다. 켜진 뒤 여기서 부여하세요.`,
+      askUnavailable: (plugin) =>
+        `${asSubject(plugin)} 비활성 상태입니다. 활성화된 뒤 여기서 부여하세요.`,
       askGrantNow: "지금 부여",
       grant: "부여",
       revoke: "회수",
@@ -450,7 +451,8 @@ export const ko: Messages = {
       },
       "notifications:read": {
         name: "알림",
-        opens: "보드 프로젝트에서 일어난 일을 콘솔이 누구에게 알렸는지 읽어, 다른 곳으로 전합니다.",
+        opens:
+          "보드 프로젝트에서 일어난 일을 콘솔이 누구에게 알렸는지 읽어 다른 곳으로 전하고, 쓰는 사람 본인의 알림 설정을 읽습니다.",
       },
       jobs: { name: "예약 실행", opens: "정해진 시간에 실행됩니다." },
       endpoints: {
@@ -782,7 +784,7 @@ export const ko: Messages = {
     loading: "알림을 불러오는 중",
     couldNotLoad: "알림을 불러오지 못했습니다.",
     fresh: "새 알림",
-    followed: "알림을 켠 작업",
+    followed: "직접 활성화한 작업",
     more: "더 보기",
     settingsLink: "알림 설정",
     empty: {
@@ -802,9 +804,9 @@ export const ko: Messages = {
     },
     settings: {
       title: "알림",
-      intro: "무엇을 알림으로 받을지 고릅니다. 켠 종류는 화면 위쪽 종 아래에 쌓입니다.",
+      intro: "무엇을 알림으로 받을지 고릅니다. 활성화된 종류는 화면 위쪽 종 아래에 쌓입니다.",
       introAgent:
-        "이 계정이 무엇을 알림으로 받을지 고릅니다. 켠 종류는 계정의 알림 목록에 남고 계정을 깨웁니다.",
+        "이 계정이 무엇을 알림으로 받을지 고릅니다. 활성화된 종류는 계정의 알림 목록에 남고 계정을 깨웁니다.",
       groups: { tasks: "작업", decisions: "결정", agents: "에이전트 계정" },
       hints: {
         tasks: "내가 소유하거나 맡은 작업에서 일어난 일입니다.",
@@ -813,18 +815,19 @@ export const ko: Messages = {
           "나에게 보고하는 에이전트 계정이 멈추거나 실패하거나 응답이 없을 때, 다시 실행될 때, 그리고 나에게 결정을 올렸을 때입니다.",
       },
       projects: "프로젝트",
-      projectsHint: "끈 프로젝트의 작업 소식은 받지 않습니다. 종을 직접 켠 작업은 예외입니다.",
+      projectsHint:
+        "비활성화된 프로젝트의 작업 소식은 받지 않습니다. 종으로 직접 활성화한 작업은 예외입니다.",
       ownAgents: "내 에이전트",
       ownAgentsHint:
-        "내 에이전트가 나로서 한 일은 내가 한 일이라 알리지 않습니다. 받고 싶으면 켜세요.",
+        "내 에이전트가 나로서 한 일은 내가 한 일이라 알리지 않습니다. 받으려면 활성화하세요.",
       ownAgentsOn: "내 에이전트가 한 일도 알림으로 받기",
       reset: "기본값으로",
     },
     task: {
-      on: "이 작업의 알림이 켜져 있습니다",
-      off: "이 작업의 알림이 꺼져 있습니다",
-      turnOn: "이 작업의 알림 켜기",
-      turnOff: "이 작업의 알림 끄기",
+      on: "이 작업의 알림이 활성화되어 있습니다",
+      off: "이 작업의 알림이 비활성화되어 있습니다",
+      turnOn: "이 작업의 알림 활성화",
+      turnOff: "이 작업의 알림 비활성화",
     },
   },
   myDecisions: {

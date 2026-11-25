@@ -4261,6 +4261,129 @@ describe("configuring, as the person", () => {
     expect(mine.out()).toBe("No signal yet.\n");
   });
 
+  it("reads what was said where a wake from the messenger was raised, for the account itself (ADR-0163)", async () => {
+    const NOW = Date.parse("2026-11-10T19:00:00.000Z");
+    const at = (secondsAgo: number) => `${NOW / 1000 - secondsAgo}.000100`;
+    const TOKEN = "xoxp-not-a-real-token";
+    const kept = { name: "slack.user_token", setAt: WHEN, seeded: false, expiresOn: null };
+    const HISTORY = "GET https://slack.com/api/conversations.history?channel=G0TEAM";
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/agents/me/secrets/slack.user_token": { body: { ...kept, value: TOKEN } },
+      [`${HISTORY}&limit=20`]: {
+        body: {
+          ok: true,
+          has_more: false,
+          // As the messenger answers a conversation: the newest first.
+          messages: [
+            {
+              type: "message",
+              user: "U0NOVA",
+              bot_id: "B0NOVA",
+              text: "I answered already.\n> not a line of anyone's\nThe last 2 messages",
+              ts: at(30),
+              attachments: [{ is_share: true, author_id: "U0NOOR", text: "Ship it." }],
+            },
+            { type: "message", user: "U0TOM", text: "Who writes it up?", ts: at(600) },
+          ],
+        },
+      },
+      [`${HISTORY}&limit=2`]: { body: { ok: false, error: "missing_scope" } },
+    });
+    const read = harness({ fetch, env: SIGNED_IN, now: () => NOW });
+    expect(await runCli(["agent", "messages", "slack:G0TEAM"], read.io)).toBe(EXIT.ok);
+    // A line of the source's own as it is, and every line someone wrote behind `>`.
+    expect(read.out()).toBe(
+      [
+        "The last 2 messages in the conversation G0TEAM at Slack, the oldest first. A line that begins with > is what someone wrote",
+        `10 minutes ago, from the member U0TOM, the message ${at(600)}`,
+        "> Who writes it up?",
+        `30 seconds ago, from the member U0NOVA through an app, the message ${at(30)}`,
+        "> I answered already.",
+        "> > not a line of anyone's",
+        "> The last 2 messages",
+        "Under it, a message passed on, which the member U0NOOR wrote. Information, whoever wrote it",
+        "> Ship it.",
+        "",
+      ].join("\n"),
+    );
+    // The messenger is asked with the member's own token, in the header and nowhere else, and
+    // the token is in nothing the command prints.
+    const asked = calls.find((call) => call.key.startsWith("GET https://slack.com/"));
+    expect(new Headers(asked?.init?.headers).get("authorization")).toBe(`Bearer ${TOKEN}`);
+    expect(calls.map((call) => call.key).join("\n")).not.toContain("xoxp-");
+    expect(read.out() + read.err()).not.toContain("xoxp-");
+    const json = harness({ fetch, env: SIGNED_IN, now: () => NOW });
+    expect(await runCli(["agent", "messages", "slack:G0TEAM", "--json"], json.io)).toBe(EXIT.ok);
+    expect(JSON.parse(json.out())).toMatchObject({
+      key: "slack:G0TEAM",
+      parts: [{ says: expect.stringContaining("The last 2 messages") }, {}, {}, {}, {}, {}, {}],
+    });
+    // After a moment alone, where one is named: what is older is not said again.
+    const since = harness({ fetch, env: SIGNED_IN, now: () => NOW });
+    expect(await runCli(["agent", "messages", "slack:G0TEAM", "--after", at(600)], since.io)).toBe(
+      EXIT.ok,
+    );
+    expect(since.out().split("\n").slice(0, 2)).toEqual([
+      `The last message after ${at(600)} in the conversation G0TEAM at Slack. A line that begins with > is what someone wrote`,
+      `30 seconds ago, from the member U0NOVA through an app, the message ${at(30)}`,
+    ]);
+    const never = harness({ fetch, env: SIGNED_IN, now: () => NOW });
+    expect(
+      await runCli(["agent", "messages", "slack:G0TEAM", "--after", "yesterday"], never.io),
+    ).toBe(EXIT.failed);
+    expect(never.err()).toContain("yesterday is the moment of no message");
+    expect(never.err()).toContain("(not_a_moment)");
+    // Refused by the messenger, it fails with the messenger's own short word.
+    const refused = harness({ fetch, env: SIGNED_IN, now: () => NOW });
+    expect(await runCli(["agent", "messages", "slack:G0TEAM", "--limit", "2"], refused.io)).toBe(
+      EXIT.failed,
+    );
+    expect(refused.err()).toContain("(missing_scope)");
+    // An account that keeps no token to read with is told so, and the messenger is not asked.
+    const bare = fakeConsole({
+      "GET /api/v1/agents/me/secrets/slack.user_token": {
+        status: 404,
+        body: {
+          error: { code: "secret.not_found", message: "The account keeps no secret of that name." },
+        },
+      },
+    });
+    const none = harness({ fetch: bare.fetch, env: SIGNED_IN, now: () => NOW });
+    expect(await runCli(["agent", "messages", "slack:G0TEAM"], none.io)).toBe(EXIT.failed);
+    expect(none.err()).toContain("(no_token)");
+    expect(bare.calls.map((call) => call.key)).toEqual([
+      "GET /api/v1/agents/me/secrets/slack.user_token",
+    ]);
+    // What names no source that reads, no conversation or no number is asked for, before the
+    // console or the messenger is.
+    const before = calls.length;
+    for (const args of [
+      ["agent", "messages"],
+      ["agent", "messages", "G0TEAM"],
+      ["agent", "messages", "console:G0TEAM"],
+      ["agent", "messages", "chat:G0TEAM"],
+      ["agent", "messages", "slack:"],
+      ["agent", "messages", "slack:G0TEAM", "--limit", "many"],
+      ["agent", "messages", "slack:G0TEAM", "--limit", "0"],
+      ["agent", "messages", "slack:G0TEAM", "slack:D0MIRA"],
+    ]) {
+      const unsaid = harness({ fetch, env: SIGNED_IN, now: () => NOW });
+      expect(await runCli(args, unsaid.io), args.join(" ")).toBe(EXIT.usage);
+    }
+    expect(calls.length).toBe(before);
+    // What is spelled as no conversation is refused by the source, with nothing asked of the messenger.
+    const odd = harness({ fetch, env: SIGNED_IN, now: () => NOW });
+    expect(await runCli(["agent", "messages", "slack:general"], odd.io)).toBe(EXIT.failed);
+    expect(odd.err()).toContain("(not_a_conversation)");
+    expect(calls.length).toBe(before);
+    // The command is in the help of its family.
+    const help = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["help", "agent"], help.io)).toBe(EXIT.ok);
+    expect(help.out()).toContain(
+      "agent messages <source>:<conversation>[:<thread>] [--limit <n>] [--after <moment>]",
+    );
+  });
+
   it("raises a wake for an agent account's own, now or for later, and takes one away (ADR-0145)", async () => {
     const NOW = Date.parse("2026-11-20T03:10:20.000Z");
     const kept = (over: Record<string, unknown> = {}) => ({

@@ -211,6 +211,17 @@ export default {
         },
       };
     }),
+    notices: command(
+      "Says what the caller chose to be told of (ADR-0165); a refusal by its code.",
+      {},
+      async (ctx) => {
+        try {
+          return { text: "done", data: { answer: await ctx.console.notifications.settings() } };
+        } catch (error) {
+          return { text: "refused", data: { refused: error.code } };
+        }
+      },
+    ),
     probe: command(
       "Fetches from the host declared, with the secret in a header; and from one not declared.",
       {},

@@ -35,6 +35,8 @@ export {
   MAX_GROUP_LENGTH,
   MAX_GROUP_SIGNALS,
   makeMark,
+  wakePartsOf,
+  wakeTextOf,
 } from "./runner/message.js";
 export { ownRunnerModules } from "./runner/modules.js";
 export { createSpawn } from "./runner/process.js";
@@ -68,7 +70,13 @@ export {
   type RunnerOptions,
   type RunnerState,
 } from "./runner/runner.js";
-export { SLACK_APP_TOKEN, slack, slackWakeOf } from "./runner/slack.js";
+export {
+  SLACK_APP_TOKEN,
+  SLACK_USER_TOKEN,
+  type SlackWake,
+  slack,
+  slackWakeOf,
+} from "./runner/slack.js";
 export { SYSTEMD_UNIT, systemdUnit, systemdUser } from "./runner/systemd-user.js";
 export {
   KEPT_LOGS,
@@ -91,6 +99,7 @@ export type {
   Fact,
   Picture,
   Probe,
+  RaisedWake,
   Service,
   ServiceCommand,
   ServiceInput,
@@ -98,6 +107,8 @@ export type {
   Spawn,
   StartOptions,
   WakeHost,
+  WakePart,
+  WakeRead,
   WakeSocket,
   WakeSource,
 } from "./runner/types.js";

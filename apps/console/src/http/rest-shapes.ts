@@ -14,6 +14,7 @@ import type {
   RestGoal,
   RestListing,
   RestMember,
+  RestNotificationSettings,
   RestPerson,
   RestProject,
   RestRules,
@@ -27,7 +28,12 @@ import type {
   RestVersion,
   RestVersionSummary,
 } from "@skillcdn/console/api";
-import { DEFAULT_DAY_START } from "@skillcdn/console/api";
+import {
+  type ChosenNotifications,
+  DEFAULT_DAY_START,
+  NOTIFICATION_DEFAULTS,
+  notificationSettingsOf,
+} from "@skillcdn/console/api";
 import type { SessionView } from "../auth/sessions.js";
 import { describeUserAgent } from "../auth/user-agent.js";
 import type { RunnerRecord } from "../db/queries/agent-runners.js";
@@ -55,6 +61,28 @@ import type { TokenRecord } from "../db/queries/tokens.js";
 // What the records of the database are on the wire. The shapes are the package's; this is the
 // one place they are built, so that the server and its tests agree with the schemas. Absent
 // values are `null`, never missing keys.
+
+/**
+ * What a member is told of (ADR-0157): their choices over the defaults of what they are, and of
+ * the projects they are told nothing of those among `seen`, by their keys. One they may no
+ * longer see is named to nobody; it stays turned off all the same.
+ */
+export function restNotificationSettings(
+  person: PersonRecord,
+  chosen: ChosenNotifications | undefined,
+  seen: readonly { readonly id: string; readonly key: string; readonly name: string }[],
+): RestNotificationSettings {
+  const member = person.kind === "agent" ? "agent" : "person";
+  const settings = notificationSettingsOf(member, chosen);
+  return {
+    kinds: settings.kinds,
+    defaults: NOTIFICATION_DEFAULTS[member],
+    projectsOff: seen
+      .filter((project) => settings.projectsOff.includes(project.id))
+      .map((project) => ({ key: project.key, name: project.name })),
+    ownAgents: settings.ownAgents,
+  };
+}
 
 export function restPerson(person: PersonRecord): RestPerson {
   return {

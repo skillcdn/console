@@ -9,6 +9,7 @@ import type {
   RestDocument,
   RestDocumentSummary,
   RestMember,
+  RestNotificationSettings,
   RestPerson,
   RestProject,
   RestRun,
@@ -358,6 +359,17 @@ export interface PluginConsole {
      * listed only where they were granted it or manage someone.
      */
     granted(role: string): Promise<readonly RestPerson[]>;
+  };
+  /**
+   * What the caller chose to be told of (ADR-0165), for a plugin that carries notifications
+   * elsewhere (`notifications:read`) to show beside its own choice: a kind that is off in the
+   * console makes no notification to carry. A member's own call reads their own, a person's,
+   * their agent's or an agent account's, and any other caller is `plugin.forbidden`, a hook, a
+   * job and a call a plugin makes for someone among them. `projectsOff` names those the plugin is on.
+   * Left out by a console older than 0.6.2.
+   */
+  notifications: {
+    settings(): Promise<RestNotificationSettings>;
   };
   /** The teams of the workspace (ADR-0073): a name and its members, among the people the caller may see. */
   teams: {

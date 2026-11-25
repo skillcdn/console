@@ -252,7 +252,7 @@ describe("a plugin's settings page", () => {
     // What it asks of other plugins: granted now where the plugin is enabled, waited for where not.
     expect(html).toContain("다른 플러그인에 요청한 역할");
     expect(html).toContain("지금 부여");
-    expect(html).toContain("crm이 꺼져 있습니다.");
+    expect(html).toContain("crm이 비활성 상태입니다.");
     // The purge waits for the plugin to be disabled.
     expect(html).toContain("삭제하려면 먼저 비활성화하세요.");
     expect(html).not.toContain('placeholder="leave 입력"');
@@ -369,7 +369,7 @@ describe("a plugin's settings page", () => {
     // the one whose plugin is not enabled locked off.
     expect(count(html, 'type="checkbox"')).toBe(6);
     expect(html).toContain("다른 플러그인에 요청한 역할");
-    expect(html).toContain("crm이 꺼져 있습니다.");
+    expect(html).toContain("crm이 비활성 상태입니다.");
     expect(count(html, 'disabled="" checked=""')).toBe(2);
     expect(count(html, 'type="checkbox" checked=""')).toBe(1);
     expect(html).toContain(

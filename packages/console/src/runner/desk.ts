@@ -105,6 +105,13 @@ function agents(input: DeskInput): string {
       service.account === undefined ? "" : `, where I am \`${plain(service.account)}\``;
     return `- ${words} ${plain(service.name)}${account}.`;
   });
+  // That an agent's message wakes another only by naming it (ADR-0163), said where the workspace
+  // names a messenger. What an agent judges by whether to answer is said by the wake itself.
+  if ((input.services ?? []).some((service) => service.role === "messenger")) {
+    services.push(
+      "- To be heard by another agent at the messenger, in a group conversation or a channel, I name it.",
+    );
+  }
   return `# AGENTS.md
 
 The instructions of ${name}'s desk, for whichever agent product runs here.

@@ -7,6 +7,7 @@ import {
   pluginPath,
   projectPath,
   REST_ROUTES,
+  type RestNotificationSettings,
   restDecisionSchema,
   restDocumentSchema,
   restErrorSchema,
@@ -33,6 +34,7 @@ import { drizzleOf } from "../db/client.js";
 import { ensureWorkspace } from "../db/queries/workspaces.js";
 import { pluginInstalls } from "../db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "../db/testing.js";
+import { PluginBoard } from "../plugins/board.js";
 import { discoverPlugins } from "../plugins/discovery.js";
 import { PluginDispatcher } from "../plugins/dispatcher.js";
 import { PluginHost } from "../plugins/host.js";
@@ -918,6 +920,92 @@ describe("a plugin on the board", () => {
     await h.request(`${REST_ROUTES.people}/${bobId}`, json({ email: null }, admin, "PATCH"));
   });
 
+  it("reads what its caller chose to be told of, in a call of their own alone (ADR-0165)", async () => {
+    const notices = async (cookie: string) =>
+      (await invoked("leave", cookie, ["notices"])).data as {
+        answer?: RestNotificationSettings;
+        refused?: string;
+      };
+    const detail = restPluginDetailSchema.parse(
+      await (await h.request(pluginPath("leave"), { headers: { cookie: admin } })).json(),
+    );
+    const before = detail.consent ?? [];
+    expect(before).not.toContain("notifications:read");
+    expect((await notices(admin)).refused).toBe("plugin.forbidden");
+    const consent = (names: readonly string[]) =>
+      h.request(pluginPath("leave", "consent"), json({ consent: names }, admin, "PATCH"));
+    expect((await consent([...before, "notifications:read"])).status).toBe(200);
+    // A project the plugin is not on, which alice turns off beside the plugin's own.
+    const elsewhere = await h.request(
+      REST_ROUTES.projects,
+      json({ key: "told-elsewhere", name: "Told elsewhere" }, admin),
+    );
+    expect(elsewhere.status, await elsewhere.clone().text()).toBe(201);
+    const settings = `${REST_ROUTES.notifications}/settings`;
+    const chose = await h.request(
+      settings,
+      json(
+        { kinds: { assigned: true, agent: false }, projectsOff: [BOARD, "told-elsewhere"] },
+        admin,
+        "PUT",
+      ),
+    );
+    expect(chose.status, await chose.clone().text()).toBe(200);
+    const answered = (await chose.json()) as RestNotificationSettings;
+    expect(answered.projectsOff.map((one) => one.key).toSorted()).toEqual([
+      BOARD,
+      "told-elsewhere",
+    ]);
+    // Hers as the console answers them, but for the project the plugin is not on.
+    expect((await notices(admin)).answer).toEqual({
+      ...answered,
+      projectsOff: answered.projectsOff.filter((one) => one.key === BOARD),
+    });
+    // Another's call reads their own, whatever alice chose.
+    expect((await notices(member)).answer).toMatchObject({
+      kinds: { assigned: false, agent: true },
+      projectsOff: [],
+    });
+    // A hook, a job, a plugin as itself and a call a plugin makes for a person read nobody's.
+    const workspace = await ensureWorkspace(testDatabase.database, {
+      name: "Acme",
+      now: new Date(),
+    });
+    const board = new PluginBoard({
+      database: testDatabase.database,
+      workspace: async () => workspace,
+      clock: { now: () => new Date() },
+    });
+    const person = { id: aliceId, login: aliceLogin };
+    const callers = [
+      { kind: "console", enabler: person },
+      { kind: "plugin", plugin: "audit", for: null },
+      { kind: "plugin", plugin: "audit", for: person },
+    ];
+    for (const caller of callers) {
+      await expect(
+        board.call(
+          {
+            key: "leave",
+            manifest: {},
+            install: { projects: "all", boardProjectId: undefined },
+            collections: [],
+            caller,
+            consent: ["notifications:read"],
+          } as never,
+          "console.notifications",
+          "settings",
+          [],
+        ),
+      ).rejects.toMatchObject({ code: "plugin.forbidden" });
+    }
+    expect((await h.request(settings, json({ reset: true }, admin, "PUT"))).status).toBe(200);
+    expect((await consent(before)).status).toBe(200);
+    expect((await notices(admin)).refused).toBe("plugin.forbidden");
+    // The plugins are handed these events now, so that a later test's pass begins after them.
+    await dispatcher.dispatch();
+  });
+
   it("makes outbound requests to the host declared, the secret put in by the console, and to no other", async () => {
     const probed = await invoked("leave", member, ["probe"]);
     expect(probed.data).toMatchObject({
@@ -1115,6 +1203,7 @@ describe("a plugin on the board", () => {
       );
     const before = await consentNow();
     expect(before.optionalCapabilities).toEqual([
+      "notifications:read",
       "outbound:api.example.test",
       "people:read:email",
       "projects:read",

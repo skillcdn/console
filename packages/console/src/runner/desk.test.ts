@@ -303,6 +303,12 @@ describe("the desk's template", () => {
     );
     expect(instructions).toContain("- My git host is GitHub, where I am `acme-mira`.");
     expect(instructions).toContain("- My messenger is Slack.");
+    // An agent account's message wakes another only by naming it (ADR-0163). What to judge by
+    // whether to answer is said by the wake, where it holds, and not here.
+    expect(instructions).toContain(
+      "\n- To be heard by another agent at the messenger, in a group conversation or a channel, I name it.\n",
+    );
+    expect(instructions).not.toContain("needs my answer");
     // What it cannot afford to lose is kept in its store alone, which gives it back on the next
     // machine (ADR-0087, point 5). A sign-in a tool keeps for itself is made again where it was
     // made, so the tool is used as it is: an agent told that the store is the only place moves
@@ -355,6 +361,8 @@ describe("the desk's template", () => {
   it("names no service the workspace does not, and a role it has no words for as it is called", () => {
     const bare = deskFiles({ ...MIRA, services: undefined }).get("AGENTS.md") ?? "";
     expect(bare).not.toContain("My git host");
+    // A desk whose workspace names no messenger says nothing of being heard at one.
+    expect(bare).not.toContain("by another agent at the messenger");
     expect(bare.match(/^## .*$/gm)).toHaveLength(DESK_SECTIONS.length);
     const other =
       deskFiles({

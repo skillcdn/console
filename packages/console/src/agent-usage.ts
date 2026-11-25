@@ -21,22 +21,64 @@ export interface UsageReading {
  */
 export const USAGE_KEPT_MS = 8 * 24 * 60 * 60 * 1000;
 
+/** How many minutes a window lasts, by the word its driver names it with: none where the word says none. */
+const MINUTES: Readonly<Record<string, number>> = { minute: 1, hour: 60, day: 24 * 60 };
+const LASTS = /^([0-9]{1,6})-(minute|hour|day)$/;
+function minutesOf(word: string): number | undefined {
+  if (word === "weekly") {
+    return 7 * 24 * 60;
+  }
+  const [, count, unit] = LASTS.exec(word) ?? [];
+  return count === undefined || unit === undefined
+    ? undefined
+    : Number(count) * (MINUTES[unit] ?? 1);
+}
+
 /**
- * The windows that still stand at a moment. One whose reset has passed says nothing of the
- * window after it, and an account whose runner is away keeps what it last said: such a window
- * is left out, so that no page shows a share of a window that is over. One that names no
- * reset is left out once it was said longer ago than any window lasts (`USAGE_KEPT_MS`).
- * Which windows there are is the product's to say, and nothing here expects one: a plan with
- * no short window shows the week alone.
+ * Where a window stands among the others, by its name: the plan's own first, the shortest of
+ * them before the longer; then the windows of a part of the allowance (`weekly fable`), the
+ * shortest first as well; then any other.
+ */
+function placeOf(name: string): { readonly group: number; readonly minutes: number } {
+  const space = name.indexOf(" ");
+  const minutes = minutesOf(space < 0 ? name : name.slice(0, space));
+  return minutes === undefined ? { group: 2, minutes: 0 } : { group: space < 0 ? 0 : 1, minutes };
+}
+
+/** Two windows in the order they are shown in, which their names alone decide. */
+function inOrder(a: { readonly name: string }, b: { readonly name: string }): number {
+  const [first, second] = [placeOf(a.name), placeOf(b.name)];
+  return (
+    first.group - second.group ||
+    first.minutes - second.minutes ||
+    (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+  );
+}
+
+/**
+ * The windows that still stand at a moment, in the order they are shown in. One whose reset has
+ * passed says nothing of the window after it, and an account whose runner is away keeps what it
+ * last said: such a window is left out, so that no page shows a share of a window that is over.
+ * One that names no reset is left out once it was said longer ago than any window lasts
+ * (`USAGE_KEPT_MS`). Which windows there are is the product's to say, and nothing here expects
+ * one: a plan with no short window shows the week alone. Their order is by their names, the
+ * short window, the week, then the week of a model: a product says a window at a time, and one
+ * that reset is said again after those that did not.
  */
 export function usageStanding<
-  T extends { readonly resetsAt: string | null; readonly at?: string | undefined },
+  T extends {
+    readonly name: string;
+    readonly resetsAt: string | null;
+    readonly at?: string | undefined;
+  },
 >(usage: readonly T[] | null | undefined, now: number): readonly T[] {
-  return (usage ?? []).filter((window) =>
-    window.resetsAt === null
-      ? !(window.at !== undefined && now - Date.parse(window.at) > USAGE_KEPT_MS)
-      : !(Date.parse(window.resetsAt) <= now),
-  );
+  return (usage ?? [])
+    .filter((window) =>
+      window.resetsAt === null
+        ? !(window.at !== undefined && now - Date.parse(window.at) > USAGE_KEPT_MS)
+        : !(Date.parse(window.resetsAt) <= now),
+    )
+    .sort(inOrder);
 }
 
 /** How far apart two windows may have been said and still be said together: one answer of the product. */

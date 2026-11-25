@@ -105,6 +105,8 @@ export interface ConsoleActions {
    * time it is shown, so that what waits in each project is what waits now (ADR-0107).
    */
   refreshProjects(): Promise<void>;
+  /** Reads the agent accounts again, for a page that says how they stand: what fails stays as it was. */
+  refreshAgents(): Promise<void>;
   /** Makes a project, whose owner the person becomes, with an image for its mark when one is given. */
   createProject(input: RestProjectInput, icon?: FileUpload): Promise<RestProject>;
   /** Changes the settings of the project the page is on; for an owner. */
@@ -741,6 +743,10 @@ export function useConsoleData(client: ConsoleClient, projectKey: string | undef
       async refreshProjects() {
         const answer = await client.projects();
         setProjects(answer.items);
+      },
+      async refreshAgents() {
+        const answer = await client.agents();
+        setAgents(answer.items);
       },
       async createProject(input, icon) {
         const made = await client.createProject(input);
