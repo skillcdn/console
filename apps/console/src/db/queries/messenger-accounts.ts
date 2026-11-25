@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, or, type SQL, sql } from "drizzle-orm";
 import { type AccessSettings, administers, personVisibleTo } from "../../auth/policy.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import { messengerAccounts, people, pluginInstalls } from "../schema.js";
@@ -26,9 +26,25 @@ export const ACCOUNTS_CAPABILITY = "people:accounts";
 
 /**
  * On a `messenger_accounts` row: whether what it says counts now, which is while the plugin that
- * said it is enabled and holds the capability.
+ * said it is enabled and holds the capability, and is one of `loaded`, the plugins this console
+ * has: one whose package left the image says nothing, and stands in nobody's way.
  */
-const counts = sql<boolean>`exists (select 1 from ${pluginInstalls} where ${pluginInstalls.workspaceId} = ${messengerAccounts.workspaceId} and ${pluginInstalls.key} = ${messengerAccounts.plugin} and ${pluginInstalls.state} = 'enabled' and ${pluginInstalls.consent} @> ${JSON.stringify([ACCOUNTS_CAPABILITY])}::jsonb)`;
+const countsWhere = (loaded: readonly string[]): SQL<boolean> =>
+  loaded.length === 0
+    ? sql<boolean>`false`
+    : sql<boolean>`(${inArray(messengerAccounts.plugin, [...loaded])} and exists (select 1 from ${pluginInstalls} where ${pluginInstalls.workspaceId} = ${messengerAccounts.workspaceId} and ${pluginInstalls.key} = ${messengerAccounts.plugin} and ${pluginInstalls.state} = 'enabled' and ${pluginInstalls.consent} @> ${JSON.stringify([ACCOUNTS_CAPABILITY])}::jsonb))`;
+
+/**
+ * Has a workspace's accounts said, taken back and forgotten one transaction at a time, so that two
+ * said at once neither pass the bound nor meet at the indexes. The first lock of whoever takes
+ * it: a change of an account goes on to the workspace's row with its event, and a purge holds
+ * that row.
+ */
+export async function holdMessengerAccounts(tx: Transaction, workspaceId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`messenger_accounts:${workspaceId}`}))`,
+  );
+}
 
 export interface MessengerAccountRecord {
   readonly id: string;
@@ -74,6 +90,8 @@ export async function putMessengerAccount(
     readonly personId: string;
     /** Whoever made the plugin say it, where a person's call did; nobody for the plugin itself. */
     readonly actor: Actor | undefined;
+    /** The plugins this console has, by key: what any other said counts for nothing. */
+    readonly loaded: readonly string[];
     /** How many accounts a workspace keeps, of every messenger together. */
     readonly most: number;
     readonly now: Date;
@@ -81,11 +99,7 @@ export async function putMessengerAccount(
 ): Promise<MessengerAccountRecord | MessengerAccountRefusal> {
   const { workspaceId, plugin, messenger, team, account, personId, actor, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
-    // One workspace's accounts are said one at a time, so that two said at once neither pass
-    // the bound nor meet at the indexes.
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext(${`messenger_accounts:${workspaceId}`}))`,
-    );
+    await holdMessengerAccounts(tx, workspaceId);
     const [person] = await tx
       .select({ login: people.login })
       .from(people)
@@ -106,7 +120,7 @@ export async function putMessengerAccount(
       eq(messengerAccounts.team, team),
     );
     const standing = await tx
-      .select({ ...columns, login: people.login, counts })
+      .select({ ...columns, login: people.login, counts: countsWhere(input.loaded) })
       .from(messengerAccounts)
       .innerJoin(people, eq(people.id, messengerAccounts.personId))
       .where(
@@ -129,6 +143,13 @@ export async function putMessengerAccount(
     if (standing.some((row) => row.plugin !== plugin && row.counts)) {
       return "another_plugins";
     }
+    const [kept] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messengerAccounts)
+      .where(eq(messengerAccounts.workspaceId, workspaceId));
+    if ((kept?.count ?? 0) - standing.length >= input.most) {
+      return "too_many";
+    }
     for (const row of standing) {
       await tx.delete(messengerAccounts).where(eq(messengerAccounts.id, row.id));
       await recordEvent(tx, {
@@ -139,13 +160,6 @@ export async function putMessengerAccount(
         data: { ...gone, login: row.login, messenger, workspace: team, account: row.account },
         now,
       });
-    }
-    const [kept] = await tx
-      .select({ count: sql<number>`count(*)::int` })
-      .from(messengerAccounts)
-      .where(eq(messengerAccounts.workspaceId, workspaceId));
-    if ((kept?.count ?? 0) >= input.most) {
-      return "too_many";
     }
     const [row] = await tx
       .insert(messengerAccounts)
@@ -181,6 +195,7 @@ export async function removeMessengerAccount(
 ): Promise<boolean> {
   const { workspaceId, plugin, messenger, team, personId, actor, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
+    await holdMessengerAccounts(tx, workspaceId);
     const [row] = await tx
       .delete(messengerAccounts)
       .where(
@@ -214,46 +229,22 @@ export async function removeMessengerAccount(
 }
 
 /**
- * Forgets everything a plugin said, as it is purged, each as an event: a package installed later
- * under the same key has said nothing until it says it.
+ * Forgets everything a plugin said, as it is purged, under the event that says it was: a package
+ * installed later under the same key has said nothing until it says it. Whoever calls it holds
+ * the workspace's accounts (`holdMessengerAccounts`).
  */
 export async function forgetMessengerAccounts(
   tx: Transaction,
-  input: {
-    readonly workspaceId: string;
-    readonly plugin: string;
-    readonly actor: Actor;
-    readonly now: Date;
-  },
+  input: { readonly workspaceId: string; readonly plugin: string },
 ): Promise<void> {
-  const { workspaceId, plugin, actor, now } = input;
-  const mine = and(
-    eq(messengerAccounts.workspaceId, workspaceId),
-    eq(messengerAccounts.plugin, plugin),
-  );
-  const rows = await tx
-    .select({ ...columns, login: people.login })
-    .from(messengerAccounts)
-    .innerJoin(people, eq(people.id, messengerAccounts.personId))
-    .where(mine)
-    .orderBy(asc(messengerAccounts.id));
-  await tx.delete(messengerAccounts).where(mine);
-  for (const row of rows) {
-    await recordEvent(tx, {
-      workspaceId,
-      kind: "person.updated",
-      actor,
-      plugin,
-      data: {
-        ...gone,
-        login: row.login,
-        messenger: row.messenger,
-        workspace: row.team,
-        account: row.account,
-      },
-      now,
-    });
-  }
+  await tx
+    .delete(messengerAccounts)
+    .where(
+      and(
+        eq(messengerAccounts.workspaceId, input.workspaceId),
+        eq(messengerAccounts.plugin, input.plugin),
+      ),
+    );
 }
 
 /** What the plugin said of a workspace of a messenger, in the order it was said, a page at a time. */
@@ -332,6 +323,8 @@ export async function writersFor(
   database: Database,
   agent: PersonRecord,
   settings: AccessSettings,
+  /** The plugins this console has, by key: what any other said counts for nothing. */
+  loaded: readonly string[],
   messenger: string,
   accounts: readonly { readonly workspace: string; readonly account: string }[],
 ): Promise<AccountWriter[]> {
@@ -342,7 +335,7 @@ export async function writersFor(
   const trusted = and(
     eq(messengerAccounts.workspaceId, agent.workspaceId),
     eq(messengerAccounts.messenger, messenger),
-    counts,
+    countsWhere(loaded),
   );
   const teams = [...new Set(accounts.map((one) => one.workspace))];
   const told = new Set(

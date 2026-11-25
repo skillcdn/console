@@ -46,12 +46,13 @@ function placeOf(name: string): { readonly group: number; readonly minutes: numb
 }
 
 /** Two windows in the order they are shown in, which their names alone decide. */
-function inOrder(a: { readonly name: string }, b: { readonly name: string }): number {
-  const [first, second] = [placeOf(a.name), placeOf(b.name)];
+interface Named {
+  readonly name?: string | undefined;
+}
+function inOrder({ name: a = "" }: Named, { name: b = "" }: Named): number {
+  const [first, second] = [placeOf(a), placeOf(b)];
   return (
-    first.group - second.group ||
-    first.minutes - second.minutes ||
-    (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+    first.group - second.group || first.minutes - second.minutes || (a < b ? -1 : a > b ? 1 : 0)
   );
 }
 
@@ -67,7 +68,7 @@ function inOrder(a: { readonly name: string }, b: { readonly name: string }): nu
  */
 export function usageStanding<
   T extends {
-    readonly name: string;
+    readonly name?: string | undefined;
     readonly resetsAt: string | null;
     readonly at?: string | undefined;
   },

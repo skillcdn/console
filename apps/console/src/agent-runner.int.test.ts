@@ -26,9 +26,11 @@ import { drizzleOf } from "./db/client.js";
 import { noteUnheardRunners } from "./db/queries/agent-runners.js";
 import { putMessengerAccount, removeMessengerAccount } from "./db/queries/messenger-accounts.js";
 import { purgeInstall } from "./db/queries/plugins.js";
+import { ensureWorkspace } from "./db/queries/workspaces.js";
 import { people, pluginInstalls } from "./db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { RUNNER_UNHEARD_MS, RunnerWatch } from "./jobs/runner-watch.js";
+import { Plugins } from "./plugins/registry.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
 import { createHarness, type Harness, SIGN_IN_URL } from "./testing/harness.js";
 
@@ -170,9 +172,19 @@ const signalsOf = (text: string) =>
       signal: restSignalSchema.parse(JSON.parse(/^data: (.*)$/m.exec(block)?.[1] ?? "")),
     }));
 
+/** The plugins the console has the packages of, by key: of plugins that are rows alone here. */
+let loaded: string[] = ["messenger", "other"];
+
 beforeAll(async () => {
   testDatabase = await createTestDatabase(process.env.TEST_DATABASE_URL ?? DEV_DATABASE_URL);
+  const plugins = Plugins.none(
+    testDatabase.database,
+    () => ensureWorkspace(testDatabase.database, { name: "Acme", now: new Date() }),
+    { now: () => new Date() },
+    pino({ level: "silent" }),
+  );
   h = createHarness(testDatabase, {
+    plugins: Object.assign(plugins, { loaded: () => loaded }),
     providers: [createFixtureProvider("gh")],
     admins: ["alice"],
     listed: ["alice", "bob"],
@@ -1180,6 +1192,7 @@ describe("who wrote at a messenger, as the console answers an agent account (ADR
       account,
       personId: ids.get(login) ?? "",
       actor: undefined,
+      loaded,
       most: 100,
       now,
     });
@@ -1407,6 +1420,7 @@ describe("who wrote at a messenger, as the console answers an agent account (ADR
         account: "U0GHOST",
         personId: "00000000-0000-7000-8000-000000000000",
         actor: undefined,
+        loaded,
         most: 100,
         now,
       }),
@@ -1421,6 +1435,7 @@ describe("who wrote at a messenger, as the console answers an agent account (ADR
         account: "U0BOB",
         personId: ids.get("bob") ?? "",
         actor: undefined,
+        loaded,
         most: 3,
         now,
       }),
@@ -1441,24 +1456,8 @@ describe("who wrote at a messenger, as the console answers an agent account (ADR
     expect((await one("U0ALICE"))?.member?.login).toBe("Alice");
     await install("messenger", "enabled", ["people:read", "people:accounts"]);
     expect(await put("messenger", "Alice", "U0ALICE")).toBe("another_plugins");
-    // Purged, what it said is gone with it, each as an event of whoever purged it: a package
-    // installed later under its key has said nothing, and the plugin before it may say it again.
-    const events = async () =>
-      (
-        restEventsSchema.parse(
-          await (
-            await h.request(`${REST_ROUTES.events}?latest=true&limit=100`, {
-              headers: fromPages(alice),
-            })
-          ).json(),
-        ).items as readonly {
-          kind: string;
-          plugin?: string | null;
-          data: Record<string, unknown>;
-        }[]
-      )
-        .filter((event) => event.kind === "person.updated" && event.plugin === "other")
-        .map((event) => [event.data.set, event.data.account]);
+    // Purged, what it said is gone with it: a package installed later under its key has said
+    // nothing, and the plugin before it may say it again.
     await purgeInstall(testDatabase.database, {
       workspaceId,
       key: "other",
@@ -1466,11 +1465,49 @@ describe("who wrote at a messenger, as the console answers an agent account (ADR
       actor: { id: ids.get("Alice") ?? "" },
       now,
     });
-    expect((await events()).at(-1)).toEqual([false, "U0ALICE"]);
     await install("other", "enabled", ["people:accounts"]);
     expect((await one("U0ALICE"))?.member).toBeNull();
     expect(await put("messenger", "Alice", "U0ALICE")).toMatchObject({ plugin: "messenger" });
     expect((await one("U0ALICE"))?.member?.supervisor).toBe(true);
+  });
+
+  it("counts nothing a plugin said whose package this console has no more, enabled as its install stands", async () => {
+    loaded = ["other"];
+    expect(await one("U0ALICE")).toMatchObject({ told: false, member: null });
+    // Nor does it stand in the way of the plugin in its place.
+    expect(await put("other", "Alice", "U0ALICE")).toMatchObject({ plugin: "other" });
+    expect((await one("U0ALICE"))?.member?.supervisor).toBe(true);
+    loaded = [];
+    expect(await one("U0ALICE")).toMatchObject({ told: false, member: null });
+    loaded = ["messenger"];
+    expect(await put("messenger", "Alice", "U0ALICE")).toMatchObject({ plugin: "messenger" });
+    loaded = ["messenger", "other"];
+  });
+
+  it("is purged while it is said, and neither waits for the other without end", async () => {
+    await install("other", "enabled", ["people:accounts"]);
+    await install("messenger", "disabled", ["people:read", "people:accounts"]);
+    const [said] = await Promise.all([
+      put("other", "Alice", "U0ALICE"),
+      purgeInstall(testDatabase.database, {
+        workspaceId,
+        key: "messenger",
+        boardProjectId: undefined,
+        actor: { id: ids.get("Alice") ?? "" },
+        now,
+      }),
+    ]);
+    expect(said).toMatchObject({ plugin: "other" });
+    // As it was for the tests after this one.
+    await install("messenger", "enabled", ["people:read", "people:accounts"]);
+    await install("other", "disabled", ["people:accounts"]);
+    for (const [login, account] of [
+      ["Alice", "U0ALICE"],
+      ["bob", "U0BOB"],
+      ["carol", "U0MIRA"],
+    ] as const) {
+      expect(await put("messenger", login, account)).toMatchObject({ plugin: "messenger" });
+    }
   });
 
   it("names no member the account may not see, but for its own line", async () => {

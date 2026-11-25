@@ -108,11 +108,13 @@ export type {
   ServicePlan,
   Spawn,
   StartOptions,
+  WakeAccount,
   WakeHost,
   WakePart,
   WakeRead,
   WakeSocket,
   WakeSource,
+  WakeWriter,
 } from "./runner/types.js";
 export {
   errorsShown,

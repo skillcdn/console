@@ -183,6 +183,8 @@ export interface PluginBoardOptions {
   readonly records?: RecordStore | undefined;
   /** The console's public origin, answered as `workspace().url`; none where the deployment names none. */
   readonly publicUrl?: string | undefined;
+  /** The plugins this console has, by key; none when left out. */
+  readonly loaded?: (() => readonly string[]) | undefined;
 }
 
 /** A project as the plugin reaches it: by key, within the plugin's reach. */
@@ -432,6 +434,7 @@ export class PluginBoard {
             account: given.data.account,
             personId,
             actor,
+            loaded: this.options.loaded?.() ?? [],
             most: MAX_MESSENGER_ACCOUNTS,
             now: this.options.clock.now(),
           });

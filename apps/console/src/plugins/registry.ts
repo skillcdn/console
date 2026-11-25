@@ -471,6 +471,7 @@ export class Plugins {
       clock: options.clock,
       records: options.records,
       publicUrl: options.publicUrl,
+      loaded: () => this.loaded(),
     });
     this.outbound =
       options.outbound ?? new Outbound({ clock: options.clock, logger: options.logger });
@@ -701,6 +702,13 @@ export class Plugins {
         );
       }
     }
+  }
+
+  /** The plugins whose packages this console has and reads, by key: an install of any other says nothing. */
+  loaded(): string[] {
+    return [...this.entries.values()]
+      .filter((entry) => entry.manifest !== undefined)
+      .map((entry) => entry.key);
   }
 
   /** Whether this console has any plugin at all. */

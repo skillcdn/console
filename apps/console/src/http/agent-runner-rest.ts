@@ -53,6 +53,7 @@ import type { Actor } from "../db/queries/events.js";
 import { writersFor } from "../db/queries/messenger-accounts.js";
 import { readWorkspaceSettings } from "../db/queries/workspaces.js";
 import type { Logger } from "../logger.js";
+import type { Plugins } from "../plugins/registry.js";
 import type { BlobStore } from "../ports/blob-store.js";
 import type { Clock } from "../ports/clock.js";
 import { createAgentGuards } from "./agent-guards.js";
@@ -79,6 +80,8 @@ export interface AgentRunnerRestDependencies {
   readonly quotas: Quotas;
   readonly clock: Clock;
   readonly logger: Logger;
+  /** The plugins, for which of them are here to have said whose account at a messenger is whose. */
+  readonly plugins: Pick<Plugins, "loaded">;
 }
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -139,7 +142,7 @@ export function registerAgentRunnerRest(
   app: Hono<AppEnv>,
   dependencies: AgentRunnerRestDependencies,
 ): void {
-  const { database, access, blobs, feed, quotas, clock, logger } = dependencies;
+  const { database, access, blobs, feed, quotas, clock, logger, plugins } = dependencies;
   const wakes = feed.agents;
   const OWN = `${REST_ROUTES.agents}/me`;
 
@@ -377,6 +380,7 @@ export function registerAgentRunnerRest(
       database,
       caller.person,
       await readWorkspaceSettings(database, caller.person.workspaceId),
+      plugins.loaded(),
       parsed.data.messenger,
       parsed.data.accounts,
     );

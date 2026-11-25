@@ -166,6 +166,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     quotas: dependencies.quotas,
     clock,
     logger,
+    plugins: dependencies.plugins,
   });
 
   registerAgentTranscriptRest(app, {

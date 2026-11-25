@@ -1,5 +1,5 @@
 import type { Messages } from "./en.js";
-import { asObject, asSubject, asWay } from "./particles.js";
+import { asBeside, asObject, asSubject, asWay } from "./particles.js";
 
 // The Korean pack (ADR-0012): every word of the English one, in Korean. With the English pack,
 // the one place in this repository where text is not English (AGENTS.md, rule 10).
@@ -1330,9 +1330,9 @@ export const ko: Messages = {
       emailChanged: (login) => `${login}의 업무 이메일을 바꿨습니다`,
       emailCleared: (login) => `${login}의 업무 이메일을 지웠습니다`,
       accountLinked: (login, messenger, account) =>
-        `${messenger} 계정 ${account}을(를) ${login}의 계정으로 연결했습니다`,
+        `${messenger} 계정 ${asObject(account)} ${login}의 계정으로 연결했습니다`,
       accountUnlinked: (login, messenger, account) =>
-        `${messenger} 계정 ${account}과(와) ${login}의 연결을 풀었습니다`,
+        `${messenger} 계정 ${asBeside(account)} ${login}의 연결을 해제했습니다`,
       personUpdated: (fields, login) => `${login}의 ${asObject(fields)} 바꿨습니다`,
       agentRunning: (agent) =>
         agent === undefined ? "실행 중입니다" : `${asSubject(agent)} 실행 중임을 확인했습니다`,

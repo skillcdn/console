@@ -15,7 +15,7 @@ import {
   workspaces,
 } from "../schema.js";
 import { type Actor, recordEvent } from "./events.js";
-import { forgetMessengerAccounts } from "./messenger-accounts.js";
+import { forgetMessengerAccounts, holdMessengerAccounts } from "./messenger-accounts.js";
 import type { PersonRecord } from "./people.js";
 
 // What the console keeps of its plugins (docs/specs/plugins.md, "Lifecycle", "Roles and grants",
@@ -1013,6 +1013,7 @@ export async function purgeInstall(
   },
 ): Promise<void> {
   await drizzleOf(database).transaction(async (tx) => {
+    await holdMessengerAccounts(tx, input.workspaceId);
     await lockWorkspace(tx, input.workspaceId);
     await tx
       .delete(pluginGrants)
@@ -1044,12 +1045,7 @@ export async function purgeInstall(
         ),
       );
     // And whose accounts at a messenger it said they are (ADR-0164).
-    await forgetMessengerAccounts(tx, {
-      workspaceId: input.workspaceId,
-      plugin: input.key,
-      actor: input.actor,
-      now: input.now,
-    });
+    await forgetMessengerAccounts(tx, { workspaceId: input.workspaceId, plugin: input.key });
     await tx
       .delete(pluginInstalls)
       .where(
