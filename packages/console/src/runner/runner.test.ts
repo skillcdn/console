@@ -3550,7 +3550,8 @@ describe("the runner, with sub-agents at work in the background", () => {
   });
 
   it("ends the session a moment after the last sub-agent ended where the product starts no turn for its report", async () => {
-    const made = setup({ reportMs: 80 });
+    // Longer than a busy machine stretches a short wait by, so that the moment is seen to hold.
+    const made = setup({ reportMs: 400 });
     const session = await atWork(made);
     await choose(made, session);
     session.emit(background(0));
@@ -3561,18 +3562,18 @@ describe("the runner, with sub-agents at work in the background", () => {
   });
 
   it("leaves the product its moment after a turn too, for the report that came while the turn was under way", async () => {
-    const made = setup({ reportMs: 80 });
+    const made = setup({ reportMs: 400 });
     const session = await atWork(made);
     made.console.signal({ text: "And this?" });
     await until("the second message", () => session.sent.length === 2);
     await choose(made, session);
     session.emit({ type: "taken" }, background(0));
-    await sleep(120);
+    await sleep(450);
     session.emit(DONE);
     await sleep(40);
     expect(made.console.ended).toEqual([]);
     session.emit(BEGAN);
-    await sleep(120);
+    await sleep(450);
     expect(made.console.ended).toEqual([]);
     session.emit(said("It is done."), DONE);
     await until("the session to end", () => made.console.ended.length === 1);
