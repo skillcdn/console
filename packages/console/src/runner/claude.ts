@@ -560,6 +560,8 @@ function eventsOf(line: Json, state: Read): DriverEvent[] {
           kind: "status",
           text: "The product compacted the conversation.",
         });
+        // The runner's to know too: what the agent was handed before is a summary at best.
+        events.push({ type: "compacted" });
       } else if (line.subtype === "api_retry") {
         const attempt = typeof line.attempt === "number" ? line.attempt : null;
         events.push({

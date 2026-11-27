@@ -1,6 +1,10 @@
-import { MAX_SIGNAL_LENGTH } from "../limits.js";
 import type { RestSignal } from "../schemas.js";
+import { inHeader, wakePartsOf } from "../wake-text.js";
 import type { WakePart } from "./types.js";
+
+// How a wake's parts are written as the one text a signal carries, and read back: the
+// console's own, which writes a wake of the board's so too (`../wake-text.ts`).
+export { quotedLines, wakePartsOf, wakeTextOf } from "../wake-text.js";
 
 // How a signal reaches the agent (docs/specs/runner.md, "How a signal reaches the product"): a
 // message with a header that carries the session's mark, which nothing outside the session
@@ -27,13 +31,17 @@ export function makeMark(random: () => number): string {
   return mark;
 }
 
-/** A word of a header on one line, with nothing in it that ends the header early. */
-const inHeader = (text: string): string => text.replaceAll(/[[\]\r\n]+/g, " ").trim();
-
-/** Who sent a signal, or where it came from, as its header says it. */
-function fromOf(signal: RestSignal): string {
+/**
+ * Who sent a signal, or where it came from, as its header says it. What the account sent itself,
+ * a wake it kept or the reset it asked for, is said as its own (ADR-0166): read under its name,
+ * it would read as a colleague's word, and it is no supervisor's.
+ */
+function fromOf(signal: RestSignal, own?: string): string {
   const by = signal.by === null ? undefined : inHeader(signal.by.name ?? signal.by.login);
   if (signal.source === "person") {
+    if (own !== undefined && signal.by?.id === own) {
+      return "yourself";
+    }
     const through = signal.agent === null ? "" : ` (through ${inHeader(signal.agent)})`;
     return `${by ?? "a supervisor"}${through}`;
   }
@@ -48,6 +56,13 @@ export interface MessageOptions {
   readonly time: (iso: string) => string;
   /** The files that came with a signal, as the runner handed them over: a line each after its words. */
   readonly attached?: ((signal: RestSignal) => readonly Attached[]) | undefined;
+  /** The id of the account the session is: a signal it sent itself is said as its own. */
+  readonly own?: string | undefined;
+  /**
+   * Whether the conversation holds a signal already, the product having taken it there before
+   * the agent could answer (ADR-0166): such a signal is named by its number and not said again.
+   */
+  readonly above?: ((signal: RestSignal) => boolean) | undefined;
 }
 
 /** A file that came with a signal, as the agent is told of it. */
@@ -139,7 +154,7 @@ export function deskName(name: string, taken: ReadonlySet<string> = new Set()): 
 /** The header of one signal: `[console k3f9a2 #8812 · tell · Jane (through Claude Code) · 14:02]`. */
 export function headerOf(signal: RestSignal, options: MessageOptions, times = 1): string {
   const counted = times > 1 ? ` · ${times} times` : "";
-  return `[console ${options.mark} #${signal.number} · ${signal.kind} · ${fromOf(signal)} · ${options.time(signal.at)}${counted}]`;
+  return `[console ${options.mark} #${signal.number} · ${signal.kind} · ${fromOf(signal, options.own)} · ${options.time(signal.at)}${counted}]`;
 }
 
 /** A text in a block fenced longer than any run of fence characters it holds, so that nothing in it ends the block. */
@@ -150,117 +165,18 @@ export function fenced(text: string): string {
 }
 
 /**
- * What a line of a wake's text begins with, as the console keeps the text (ADR-0163): a line of
- * the wake source's own, and a line of someone else's words. Every line of someone's words is
- * begun so where the text is written, so that no word of theirs is ever a line of the source's.
- */
-const SAYS = "#";
-const WORDS = ">";
-/** What a wake's text ends on where its parts came to more than a signal carries. */
-const WAKE_CUT = "The wake came to more than a signal carries, and was cut here";
-
-/** The first `most` characters of a text, never half of a character that takes two. */
-function firstOf(text: string, most: number): string {
-  const last = text.charCodeAt(most - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? most - 1 : most);
-}
-
-/**
- * What someone wrote, a line each behind `>`. A line break of any spelling ends a line, so that
- * none is left in one to end it for a reader.
- */
-export function quotedLines(words: string): string[] {
-  return words.split(/\r\n?|\n/).map((line) => (line === "" ? WORDS : `${WORDS} ${line}`));
-}
-
-/**
- * The parts of a wake as the one text a signal carries: a line of the source's own behind `#`,
- * and each line of someone else's words behind `>`, in the order given. The runner writes it so
- * for every wake a source raises, whatever the source handed it, and reads it back so when the
- * signal returns (`wakePartsOf`). Two runs of words with no line between them are parted by a
- * line that says nothing. Within `most` characters, the most a signal carries: what comes to
- * more is cut at the end of a line, or within a line of words, and the text's last line says so.
- */
-export function wakeTextOf(parts: readonly WakePart[], most = MAX_SIGNAL_LENGTH): string {
-  const lines: string[] = [];
-  let afterWords = false;
-  for (const part of parts) {
-    if ("says" in part) {
-      const says = inHeader(part.says);
-      if (says !== "") {
-        lines.push(`${SAYS} ${says}`);
-        afterWords = false;
-      }
-      continue;
-    }
-    if (part.words === "") {
-      continue;
-    }
-    if (afterWords) {
-      lines.push(SAYS);
-    }
-    lines.push(...quotedLines(part.words));
-    afterWords = true;
-  }
-  const whole = lines.join("\n");
-  if (whole.length <= most) {
-    return whole;
-  }
-  const cut = `${SAYS} ${WAKE_CUT}`;
-  const kept: string[] = [];
-  let room = most - cut.length;
-  for (const line of lines) {
-    if (line.length + 1 > room) {
-      // A line of words is carried as far as it goes; one of the source's own, whole or not at all.
-      if (line.startsWith(`${WORDS} `) && room > WORDS.length + 2) {
-        kept.push(firstOf(line, room - 1));
-      }
-      break;
-    }
-    kept.push(line);
-    room -= line.length + 1;
-  }
-  return [...kept, cut].join("\n");
-}
-
-/**
- * The parts of a wake read back from its text, or nothing where the text is not written as
- * `wakeTextOf` writes one: a wake raised by a runner of before, which is then carried whole as
- * someone else's words, as it was.
- */
-export function wakePartsOf(text: string): readonly WakePart[] | undefined {
-  const parts: WakePart[] = [];
-  let words: string[] | undefined;
-  const close = (): void => {
-    if (words !== undefined) {
-      parts.push({ words: words.join("\n") });
-      words = undefined;
-    }
-  };
-  for (const line of text.split("\n")) {
-    if (line === WORDS || line.startsWith(`${WORDS} `)) {
-      words ??= [];
-      words.push(line.slice(WORDS.length + 1));
-    } else if (line === SAYS || line.startsWith(`${SAYS} `)) {
-      close();
-      if (line.length > SAYS.length + 1) {
-        parts.push({ says: line.slice(SAYS.length + 1) });
-      }
-    } else {
-      return undefined;
-    }
-  }
-  close();
-  return parts;
-}
-
-/**
  * What a signal says, without the session's mark: the mark is the runner's, and what someone wrote
  * carries it nowhere, not even where it became known, quoted by the agent itself say. In any case
  * of its letters, which read as the same.
  */
 const unmarked = (text: string, mark: string): string =>
   text.replaceAll(new RegExp(mark, "gi"), "[mark]");
+
+/** The parts of a wake as the agent reads them: a line of the source's under the mark, words in a block. */
+const inParts = (parts: readonly WakePart[], mark: string): string[] =>
+  parts.map((part) =>
+    "says" in part ? `[console ${mark} · ${inHeader(part.says)}]` : fenced(part.words),
+  );
 
 /**
  * A wake from outside the console as the agent reads it under its header (ADR-0163): each line
@@ -272,11 +188,20 @@ const unmarked = (text: string, mark: string): string =>
  */
 function outsideOf(text: string, mark: string): string[] {
   const parts = wakePartsOf(text);
-  return parts === undefined
-    ? [fenced(text)]
-    : parts.map((part) =>
-        "says" in part ? `[console ${mark} · ${inHeader(part.says)}]` : fenced(part.words),
-      );
+  return parts === undefined ? [fenced(text)] : inParts(parts, mark);
+}
+
+/**
+ * A wake of the board's as the agent reads it under its header (ADR-0166). Its words are the
+ * console's own, and stand as they are; where it carries what a member wrote, a comment say, the
+ * console writes it in parts as a wake source does, and the agent reads the console's lines
+ * under the mark and the member's words in a block. A text of one part alone is none written so.
+ */
+function boardOf(text: string, mark: string): string[] {
+  const parts = wakePartsOf(text);
+  return parts === undefined || !parts.some((part) => "words" in part)
+    ? [text]
+    : inParts(parts, mark);
 }
 
 /** One signal as the agent reads it: its header, what it says under it, and the files that came with it. */
@@ -291,9 +216,26 @@ function entryOf(signal: RestSignal, options: MessageOptions, times: number): st
       ? []
       : signal.source === "messenger"
         ? outsideOf(words, options.mark)
-        : [words]),
+        : signal.source === "board"
+          ? boardOf(words, options.mark)
+          : [words]),
     ...files,
   ].join("\n");
+}
+
+/** How many signals a line names by their numbers before it counts the rest. */
+const MAX_NAMED = 40;
+
+/**
+ * The line that names what the conversation holds already (ADR-0166): the signals the product
+ * took there and the agent never answered, by their numbers, in the order they came. Their
+ * words stand above, under their own headers, and are not said a second time; the command that
+ * reads the record is named for a conversation that holds them no more after all.
+ */
+function aboveLine(signals: readonly RestSignal[], mark: string): string {
+  const named = signals.slice(0, MAX_NAMED).map((signal) => `#${signal.number}`);
+  const rest = signals.length - named.length;
+  return `[console ${mark} · above in this conversation, handed to you before and not said again: ${named.join(", ")}${rest > 0 ? ` and ${rest} more` : ""} (console agent signals me reads them)]`;
 }
 
 export interface Composed {
@@ -309,12 +251,18 @@ export interface Composed {
  * wake from the messenger, which carries a message no other wake carries again (ADR-0163),
  * and stands as an entry of its own. Beyond the bounds the rest is said as "N more" with the
  * command that reads them: of the wakes from the messenger the oldest, so that what was said
- * last there is read, and of everything else, which goes before them, the latest.
+ * last there is read, and of everything else, which goes before them, the latest. What the
+ * conversation holds already (`above`) is no entry: one line ahead of the others names it.
  */
 export function composeSignals(signals: readonly RestSignal[], options: MessageOptions): Composed {
   const entries: { signal: RestSignal; times: number }[] = [];
   const wakes = new Map<string, { signal: RestSignal; times: number }>();
+  // What the conversation holds already is named, and said by nothing else here (ADR-0166).
+  const held = options.above === undefined ? [] : signals.filter(options.above);
   for (const signal of signals) {
+    if (held.includes(signal)) {
+      continue;
+    }
     const same =
       signal.kind === "wake" && signal.key !== null && signal.source !== "messenger"
         ? `${signal.source}\n${signal.key}`
@@ -350,7 +298,10 @@ export function composeSignals(signals: readonly RestSignal[], options: MessageO
   const outside = (entry: (typeof entries)[number]) => entry.signal.source === "messenger";
   carry(entries.filter((entry) => !outside(entry)));
   carry(entries.filter(outside).toReversed());
-  const parts = entries.flatMap((entry) => carried.get(entry.signal) ?? []);
+  const parts = [
+    ...(held.length === 0 ? [] : [aboveLine(held, options.mark)]),
+    ...entries.flatMap((entry) => carried.get(entry.signal) ?? []),
+  ];
   const more = entries.length - carried.size;
   if (more > 0) {
     parts.push(

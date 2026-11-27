@@ -1,6 +1,6 @@
 # ADR-0163: A wake from the messenger is carried in parts, with what was said before it, and an agent account judges whether to answer where several were woken
 
-- Status: Accepted; which member of the console an account at a messenger is, left open here, is decided by [ADR-0164](0164-a-plugin-says-which-account-at-a-messenger-is-a-members-and-a-wake-says-by-it-whether-a-supervisor-wrote.md), and a wake's lines say a member, an agent account and a supervisor by it
+- Status: Accepted; which member of the console an account at a messenger is, left open here, is decided by [ADR-0164](0164-a-plugin-says-which-account-at-a-messenger-is-a-members-and-a-wake-says-by-it-whether-a-supervisor-wrote.md), and a wake's lines say a member, an agent account and a supervisor by it; points 6 and 9 are amended by [ADR-0166](0166-a-wake-carries-what-the-agents-conversation-does-not-hold-and-says-it-once.md): what a source keeps outlasts the runner, counts for as long as the agent's conversation holds it, and what to judge by is said once for a place in a conversation
 - Date: 2026-11-25
 - Adds to [ADR-0085](0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md), points 2, 8 and 9: what a wake source hands the runner, how what comes from outside the console is carried, and which wakes become one entry. Settles what [ADR-0160](0160-an-agent-account-takes-every-supervisors-word-as-its-managers-by-a-tell-or-at-the-messenger.md) left open of how a wake marks what a message carries of someone else's, and rests on its points 2, 5 and 8.
 

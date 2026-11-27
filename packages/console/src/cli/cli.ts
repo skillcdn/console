@@ -79,6 +79,7 @@ import { ownRunnerModules } from "../runner/modules.js";
 import {
   createRunner,
   GIT_TOKEN_SECRET,
+  type KeptBySource,
   type Runner,
   type RunnerEnd,
   type RunnerState,
@@ -4849,6 +4850,7 @@ function runnerStateOf(text: string | undefined): RunnerState | undefined {
   const driver = "driver" in json ? json.driver : undefined;
   const limited = "limited" in json ? json.limited : undefined;
   const kept: unknown = "kept" in json ? json.kept : undefined;
+  const began: unknown = "began" in json ? json.began : undefined;
   if (typeof delivered !== "number" || !Number.isSafeInteger(delivered) || delivered < 0) {
     return undefined;
   }
@@ -4890,7 +4892,51 @@ function runnerStateOf(text: string | undefined): RunnerState | undefined {
             .slice(0, 50),
         }
       : {}),
+    // When the conversation kept began (ADR-0166): nothing for a file of before, or a number that is none.
+    ...(momentOf(began) === undefined ? {} : { began: momentOf(began) }),
   };
+}
+
+/** How many names a wake source's file holds at the most, and how long a name and what stands under it may be. */
+const MAX_KEPT_NAMES = 2000;
+const MAX_KEPT_LENGTH = 200;
+
+/**
+ * What a wake source kept under a runner before this one (ADR-0166), as its file says it: the
+ * names it keeps with what stands under each, the oldest first, and nothing for a file that
+ * does not read. Read as data: a pair that is none, or longer than a name is, is left out, and
+ * no more is read than a source keeps.
+ */
+function keptBySourceOf(text: string | undefined): KeptBySource | undefined {
+  if (text === undefined) {
+    return undefined;
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (!Array.isArray(json)) {
+    return undefined;
+  }
+  const kept: [string, string][] = [];
+  for (const pair of json.slice(-MAX_KEPT_NAMES)) {
+    if (!Array.isArray(pair) || pair.length !== 2) {
+      continue;
+    }
+    const [name, value]: unknown[] = pair;
+    if (
+      typeof name === "string" &&
+      typeof value === "string" &&
+      name.length > 0 &&
+      name.length <= MAX_KEPT_LENGTH &&
+      value.length <= MAX_KEPT_LENGTH
+    ) {
+      kept.push([name, value]);
+    }
+  }
+  return kept;
 }
 
 /** A line a runner says of its machine, within what the console takes one in. */
@@ -5022,6 +5068,9 @@ const runner: Command = async (args, io) => {
     });
   }
   const statePath = workPath("runner-state.json");
+  // A wake source is named as a registry spells one, which is a file's name as it stands.
+  const keptPath = (source: string): string =>
+    workPath(`runner-kept-${source.replaceAll(/[^a-z0-9-]/g, "_")}.json`);
   const person = me.person;
   /** A runner for the desk's runner.json as it is read now: begun again whenever the file changed (ADR-0144). */
   const runnerOf = (read: Extract<Awaited<ReturnType<typeof readConfig>>, { ok: true }>) => {
@@ -5096,6 +5145,13 @@ const runner: Command = async (args, io) => {
         }),
         fetch: (url, init) => io.fetch(url, { ...init, headers: { ...init.headers } }),
         socket: (url) => host.socket(url),
+        // What a source keeps of what it brought the agent, ids and moments and never a word,
+        // in a file of its own beside the runner's state: a runner started again reads it.
+        kept: {
+          load: async (source) => keptBySourceOf(await host.readText(keptPath(source))),
+          save: (source, kept) =>
+            host.writePrivate(keptPath(source), `${JSON.stringify(kept.slice(-MAX_KEPT_NAMES))}\n`),
+        },
       },
     });
   };

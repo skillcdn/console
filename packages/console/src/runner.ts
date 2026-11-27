@@ -63,6 +63,7 @@ export {
   createRunner,
   HEARTBEAT_MS,
   HOLD_MS,
+  type KeptBySource,
   MAX_COOL_DOWN_MS,
   MAX_HOLD_MS,
   REPORT_MS,

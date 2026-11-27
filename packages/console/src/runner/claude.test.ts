@@ -481,6 +481,8 @@ describe("the claude driver", () => {
         ],
       },
       { type: "event", kind: "status", text: "The product compacted the conversation." },
+      // Said to the runner too (ADR-0166): what the agent was handed before is a summary now.
+      { type: "compacted" },
       {
         type: "event",
         kind: "error",

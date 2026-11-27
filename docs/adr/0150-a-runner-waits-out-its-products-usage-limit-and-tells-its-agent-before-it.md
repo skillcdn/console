@@ -1,6 +1,6 @@
 # ADR-0150: A runner waits out its product's usage limit, and tells its agent before it
 
-- Status: Accepted
+- Status: Accepted; point 3 is amended by [ADR-0166](0166-a-wake-carries-what-the-agents-conversation-does-not-hold-and-says-it-once.md): what the product took and the agent never answered is named when it is handed over again, and not said a second time
 - Date: 2026-11-24
 - Amends [ADR-0085](0085-a-runner-on-the-agents-machine-is-told-by-signals-and-runs-one-session-at-a-time.md), by which a runner restarts nothing by itself and an agent that cannot go on waits for a supervisor. The runner is in [specs/runner.md](../specs/runner.md).
 

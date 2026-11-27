@@ -77,7 +77,7 @@ describe("what an event of the messenger wakes the agent for", () => {
           wakeOf(payload(message({ text: `${written} the release is out, please check` }))),
         ).toEqual({
           key: "slack:C0OPS:1762800000.000100",
-          text: `A call of everyone (@${word}) in the channel C0OPS at Slack, from the member U0TOM, in the thread 1762800000.000100:\n${written} the release is out, please check`,
+          text: `A call of everyone (@${word}) in the channel C0OPS at Slack, from the member U0TOM, outside any thread: a reply begins the thread 1762800000.000100:\n${written} the release is out, please check`,
         });
       }
     }
@@ -99,7 +99,7 @@ describe("what an event of the messenger wakes the agent for", () => {
         payload(message({ text: "<!here> the review is in", user: "U0ERATO", bot_id: "B0ERATO" })),
       )?.text,
     ).toBe(
-      "A call of everyone (@here) in the channel C0OPS at Slack, from the member U0ERATO through an app, in the thread 1762800000.000100:\n<!here> the review is in",
+      "A call of everyone (@here) in the channel C0OPS at Slack, from the member U0ERATO through an app, outside any thread: a reply begins the thread 1762800000.000100:\n<!here> the review is in",
     );
     expect(
       wakeOf(payload(message({ text: "the review is in", user: "U0ERATO", bot_id: "B0ERATO" }))),
@@ -138,12 +138,17 @@ describe("what an event of the messenger wakes the agent for", () => {
   it("is a mention of its member, by the thread it is in", () => {
     expect(wakeOf(payload(message()))).toEqual({
       key: "slack:C0OPS:1762800000.000100",
+      text: `A mention in the channel C0OPS at Slack, from the member U0TOM, outside any thread: a reply begins the thread 1762800000.000100:\n<@${MEMBER}> can you look at the release?`,
+    });
+    // A reply in a thread is of that thread: what is said there is one thing to the agent. Its
+    // line names the thread it is in, where a message in none says so and names the thread a
+    // reply begins (ADR-0166): the two read apart, and neither is answered in the wrong place.
+    expect(
+      wakeOf(payload(message({ ts: "1762800500.000200", thread_ts: "1762800000.000100" }))),
+    ).toEqual({
+      key: "slack:C0OPS:1762800000.000100",
       text: `A mention in the channel C0OPS at Slack, from the member U0TOM, in the thread 1762800000.000100:\n<@${MEMBER}> can you look at the release?`,
     });
-    // A reply in a thread is of that thread: what is said there is one thing to the agent.
-    expect(
-      wakeOf(payload(message({ ts: "1762800500.000200", thread_ts: "1762800000.000100" })))?.key,
-    ).toBe("slack:C0OPS:1762800000.000100");
     // An app's own mention event says the same.
     expect(wakeOf(payload({ ...message({ text: "hello" }), type: "app_mention" }))?.key).toBe(
       "slack:C0OPS:1762800000.000100",
@@ -205,7 +210,7 @@ describe("what an event of the messenger wakes the agent for", () => {
       message({ text: "Shipping at noon.", ...over });
     expect(wakeOf(payload(talk()), ["C0OPS"])).toEqual({
       key: "slack:C0OPS:1762800000.000100",
-      text: "A message in the channel C0OPS at Slack, from the member U0TOM, in the thread 1762800000.000100:\nShipping at noon.",
+      text: "A message in the channel C0OPS at Slack, from the member U0TOM, outside any thread: a reply begins the thread 1762800000.000100:\nShipping at noon.",
     });
     // A private channel is named the same way, and a reply is of its thread.
     expect(
@@ -285,7 +290,7 @@ describe("what an event of the messenger wakes the agent for", () => {
       "A direct message at Slack, from the member U0JANE of another workspace (T0OTHER), in the thread 1762799000.000001 of the externally shared conversation D0MIRA:\nAre you there?",
     );
     expect(wakeOf(shared(message(outside)))?.text).toBe(
-      `A mention in the externally shared channel C0OPS at Slack, from the member U0JANE of another workspace (T0OTHER), in the thread 1762800000.000100:\n<@${MEMBER}> can you look at the release?`,
+      `A mention in the externally shared channel C0OPS at Slack, from the member U0JANE of another workspace (T0OTHER), outside any thread: a reply begins the thread 1762800000.000100:\n<@${MEMBER}> can you look at the release?`,
     );
     expect(
       wakeOf(
@@ -297,11 +302,11 @@ describe("what an event of the messenger wakes the agent for", () => {
     // A colleague in the same conversation is of the agent's own workspace, and is said as
     // ever: the conversation is still one that people outside read.
     expect(wakeOf(shared(message(ours)))?.text).toBe(
-      `A mention in the externally shared channel C0OPS at Slack, from the member U0TOM, in the thread 1762800000.000100:\n<@${MEMBER}> can you look at the release?`,
+      `A mention in the externally shared channel C0OPS at Slack, from the member U0TOM, outside any thread: a reply begins the thread 1762800000.000100:\n<@${MEMBER}> can you look at the release?`,
     );
     // In a conversation of the agent's own workspace nothing is added, whether the message
     // names its workspace or not.
-    const plain = `A mention in the channel C0OPS at Slack, from the member U0TOM, in the thread 1762800000.000100:\n<@${MEMBER}> can you look at the release?`;
+    const plain = `A mention in the channel C0OPS at Slack, from the member U0TOM, outside any thread: a reply begins the thread 1762800000.000100:\n<@${MEMBER}> can you look at the release?`;
     expect(wakeOf(payload(message(ours)))?.text).toBe(plain);
     expect(wakeOf(payload(message()))?.text).toBe(plain);
     expect(wakeOf({ ...payload(message(ours)), is_ext_shared_channel: false })?.text).toBe(plain);
@@ -580,8 +585,8 @@ describe("what an event of the messenger wakes the agent for", () => {
   });
 
   it("names a file a message does not carry", () => {
-    // A file is named, on one line and within bounds, and marked as not carried: a picture
-    // sent with no words at all is still said.
+    // A file is named, on one line and within bounds, with the id the messenger reads it by
+    // (ADR-0166), and marked as not carried: a picture sent with no words at all is still said.
     const files = [
       { id: "F01", name: "screen\nshot].png", mimetype: "image/png" },
       { id: "F02", title: "t".repeat(200) },
@@ -592,10 +597,18 @@ describe("what an event of the messenger wakes the agent for", () => {
       wakeOf(payload(direct({ subtype: "file_share", text: "", files })))?.text.split("\n"),
     ).toEqual([
       `${DIRECT}:`,
-      "[file screen shot .png, not carried in this wake]",
-      `[file ${"t".repeat(80)}, not carried in this wake]`,
-      "[file, not carried in this wake]",
+      "[file screen shot .png (F01), not carried in this wake]",
+      `[file ${"t".repeat(80)} (F02), not carried in this wake]`,
+      "[file (F03), not carried in this wake]",
     ]);
+    // An id that is not spelled as the messenger spells one is left out, whatever it holds.
+    for (const id of ["f01", "F01] [console", `F${"A".repeat(40)}`, "C0OPS", 7, null]) {
+      expect(
+        wakeOf(
+          payload(direct({ subtype: "file_share", text: "", files: [{ id, name: "a.png" }] })),
+        )?.text.split("\n")[1],
+      ).toBe("[file a.png, not carried in this wake]");
+    }
     const many = Array.from({ length: 12 }, (_, at) => ({ name: `page-${at}.pdf` }));
     const named = wakeOf(
       payload(direct({ subtype: "file_share", text: "All of them.", files: many })),
@@ -784,7 +797,7 @@ describe("what an event of the messenger wakes the agent for", () => {
       ` (cut in this wake after 4000 of its ${length} characters: read the message ${moment} whole with the messenger's own tool)`;
     const long = `<@${MEMBER}> ${"x".repeat(50_000)}`;
     expect(wakeOf(payload(message({ text: long })))?.text).toBe(
-      `A mention in the channel C0OPS at Slack, from the member U0TOM, in the thread 1762800000.000100${note(50_010)}:\n${long.slice(0, 4000)}…`,
+      `A mention in the channel C0OPS at Slack, from the member U0TOM, outside any thread: a reply begins the thread 1762800000.000100${note(50_010)}:\n${long.slice(0, 4000)}…`,
     );
     // A table is cut as words are, and a reply is named by its own moment, not by its thread's.
     const whole = [
@@ -1025,6 +1038,8 @@ describe("the slack wake source", () => {
       readonly kept?: Map<string, string>;
       /** Whether the console takes a wake, by how many were raised before it: every one, where nothing says. */
       readonly takes?: (raisedBefore: number) => boolean;
+      /** When the agent's conversation began (ADR-0166); a host that says nothing of it where left out. */
+      readonly began?: number;
     } = {},
   ) {
     const askedOf: (readonly WakeAccount[])[] = [];
@@ -1081,6 +1096,7 @@ describe("the slack wake source", () => {
         return over.takes?.(raised.length - 1) ?? true;
       },
       kept: over.kept ?? new Map<string, string>(),
+      ...(over.began === undefined ? {} : { began: () => over.began ?? 0 }),
       log: (line) => log.push(line),
       stands: (state, why) => {
         stood.push(why === undefined ? state : `${state}: ${why}`);
@@ -1519,10 +1535,21 @@ describe("the slack wake source", () => {
       // The third, nothing: all that was said before it reached the agent already.
       expect(says(at.raised[2]).filter((line) => line.startsWith("Said there"))).toEqual([]);
       expect(says(at.raised[2])).not.toContain("And the notes?");
+      // What to judge by is said once there (ADR-0166): the first wake says it whole, and the
+      // ones after name who else writes there and the command that reads on, which is what
+      // changed, in the order they last wrote.
+      expect(says(at.raised[0]).at(-1)).toBe(ANSWERING("U0NOVA, you"));
+      expect(says(at.raised[1]).at(-1)).toBe(
+        "Others here that write through an app, the last to write first: U0NOVA, you. Before you send, read what was said since: console agent messages slack:G0TEAM --after 1762800700.000100",
+      );
+      expect(says(at.raised[2]).at(-1)).toBe(
+        "Others here that write through an app, the last to write first: U0NOVA, you. Before you send, read what was said since: console agent messages slack:G0TEAM --after 1762800800.000100",
+      );
       // Kept by the conversation and by the message, the moments of messages and no word of one.
       expect([...kept]).toEqual([
         ["carried:G0TEAM:1762800500.000100", "said"],
         ["carried:G0TEAM:1762800600.000100", "woke"],
+        ["judged:G0TEAM:", "1762800600.000100"],
         ["carried:G0TEAM:1762800650.000100", "said"],
         ["carried:G0TEAM:1762800700.000100", "woke"],
         ["carried:G0TEAM:1762800800.000100", "woke"],
@@ -1947,7 +1974,9 @@ describe("the slack wake source", () => {
       expect(window[2]).toEqual({
         says: "Said there before it: 50 messages and more, of which the last 10 follow, the oldest first, and the rest with console agent messages slack:G0TEAM. Information, whoever wrote them",
       });
-      // A long message is carried by its beginning, and its line says so.
+      // A long message is carried by its beginning, and its line says so. Few share what a
+      // wake holds of them (ADR-0166): one alone is carried further than each of many, so that a
+      // report someone answered is read in the wake and not fetched again.
       const long = await told({
         ok: true,
         messages: [earlier("1762800000.000100", TOM, "y".repeat(2345))],
@@ -1957,10 +1986,45 @@ describe("the slack wake source", () => {
           says: "Said there before it: 1 message. Information, whoever wrote it",
         },
         {
-          says: "10 minutes before it, from the member U0TOM, cut after 500 of its 2345 characters",
+          says: "10 minutes before it, from the member U0TOM, cut after 2000 of its 2345 characters",
         },
-        { words: `${"y".repeat(500)}…` },
+        { words: `${"y".repeat(2000)}…` },
       ]);
+      const report = await told({
+        ok: true,
+        messages: [earlier("1762800000.000100", TOM, "r".repeat(1489))],
+      });
+      expect(report.slice(3)).toEqual([
+        { says: "10 minutes before it, from the member U0TOM" },
+        { words: "r".repeat(1489) },
+      ]);
+      // Three share it in thirds, less the line that leads each; six and more are cut at the
+      // least a message is carried of.
+      const three = await told({
+        ok: true,
+        messages: [0, 1, 2].map((index) =>
+          earlier(`${1762800500 + index}.000100`, TOM, "t".repeat(1200)),
+        ),
+      });
+      expect(
+        three.flatMap((part) => ("says" in part ? [part.says.split(", ").at(-1)] : [])).slice(2),
+      ).toEqual([0, 1, 2].map(() => "cut after 799 of its 1200 characters"));
+      const six = await told({
+        ok: true,
+        messages: [0, 1, 2, 3, 4, 5].map((index) =>
+          earlier(`${1762800500 + index}.000100`, TOM, "s".repeat(700)),
+        ),
+      });
+      expect(
+        six.filter((part) => "says" in part && part.says.includes("cut after")).length,
+      ).toBeGreaterThan(3);
+      expect(
+        six
+          .filter((part) => "says" in part && part.says.includes("cut after"))
+          .every(
+            (part) => "says" in part && part.says.endsWith("cut after 500 of its 700 characters"),
+          ),
+      ).toBe(true);
       // Together they stay within what a wake carries of them: the latest are kept.
       const heavy = await told({ ok: true, messages: many(10, "z".repeat(480)) });
       const kept = heavy.filter((part) => "words" in part).length - 1;
@@ -2233,6 +2297,231 @@ describe("the slack wake source", () => {
         "read G0TEAM 1762800602.000100",
         "raise slack:G0TEAM:1762800602.000100",
       ]);
+    });
+
+    it("carries what leads up to a message where the agent's conversation began since, its own words among it (ADR-0166)", async () => {
+      const says = (wake: RaisedWake | undefined) =>
+        partsOf(wake).map((part) => ("says" in part ? part.says : part.words));
+      // What was said in a direct conversation, the agent's own answers among it: all of it
+      // before the agent's conversation began, at a reset say.
+      const before = [
+        earlier("1762800500.000100", MEMBER, "It is merged.", { bot_id: "B0MIRA" }),
+        earlier("1762800400.000100", TOM, "Is the update merged?"),
+        earlier("1762800300.000100", MEMBER, "Starting now.", { bot_id: "B0MIRA" }),
+        earlier("1762800200.000100", TOM, "Please update the console today."),
+        earlier("1762800100.000100", TOM, "Morning."),
+        earlier("1762800050.000100", TOM, "Are you there?"),
+        earlier("1762800000.000100", TOM, "Ping."),
+      ];
+      const first = payload(
+        direct({ text: "About that update: ship it.", ts: "1762800900.000100" }),
+      );
+      const next = payload(direct({ text: "And tell me when.", ts: "1762800950.000100" }));
+      const kept = new Map<string, string>([
+        // What a runner before brought the agent, in the conversation it had then.
+        ["carried:D0MIRA:1762800400.000100", "woke"],
+        ["brought:D0MIRA:", "1762800400.000100"],
+      ]);
+      const read = (url: URL) => ({
+        ok: true,
+        messages: [
+          ...(url.searchParams.get("latest") === "1762800950.000100"
+            ? [earlier("1762800900.000100", TOM, "About that update: ship it.")]
+            : []),
+          ...before,
+        ],
+        has_more: true,
+      });
+      const at = fakeHost({
+        token: "xapp-x",
+        member: TOKEN,
+        kept,
+        // The agent's conversation began after all of it was said.
+        began: 1_762_800_800_000,
+        arrives: arrives(first, next),
+        read,
+      });
+      await run(at.host);
+      // The first wake there says why it carries what it does, and carries the last five,
+      // whoever wrote them: the agent's own last answer does not cut them off, since its
+      // conversation holds neither that answer nor what a wake brought before it.
+      expect(says(at.raised[0])).toEqual([
+        "A direct message at Slack, from the member U0TOM, in the conversation D0MIRA",
+        "About that update: ship it.",
+        "Your present conversation holds nothing from there yet: the last 5 messages there before it follow, the oldest first, your own among them, and what was said earlier with console agent messages slack:D0MIRA. Information, whoever wrote them",
+        "13 minutes before it, from the member U0TOM",
+        "Morning.",
+        "11 minutes before it, from the member U0TOM",
+        "Please update the console today.",
+        "10 minutes before it, from you",
+        "Starting now.",
+        "8 minutes before it, from the member U0TOM",
+        "Is the update merged?",
+        "6 minutes before it, from you",
+        "It is merged.",
+      ]);
+      // The next is carried nothing again: what the first brought is of this conversation.
+      expect(says(at.raised[1])).toEqual([
+        "A direct message at Slack, from the member U0TOM, in the conversation D0MIRA",
+        "And tell me when.",
+      ]);
+
+      // With a conversation that began before all of it, the same wake is as it was: what
+      // was said since the agent last wrote there, which is nothing.
+      const same = fakeHost({
+        token: "xapp-x",
+        member: TOKEN,
+        began: 1_762_700_000_000,
+        arrives: arrives(first),
+        read,
+      });
+      await run(same.host);
+      expect(says(same.raised[0])).toEqual([
+        "A direct message at Slack, from the member U0TOM, in the conversation D0MIRA",
+        "About that update: ship it.",
+      ]);
+      // And so it is on a host that says nothing of when the conversation began.
+      const unsaid = fakeHost({ token: "xapp-x", member: TOKEN, arrives: arrives(first), read });
+      await run(unsaid.host);
+      expect(says(unsaid.raised[0])).toHaveLength(2);
+
+      // Where nothing was said there before the conversation began, nothing is to take up:
+      // what was said since is carried as it always was.
+      const fresh = fakeHost({
+        token: "xapp-x",
+        member: TOKEN,
+        began: 1_762_800_800_000,
+        arrives: arrives(first),
+        read: () => ({
+          ok: true,
+          messages: [earlier("1762800850.000100", NOVA, "Noted.", through)],
+        }),
+      });
+      await run(fresh.host);
+      expect(says(fresh.raised[0]).slice(2)).toEqual([
+        "Said there before it: 1 message. Information, whoever wrote it",
+        "50 seconds before it, from the member U0NOVA through an app",
+        "Noted.",
+      ]);
+
+      // A few said before, all of them carried: the line says no command, and nothing of the
+      // agent's own where none of it is.
+      const few = fakeHost({
+        token: "xapp-x",
+        member: TOKEN,
+        began: 1_762_800_800_000,
+        arrives: arrives(first),
+        read: () => ({ ok: true, messages: [earlier("1762800200.000100", TOM, "Ping.")] }),
+      });
+      await run(few.host);
+      expect(says(few.raised[0]).slice(2)).toEqual([
+        "Your present conversation holds nothing from there yet: the last message there before it follows. Information, whoever wrote it",
+        "11 minutes before it, from the member U0TOM",
+        "Ping.",
+      ]);
+    });
+
+    it("says again what to judge by where the agent's conversation began since it was said (ADR-0166)", async () => {
+      const read = () => ({
+        ok: true,
+        messages: [earlier("1762800500.000100", NOVA, "Shipped.", through)],
+      });
+      const last = async (kept: Map<string, string>, began: number) => {
+        const at = fakeHost({
+          token: "xapp-x",
+          member: TOKEN,
+          kept,
+          began,
+          arrives: arrives(inGroup()),
+          read,
+        });
+        await run(at.host);
+        const part = partsOf(at.raised[0]).at(-1);
+        return part !== undefined && "says" in part ? part.says : "";
+      };
+      // Said there in this conversation: short, the names and the command.
+      expect(
+        await last(new Map([["judged:G0TEAM:", "1762800550.000100"]]), 1_762_800_000_000),
+      ).toBe(
+        "Others here that write through an app, the last to write first: U0NOVA. Before you send, read what was said since: console agent messages slack:G0TEAM --after 1762800600.000100",
+      );
+      // Said there before the conversation began: whole, once more.
+      expect(
+        await last(new Map([["judged:G0TEAM:", "1762800550.000100"]]), 1_762_800_580_000),
+      ).toBe(ANSWERING("U0NOVA"));
+      // And said in a thread, it is not said in the conversation around it.
+      expect(
+        await last(
+          new Map([["judged:G0TEAM:1762800000.000100", "1762800550.000100"]]),
+          1_762_800_000_000,
+        ),
+      ).toBe(ANSWERING("U0NOVA"));
+    });
+
+    it("says whom a message names where it does not name the agent, and nothing of it in a direct conversation (ADR-0166)", () => {
+      const first = (event: unknown, channels: readonly string[] = []) => {
+        const part = slackWakeOf(event, channels)?.parts[0];
+        return part !== undefined && "says" in part ? part.says : undefined;
+      };
+      // In a group conversation every message wakes: one that names another, and not the
+      // agent, was said to that one, and the line says so before the words are read.
+      expect(first(inGroup({ text: "<@U0NOVA> can you take the notes?" }))).toBe(
+        "A message in a group conversation at Slack, from the member U0TOM, naming U0NOVA and not you, in the conversation G0TEAM",
+      );
+      // Each once, in the order named, with what the messenger shows for a name left out; the
+      // writer's own name is nobody the message was said to, and so many are named at the most.
+      expect(
+        first(
+          inGroup({
+            text: "<@U0NOVA|nova> and <@U0ANN>, <@U0NOVA> again, says <@U0TOM>",
+          }),
+        ),
+      ).toBe(
+        "A message in a group conversation at Slack, from the member U0TOM, naming U0NOVA, U0ANN and not you, in the conversation G0TEAM",
+      );
+      expect(
+        first(
+          inGroup({
+            text: ["A", "B", "C", "D", "E", "F", "G"].map((one) => `<@U0${one}>`).join(" "),
+          }),
+        ),
+      ).toBe(
+        "A message in a group conversation at Slack, from the member U0TOM, naming U0A, U0B, U0C, U0D, U0E and 2 more and not you, in the conversation G0TEAM",
+      );
+      // In a channel the agent listens to, the same, ahead of where the message is.
+      expect(
+        first(payload(message({ text: "<@U0NOVA> ship it", ts: "1762800600.000100" })), ["C0OPS"]),
+      ).toBe(
+        "A message in the channel C0OPS at Slack, from the member U0TOM, naming U0NOVA and not you, outside any thread: a reply begins the thread 1762800600.000100",
+      );
+      // A message that names the agent is a mention, whoever else it names; one that names
+      // nobody says nothing of it; and what a person typed that only looks like a name is none.
+      expect(first(inGroup({ text: `<@U0NOVA> and <@${MEMBER}>, who takes it?` }))).toBe(GROUP);
+      expect(first(inGroup())).toBe(GROUP);
+      expect(first(inGroup({ text: "&lt;@U0NOVA&gt; is how a name is written" }))).toBe(GROUP);
+      // In a direct conversation whatever is said is said to the agent, and a call of everyone
+      // calls it with the rest, whoever else is named beside.
+      expect(first(payload(direct({ text: "Ask <@U0NOVA> for the notes." })))).toBe(DIRECT);
+      expect(
+        first(
+          payload(message({ text: "<!channel> <@U0NOVA> has the notes", ts: "1762800600.000100" })),
+        ),
+      ).toBe(
+        "A call of everyone (@channel) in the channel C0OPS at Slack, from the member U0TOM, outside any thread: a reply begins the thread 1762800600.000100",
+      );
+      // Where the event does not say which member it was delivered for, nobody is "not you".
+      expect(
+        first(
+          payload(
+            message({
+              channel: "G0TEAM",
+              channel_type: "mpim",
+              text: "<@U0NOVA> can you?",
+            }),
+            null,
+          ),
+        ),
+      ).toBe(GROUP);
     });
   });
 
@@ -2843,6 +3132,75 @@ describe("the slack wake source", () => {
       expect(named.first).toBe(
         "A direct message at Slack, from the member U0TOM (a member of the console, no supervisor of yours), in the conversation D0MIRA",
       );
+    });
+
+    it("takes the agent's own workspace for a writer the event names none for, only where the messenger says the conversation is shared with no other organization (ADR-0166)", async () => {
+      // A message with a file names no workspace for its writer, as the messenger sends one.
+      const filed = direct({ user: ALICE, subtype: "file_share", files: [{ id: "F01" }] });
+      const within = await heard(
+        { ...payload(filed), is_ext_shared_channel: false },
+        { writers: people },
+      );
+      expect(within.askedOf).toEqual([[{ workspace: "T0ACME", account: ALICE }]]);
+      expect(within.first).toBe(
+        "A direct message at Slack, from the member U0ALICE (@alice in the console, a supervisor of yours), in the conversation D0MIRA",
+      );
+      // Shared with another organization, or nothing said of it: the same id may be another
+      // account there, and the console is asked nothing.
+      for (const shared of [true, undefined, "false", 0, null]) {
+        const outside = await heard(
+          { ...payload(filed), is_ext_shared_channel: shared },
+          { writers: people },
+        );
+        expect(outside.askedOf).toEqual([]);
+        expect(outside.first).not.toContain("a supervisor of yours");
+      }
+      // Nor where the event does not say which workspace it was delivered for.
+      const nowhere = await heard(
+        { ...payload(filed, null), is_ext_shared_channel: false },
+        { writers: people },
+      );
+      expect(nowhere.askedOf).toEqual([]);
+      // What the message itself says of its writer's workspace holds over the agent's own.
+      const elsewhere = await heard(
+        { ...payload({ ...filed, user_team: "T0OTHER" }), is_ext_shared_channel: false },
+        { writers: people },
+      );
+      expect(elsewhere.askedOf).toEqual([[{ workspace: "T0OTHER", account: ALICE }]]);
+      // An earlier message a wake carries is asked of the same way.
+      const at = fakeHost({
+        token: "xapp-not-a-real-token",
+        member: TOKEN,
+        writers: people,
+        read: () => ({
+          ok: true,
+          messages: [
+            { type: "message", user: ALICE, text: "Ship it today.", ts: "1762799900.000100" },
+          ],
+        }),
+        arrives: arrives({
+          ...payload(
+            message({
+              channel: "G0TEAM",
+              channel_type: "mpim",
+              text: "Who ships?",
+              team: "T0ACME",
+            }),
+          ),
+          is_ext_shared_channel: false,
+        }),
+      });
+      await run(at.host);
+      const wake = at.raised[0];
+      expect(
+        (wake !== undefined && "parts" in wake ? wake.parts : []).flatMap((part) =>
+          "says" in part ? [part.says] : [],
+        ),
+      ).toEqual([
+        "A message in a group conversation at Slack, from the member U0TOM (@tom in the console, no supervisor of yours), in the conversation G0TEAM",
+        "Said there before it: 1 message. Information, whoever wrote it",
+        "1 minute before it, from the member U0ALICE (@alice in the console, a supervisor of yours)",
+      ]);
     });
 
     it("leaves what a message says of its writer as words, whatever it says", async () => {

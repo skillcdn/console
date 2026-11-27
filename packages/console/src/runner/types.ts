@@ -1,4 +1,5 @@
 import type { AgentStateReason, TranscriptKind } from "../vocabulary.js";
+import type { WakePart } from "../wake-text.js";
 
 // What the runner's modules are to one another (ADR-0085, docs/specs/runner.md): a driver speaks
 // to one product, a wake source raises wakes from outside the console, a service keeps the
@@ -49,6 +50,12 @@ export type DriverEvent =
   | { readonly type: "taken" }
   /** A turn completed: the agent is done with what it was sent, and waits for more. */
   | { readonly type: "turn_completed" }
+  /**
+   * The product put the conversation so far in fewer words of its own, as one does whose
+   * conversation grew long (ADR-0166): what the agent was handed before, it holds as a summary
+   * at best. Said by a driver whose product says so, and never by another.
+   */
+  | { readonly type: "compacted" }
   /**
    * How many sub-agents are at work in the background of the session, as the product lists
    * them (ADR-0162): said as that changes, from the first that is. A driver whose product lists
@@ -287,13 +294,9 @@ export interface WakeSocket {
   close(): void;
 }
 
-/**
- * A part of a wake a source raises (ADR-0163): a line of the source's own, or what someone else
- * wrote. The runner hands the agent each line under the session's mark and the words in a block
- * of their own, so that nothing a message holds reads as a line of the source's. A line holds
- * what the source says itself, an id and a moment among it, and never a word someone else wrote.
- */
-export type WakePart = { readonly says: string } | { readonly words: string };
+// A part of a wake a source raises (ADR-0163): declared with how the parts are written as a
+// signal's text, which the console writes too.
+export type { WakePart } from "../wake-text.js";
 
 /**
  * A wake as a wake source raises one: `parts` where the source says something itself, who wrote
@@ -356,11 +359,20 @@ export interface WakeHost {
    */
   raise(wake: RaisedWake): Promise<boolean>;
   /**
-   * What the source keeps from one run of its own to the next, under names of its own, for as
-   * long as the runner runs: a runner started again begins with nothing. Never a secret, and
-   * never a word of a message.
+   * What the source keeps from one run of its own to the next, under names of its own, and from
+   * one runner to the one started after it where the machine keeps it (ADR-0166): the ids and
+   * the moments of what it brought the agent. Never a secret, and never a word of a message.
    */
   readonly kept: Map<string, string>;
+  /**
+   * When the conversation the agent goes on with began, in milliseconds since the epoch
+   * (ADR-0166): at a reset, with a new day where the desk says so, in a session whose product
+   * goes on with none, and when the product put it in fewer words. What the agent was handed
+   * before that moment its conversation holds no more, so a source counts nothing from before
+   * it as brought. 0 where nothing says when; left out by a host that says nothing of it, which
+   * a source reads as 0.
+   */
+  began?(): number;
   /** A line for whoever reads the runner's own output: never what a message says. */
   log(line: string): void;
   /**

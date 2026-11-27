@@ -3,14 +3,16 @@ import {
   notificationKindFor,
   notificationSettingsOf,
   type TaskFollowState,
+  wakeTextOf,
 } from "@skillcdn/console/api";
-import { and, eq, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, lte } from "drizzle-orm";
 import { decisionReachableBy } from "../../auth/policy.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import {
   agentRunners,
   agentSecrets,
   agentWakeCursors,
+  comments,
   decisions,
   people,
   projects,
@@ -21,6 +23,7 @@ import { listWaitingDecisionsFor } from "./decisions.js";
 import type { EventRecord } from "./events.js";
 import { followsOfTask, type MemberToTell, membersToTell } from "./notifications.js";
 import { type PersonRecord, personColumns, toPerson } from "./people.js";
+import { excerptOf } from "./runs.js";
 import { listTasksOf } from "./tasks.js";
 
 // Whom the board tells of what happens on it (ADR-0157, and ADR-0085, point 10, for the wakes):
@@ -62,6 +65,68 @@ const said = (text: string, most = 200): string => {
   const line = text.replaceAll(/\s+/g, " ").trim();
   return line.length > most ? `${line.slice(0, most - 1)}…` : line;
 };
+
+/**
+ * The most of a comment a wake carries (ADR-0166): what most comments are within, so that the
+ * agent reads what was said where it is woken, and the rest of a long one on the board.
+ */
+export const MAX_WAKE_COMMENT = 2000;
+
+/**
+ * The words of the comment an event says was written (ADR-0166), or nothing. The event names
+ * no comment: it is the one its author wrote on that task at that moment, and of those, where
+ * a clock gave several the same moment, the one whose first words the event keeps. A comment
+ * of files alone has no words to carry.
+ */
+async function commentOf(
+  database: Database,
+  event: EventRecord,
+  taskId: string,
+): Promise<string | undefined> {
+  if (event.actor === undefined) {
+    return undefined;
+  }
+  const written = await drizzleOf(database)
+    .select({ body: comments.body })
+    .from(comments)
+    .where(
+      and(
+        eq(comments.taskId, taskId),
+        eq(comments.authorId, event.actor.id),
+        eq(comments.createdAt, event.createdAt),
+      ),
+    )
+    .orderBy(desc(comments.id))
+    .limit(20);
+  const body = written
+    .find((comment) => excerptOf(comment.body) === (event.data.excerpt ?? ""))
+    ?.body.trim();
+  return body === undefined || body.length === 0 ? undefined : body;
+}
+
+/**
+ * A wake for a comment as the one text a signal carries (ADR-0166): the console's own lines
+ * apart from what the comment says, written as a wake source writes what someone said at a
+ * messenger, so that the agent reads the console's lines under its session's mark and the
+ * comment in a block, as its writer's words and never the console's. So much of it, and where
+ * it is longer the first line says so, since a line after the words would read as theirs.
+ */
+function commentWake(named: string, read: string, body: string): string {
+  const cut =
+    body.length > MAX_WAKE_COMMENT
+      ? `, cut here after ${MAX_WAKE_COMMENT} of its ${body.length} characters`
+      : "";
+  const end = body.charCodeAt(MAX_WAKE_COMMENT - 1);
+  // Never half of a character that takes two.
+  const most = end >= 0xd800 && end <= 0xdbff ? MAX_WAKE_COMMENT - 1 : MAX_WAKE_COMMENT;
+  return wakeTextOf([
+    { says: `A comment on ${named}${cut}` },
+    { words: cut === "" ? body : `${body.slice(0, most)}…` },
+    {
+      says: `The task, with ${cut === "" ? "the rest of what was said on it" : "the comment whole"}: ${read}`,
+    },
+  ]);
+}
 
 /** The fields of a task whose change its people are told of: what it says and when it is planned. */
 const TOLD_OF_FIELDS: readonly string[] = ["title", "body", "startsOn", "dueOn"];
@@ -264,6 +329,10 @@ async function taskTellings(
   const read = `console task ${task.number} --project ${task.project}`;
   const named = `#${task.number} "${said(task.title)}" in ${task.project}`;
   const changed = fields.length === 0 ? "" : ` (${said(fields.join(", "), 80)})`;
+  // What a comment says goes with the wake for it (ADR-0166): read where the agent is woken,
+  // it costs no reading of the task whole to learn what was said.
+  const comment =
+    event.kind === "task.commented" ? await commentOf(database, event, task.id) : undefined;
   const words = (kind: NotificationKind): string => {
     switch (kind) {
       case "ready":
@@ -271,7 +340,9 @@ async function taskTellings(
       case "assigned":
         return `${named} was given to you. Read it: ${read}`;
       case "commented":
-        return `A comment on ${named}. Read it: ${read}`;
+        return comment === undefined
+          ? `A comment on ${named}. Read it: ${read}`
+          : commentWake(named, read, comment);
       case "moved":
         return `${named} went from ${event.data.from ?? "one state"} to ${event.data.to ?? "another"}. Read it: ${read}`;
       case "archived":

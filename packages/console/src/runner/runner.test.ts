@@ -10,7 +10,13 @@ import {
 } from "../schemas.js";
 import { DEFAULT_RUNNER_CONFIG, type RunnerConfig } from "./config.js";
 import { WITHHELD } from "./redact.js";
-import { createRunner, type RunnerClient, type RunnerState } from "./runner.js";
+import {
+  createRunner,
+  type KeptBySource,
+  type RunnerClient,
+  type RunnerOptions,
+  type RunnerState,
+} from "./runner.js";
 import type { Driver, DriverEvent, DriverMessage, StartOptions, WakeSource } from "./types.js";
 
 // The runner against a console and a product that are both the test's: what it asks of the
@@ -406,6 +412,8 @@ function setup(
     before?: (console: ReturnType<typeof fakeConsole>) => void;
     /** The wake sources the runner keeps beside the console's own. */
     sources?: readonly WakeSource[];
+    /** Where what a wake source keeps outlasts the runner; a machine that keeps nothing where left out. */
+    kept?: NonNullable<RunnerOptions["wakes"]>["kept"];
     /** How git ends for the autosave, by its first words; a desk that is a repository with nothing to save where left out. */
     git?: (args: readonly string[]) => number | null;
     /** The version of the package on the machine, read again; a runner that never looks where left out. */
@@ -479,6 +487,7 @@ function setup(
     log: (line) => log.push(line),
     wakes: {
       sources: over.sources ?? [],
+      ...(over.kept === undefined ? {} : { kept: over.kept }),
       fetch: async () => ({ json: async () => ({}) }),
       socket: () => {
         throw new Error("no socket is opened here");
@@ -611,7 +620,13 @@ describe("the runner", () => {
     });
     // What it keeps for its own next start: the last signal delivered, and the conversation.
     await until("the state", () => saved.at(-1)?.conversation === "c-1");
-    expect(saved.at(-1)).toEqual({ delivered: 1, conversation: "c-1", driver: "claude" });
+    // And when that conversation began (ADR-0166), which is when this session did.
+    expect(saved.at(-1)).toEqual({
+      delivered: 1,
+      conversation: "c-1",
+      driver: "claude",
+      began: expect.any(Number),
+    });
     await until("a heartbeat with the session", () =>
       console.beats.some(
         (beat) => beat.session !== null && beat.delivered === 1 && beat.running.model === "opus",
@@ -875,7 +890,7 @@ describe("the runner", () => {
     expect(text).toContain("Why is in your own words, under the header #2 below.");
     expect(text).toContain("Read first what was kept of your work: the board (console work)");
     expect(text).not.toContain("You were reset");
-    expect(text).toContain("#2 · reset · Mira · 14:02]\nThe release is out. Next: its notes.");
+    expect(text).toContain("#2 · reset · yourself · 14:02]\nThe release is out. Next: its notes.");
     // What the agent took in the turn before is not said again in the new conversation.
     expect(text).not.toContain("Tag it before you go.");
     // On the new session's record as what the agent was sent, by the account, as a
@@ -918,7 +933,7 @@ describe("the runner", () => {
     expect(session.options.resume).toBeUndefined();
     const text = session.sent[0]?.text ?? "";
     expect(text).toContain("You began this conversation yourself (console agent reset me)");
-    expect(text).toContain("#2 · reset · Mira · 14:02]\nThe release is out. Next: its notes.");
+    expect(text).toContain("#2 · reset · yourself · 14:02]\nThe release is out. Next: its notes.");
     // The tell the agent took and acted on is not sent into a conversation that knows nothing
     // of having done so.
     expect(text).not.toContain("Tag it before you go.");
@@ -1255,10 +1270,14 @@ describe("the runner", () => {
     await until("the agent to be brought back", () => session.sent.length === 4);
     const back = session.sent[3]?.text ?? "";
     expect(back).not.toContain("Begin.");
-    expect(back).toContain("#2 · tell · Jane · 14:02]\nAnd this.");
-    expect(back).toContain("#3 · tell · Jane · 14:02]\nAnd that.");
+    // What the product took stands in the conversation the agent goes on in: it is named by
+    // its number and not said a second time (ADR-0166). What the product never took is said.
+    expect(back).not.toContain("And this.");
     expect(back).toContain(
-      "what you were handed as the limit was reached and had not read among it",
+      "What you were handed as the limit was reached and had not answered stands above in this conversation: it is named below by its number, and not said again. What reached you since follows, in the order it came.",
+    );
+    expect(back).toContain(
+      "[console ssssss · above in this conversation, handed to you before and not said again: #2 (console agent signals me reads them)]\n\n[console ssssss #3 · tell · Jane · 14:02]\nAnd that.",
     );
     // A message the product still had on its input is refused too: the same stretch, said once.
     session.emit(
@@ -1375,8 +1394,16 @@ describe("the runner", () => {
     expect(Date.now()).toBeLessThan(resets);
     const text = second.sent[0]?.text ?? "";
     expect(text.indexOf("#2 · wake · board: #7")).toBeGreaterThan(0);
-    expect(text.indexOf("Are you there?")).toBeGreaterThan(text.indexOf("#2 · wake"));
-    expect(text.indexOf("Still there?")).toBeGreaterThan(text.indexOf("#5 · wake"));
+    expect(text.indexOf("#5 · wake · board: #8")).toBeGreaterThan(text.indexOf("#4 · wake"));
+    // The supervisor's words the product took under the limit stand in the conversation the
+    // restart goes on with: named ahead of the rest by their numbers, and not said again
+    // (ADR-0166).
+    expect(text).toContain(
+      "· above in this conversation, handed to you before and not said again: #3, #6 (console agent signals me reads them)]",
+    );
+    expect(text.indexOf("#2 · wake")).toBeGreaterThan(text.indexOf("not said again: #3, #6"));
+    expect(text).not.toContain("Are you there?");
+    expect(text).not.toContain("Still there?");
     expect(text).not.toContain("usage limit");
     expect(console.beats.at(-1)).toMatchObject({ state: "running" });
     expect(console.beats.at(-1)).not.toHaveProperty("until");
@@ -2321,6 +2348,166 @@ describe("the runner", () => {
     await second.done;
   });
 
+  it("keeps what a wake source keeps from one runner to the next, and writes it when it changed (ADR-0166)", async () => {
+    const seen: [string, string][][] = [];
+    let keep: ((name: string, value: string) => void) | undefined;
+    const source: WakeSource = {
+      name: "chat",
+      async run(host, signal) {
+        // What the source kept under the runner before is there when it starts.
+        seen.push([...host.kept]);
+        keep = (name, value) => {
+          host.kept.set(name, value);
+        };
+        await host.wait(60_000, signal);
+      },
+    };
+    const written: [string, KeptBySource][] = [];
+    const store = (kept?: KeptBySource) => ({
+      load: async (name: string) => (name === "chat" ? kept : undefined),
+      save: async (name: string, now: KeptBySource) => {
+        written.push([name, now]);
+      },
+    });
+    const first = setup({ sources: [source], kept: store() });
+    await until("the source to listen", () => keep !== undefined);
+    expect(seen).toEqual([[]]);
+    // Nothing is written while nothing changed.
+    await sleep(60);
+    expect(written).toEqual([]);
+    // The moment of a message and where it was brought from: never a word of one.
+    keep?.("brought:ops:", "1762800600.000100");
+    await until("what it keeps to be written", () => written.length === 1);
+    expect(written).toEqual([["chat", [["brought:ops:", "1762800600.000100"]]]]);
+    // Written once for a change, and again for the next.
+    await sleep(60);
+    expect(written).toHaveLength(1);
+    keep?.("carried:ops:1762800600.000100", "woke");
+    await until("the next change to be written", () => written.length === 2);
+    first.runner.stop();
+    await first.done;
+    // The runner started after it hands the source what was written.
+    keep = undefined;
+    const second = setup({ sources: [source], kept: store(written.at(-1)?.[1]) });
+    await until("the source to listen again", () => keep !== undefined);
+    expect(seen[1]).toEqual([
+      ["brought:ops:", "1762800600.000100"],
+      ["carried:ops:1762800600.000100", "woke"],
+    ]);
+    second.runner.stop();
+    await second.done;
+    // A machine that keeps nothing, or whose file does not read: the source begins with nothing.
+    keep = undefined;
+    const third = setup({
+      sources: [source],
+      kept: {
+        load: async () => {
+          throw new Error("EACCES");
+        },
+        save: async () => undefined,
+      },
+    });
+    await until("the source to listen once more", () => keep !== undefined);
+    expect(seen[2]).toEqual([]);
+    expect(third.log).toContain(
+      "what the wake source chat kept could not be read; it begins with nothing",
+    );
+    third.runner.stop();
+    await third.done;
+  });
+
+  it("says to a wake source when the agent's conversation began: at a reset, at a compaction, and not where a session goes on with the one before (ADR-0166)", async () => {
+    let began: (() => number) | undefined;
+    const source: WakeSource = {
+      name: "chat",
+      async run(host, signal) {
+        began = () => host.began?.() ?? -1;
+        await host.wait(60_000, signal);
+      },
+    };
+    // A runner that goes on with a conversation a runner before it kept says when that began.
+    const { console, product, saved } = setup({
+      sources: [source],
+      state: { delivered: 0, conversation: "c-0", driver: "claude", began: 1_762_800_000_000 },
+    });
+    await until("the source to listen", () => began !== undefined);
+    expect(began?.()).toBe(1_762_800_000_000);
+    console.signal({ text: "Begin." });
+    const first = await sessionOf(product);
+    await until("the message", () => first.sent.length === 1);
+    first.emit(...STARTED, { type: "taken" }, { type: "turn_completed" });
+    await until("the conversation", () => saved.at(-1)?.conversation === "c-1");
+    // The session went on with the conversation kept: it began when it did.
+    expect(first.options.resume).toBe("c-0");
+    expect(began?.()).toBe(1_762_800_000_000);
+    expect(saved.at(-1)).toMatchObject({ began: 1_762_800_000_000 });
+    // The product puts the conversation in fewer words: what was brought before counts no more.
+    const before = Date.now();
+    first.emit({ type: "compacted" });
+    await until("the moment to move", () => (began?.() ?? 0) >= before);
+    const compacted = began?.() ?? 0;
+    await until("the state", () => saved.at(-1)?.began === compacted);
+    // A restart goes on with the conversation, and leaves the moment as it stands.
+    console.signal({ kind: "restart", text: "" });
+    await until("the session to end", () => console.ended.length === 1);
+    console.signal({ text: "Go on." });
+    const second = await sessionOf(product, 2);
+    await until("the message", () => second.sent.length === 1);
+    expect(second.options.resume).toBe("c-1");
+    expect(began?.()).toBe(compacted);
+    second.emit(...STARTED, { type: "taken" }, { type: "turn_completed" });
+    // A reset lets the conversation go: the next one begins there, and the session that
+    // begins it, a moment later, leaves the moment where the reset put it.
+    await sleep(5);
+    const reset = Date.now();
+    console.signal({ kind: "reset", text: "Start over." });
+    const third = await sessionOf(product, 3);
+    await until("the message", () => third.sent.length === 1);
+    expect(third.options.resume).toBeUndefined();
+    const anew = began?.() ?? 0;
+    expect(anew).toBeGreaterThanOrEqual(reset);
+    expect(anew).toBeLessThanOrEqual(Date.now());
+    expect(saved.at(-1)).toMatchObject({ began: anew });
+    expect(saved.at(-1)?.conversation).toBeUndefined();
+  });
+
+  it("begins a conversation when its first session does, where a runner kept none (ADR-0166)", async () => {
+    let began: (() => number) | undefined;
+    const source: WakeSource = {
+      name: "chat",
+      async run(host, signal) {
+        began = () => host.began?.() ?? -1;
+        await host.wait(60_000, signal);
+      },
+    };
+    const { console, product } = setup({ sources: [source] });
+    await until("the source to listen", () => began !== undefined);
+    // Nothing says when: a source counts everything as held, as it did.
+    expect(began?.()).toBe(0);
+    const before = Date.now();
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    expect(began?.()).toBeGreaterThanOrEqual(before);
+  });
+
+  it("says a wake the account kept for itself as its own, and a supervisor's by who sent it (ADR-0166)", async () => {
+    const { console, product } = setup({ account: MIRA.id });
+    console.signal({ kind: "wake", by: MIRA, key: "deploy", text: "Look at the deploy again." });
+    console.signal({ kind: "wake", text: "There is something to do." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    const text = session.sent[0]?.text ?? "";
+    expect(text).toContain("#1 · wake · yourself · 14:02]\nLook at the deploy again.");
+    expect(text).toContain("#2 · wake · Jane · 14:02]\nThere is something to do.");
+    // A runner that is told no account says every signal by who sent it.
+    const other = setup();
+    other.console.signal({ kind: "wake", by: MIRA, text: "Look at the deploy again." });
+    const second = await sessionOf(other.product);
+    await until("the message", () => second.sent.length === 1);
+    expect(second.sent[0]?.text).toContain("#1 · wake · Mira · 14:02]");
+  });
+
   it("keeps a wake source listening, and carries what it raises to the agent as someone else's words", async () => {
     const seen: (string | undefined)[] = [];
     const listened: string[] = [];
@@ -2795,7 +2982,12 @@ describe("the runner", () => {
     runner.stop();
     session.emit(...STARTED, { type: "taken" });
     await done;
-    expect(saved.at(-1)).toEqual({ delivered: 1, conversation: "c-1", driver: "claude" });
+    expect(saved.at(-1)).toEqual({
+      delivered: 1,
+      conversation: "c-1",
+      driver: "claude",
+      began: expect.any(Number),
+    });
     expect(console.events()).toEqual([
       [1, "person", "Hold the release."],
       [2, "status", "The product started."],
