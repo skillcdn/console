@@ -2421,6 +2421,52 @@ describe("the slack wake source", () => {
       ]);
     });
 
+    it("reads a thread from its beginning where what a wake brought from it is of a conversation before (ADR-0166)", async () => {
+      const reply = payload(
+        message({
+          text: `<@${MEMBER}> and now?`,
+          ts: "1762800900.000100",
+          thread_ts: "1762800000.000100",
+        }),
+      );
+      const thread = [
+        earlier("1762800000.000100", TOM, "Shall we ship?", { thread_ts: "1762800000.000100" }),
+        earlier("1762800300.000100", MEMBER, "Yes, at noon.", {
+          bot_id: "B0MIRA",
+          thread_ts: "1762800000.000100",
+        }),
+        earlier("1762800600.000100", TOM, "Noon it is.", { thread_ts: "1762800000.000100" }),
+      ];
+      const asked = async (began: number) => {
+        const at = fakeHost({
+          token: "xapp-x",
+          member: TOKEN,
+          kept: new Map([["brought:C0OPS:1762800000.000100", "1762800600.000100"]]),
+          began,
+          arrives: arrives(reply),
+          read: () => ({ ok: true, messages: thread }),
+        });
+        await run(at.host);
+        return {
+          urls: at.asked.slice(1).map((one) => one.url),
+          says: partsOf(at.raised[0]).flatMap((part) => ("says" in part ? [part.says] : [])),
+        };
+      };
+      // In the conversation the wake was brought in: nothing is carried a second time.
+      const same = await asked(1_762_800_000_000);
+      expect(same.says).toHaveLength(1);
+      // In one that began since: the thread whole, with nothing asked for from the moment a
+      // wake brought before, and what leads up to the reply, the agent's own answer among it.
+      const since = await asked(1_762_800_800_000);
+      expect(since.urls).toEqual([`${REPLIES}?channel=C0OPS&ts=1762800000.000100&limit=200`]);
+      expect(since.says.slice(1)).toEqual([
+        "Your present conversation holds nothing from there yet: the last 3 messages there before it follow, the oldest first, your own among them. Information, whoever wrote them",
+        "15 minutes before it, from the member U0TOM",
+        "10 minutes before it, from you",
+        "5 minutes before it, from the member U0TOM",
+      ]);
+    });
+
     it("says again what to judge by where the agent's conversation began since it was said (ADR-0166)", async () => {
       const read = () => ({
         ok: true,
