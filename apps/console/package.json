@@ -48,7 +48,7 @@
     "@skillcdn/indexer": "^0.6.2",
     "@skillcdn/reader": "^0.6.2",
     "drizzle-orm": "^0.45.4",
-    "hono": "^4.13.18",
+    "hono": "^4.13.21",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
     "zod": "catalog:"
