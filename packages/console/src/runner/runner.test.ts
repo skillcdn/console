@@ -2491,6 +2491,51 @@ describe("the runner", () => {
     expect(began?.()).toBeGreaterThanOrEqual(before);
   });
 
+  it("takes a conversation to begin before the wakes that wait to be handed over in it (ADR-0166)", async () => {
+    let began: (() => number) | undefined;
+    const source: WakeSource = {
+      name: "chat",
+      async run(host, signal) {
+        began = () => host.began?.() ?? -1;
+        await host.wait(60_000, signal);
+      },
+    };
+    const { console, product } = setup({ sources: [source] });
+    await until("the source to listen", () => began !== undefined);
+    console.signal({ text: "Begin." });
+    const first = await sessionOf(product);
+    await until("the message", () => first.sent.length === 1);
+    first.emit(...STARTED, { type: "taken" }, { type: "turn_completed" });
+    // Stopped, the agent is handed nothing: a wake from the messenger waits, raised a while ago.
+    console.signal({ kind: "stop", text: "" });
+    await until("the session to end", () => console.ended.length === 1);
+    const raised = Date.now() - 600_000;
+    console.signal({
+      kind: "wake",
+      by: null,
+      source: "messenger",
+      key: "chat:ops:17",
+      text: "Said while it was stopped.",
+      at: new Date(raised).toISOString(),
+    });
+    // A wake of the board's that waits moves nothing: only a wake source counts from the moment.
+    console.signal({
+      kind: "wake",
+      by: null,
+      source: "board",
+      key: "ops#7",
+      at: new Date(raised - 3_600_000).toISOString(),
+    });
+    await sleep(60);
+    console.signal({ kind: "reset", text: "" });
+    const second = await sessionOf(product, 2);
+    await until("the message", () => second.sent.length === 1);
+    expect(second.sent[0]?.text).toContain("Said while it was stopped.");
+    // The new conversation holds that wake, so it began before the wake's message was
+    // written, by what a wake may be behind its message, and no further back.
+    expect(began?.()).toBe(raised - 60_000);
+  });
+
   it("says a wake the account kept for itself as its own, and a supervisor's by who sent it (ADR-0166)", async () => {
     const { console, product } = setup({ account: MIRA.id });
     console.signal({ kind: "wake", by: MIRA, key: "deploy", text: "Look at the deploy again." });

@@ -105,6 +105,12 @@ const SOURCE_HELD_MS = 60_000;
 const SLEPT_MS = 60_000;
 /** The kinds of event that are the agent's own answer: what it said, thought or called. */
 const ANSWERS: ReadonlySet<TranscriptKind> = new Set(["assistant", "thinking", "tool_call"]);
+/**
+ * How long before its wake is on the record a message may have been written (ADR-0166): what a
+ * wake source reads for a wake, and the wakes ahead of it, are waited for half a minute at the
+ * most, and the messenger's clock and the console's differ by less than the rest.
+ */
+const RAISED_AFTER_MS = 60_000;
 /** How many signals the runner writes down as kept for the agent beside what the record sends again. */
 const MAX_KEPT = 50;
 /** How long before its moment a timer may ring: a delivery asked for at a moment is taken within it. */
@@ -751,12 +757,29 @@ export function createRunner(options: RunnerOptions): Runner {
   };
 
   /**
+   * When a conversation that begins now is taken to have begun (ADR-0166): now, or, where wakes
+   * of a wake source wait to be handed over, a little before the oldest of them was raised.
+   * They are handed over in the new conversation, which holds them from then on: counted as
+   * from before it, their messages would be carried once more with the next wake.
+   */
+  const beginsAt = (): number => {
+    let at = options.now();
+    for (const signal of pending) {
+      const raised = signal.source === "messenger" ? Date.parse(signal.at) : Number.NaN;
+      if (Number.isFinite(raised)) {
+        at = Math.min(at, raised - RAISED_AFTER_MS);
+      }
+    }
+    return at;
+  };
+
+  /**
    * Lets go of the conversation kept: the next session begins a new one, which holds nothing
-   * the agent was handed before this moment (ADR-0166).
+   * the agent was handed before this moment (ADR-0166), but for what waits to be handed over.
    */
   const letGo = (): void => {
     conversation = undefined;
-    began = options.now();
+    began = beginsAt();
     renewed = true;
     above.clear();
   };
@@ -1251,7 +1274,7 @@ export function createRunner(options: RunnerOptions): Runner {
       // Where it was let go a moment ago, at a reset say, it began then, and what was kept
       // for it since is handed over in it.
       if (!renewed) {
-        began = options.now();
+        began = beginsAt();
       }
       above.clear();
     }
