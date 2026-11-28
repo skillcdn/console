@@ -843,3 +843,4 @@ export {
   WEEK_STARTS,
   type WeekStart,
 } from "./vocabulary.js";
+export { BOARD_PARTS_FROM, type WakePart, wakePartsOf, wakeTextOf } from "./wake-text.js";

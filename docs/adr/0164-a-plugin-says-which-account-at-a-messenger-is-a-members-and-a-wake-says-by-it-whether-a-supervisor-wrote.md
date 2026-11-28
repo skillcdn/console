@@ -1,6 +1,6 @@
 # ADR-0164: A plugin says which account at a messenger is a member's, and a wake says by it whether a supervisor wrote
 
-- Status: Accepted
+- Status: Accepted; point 7 is amended by [ADR-0166](0166-a-wake-carries-what-the-agents-conversation-does-not-hold-and-says-it-once.md) in one case: a writer the event names no workspace for is taken to be of the agent's own, in a conversation the messenger says is shared with no other organization
 - Date: 2026-11-25
 - Settles what [ADR-0160](0160-an-agent-account-takes-every-supervisors-word-as-its-managers-by-a-tell-or-at-the-messenger.md) and [ADR-0163](0163-a-wake-from-the-messenger-is-carried-in-parts-with-what-was-said-before-it-and-an-agent-account-judges-whether-to-answer-where-several-were-woken.md) left open, "who a member of the messenger is in the console", and adds to [ADR-0050](0050-plugin-code-runs-in-a-host-process-of-its-own-and-reaches-the-console-only-through-the-capabilities-it-declared.md)'s catalogue of capabilities. Rests on ADR-0160, points 2 and 8, on ADR-0163, points 1 to 3, and on [ADR-0084](0084-an-agent-account-is-a-member-of-its-own-with-a-manager-above-it.md), point 5.
 

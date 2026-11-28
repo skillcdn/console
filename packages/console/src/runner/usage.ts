@@ -210,8 +210,13 @@ export function limitWords(
   options: {
     readonly now: number;
     readonly moment: (iso: string) => string;
-    /** How many signals follow in the message. */
+    /** How many signals follow in the message, said whole. */
     readonly follow: number;
+    /**
+     * How many more the message only names (ADR-0166): what the product took in this
+     * conversation as the limit was reached and the agent never answered, which stands above.
+     */
+    readonly above?: number | undefined;
     /** Whether this is a supervisor's signal tried before the runner's own try, with what else is kept left for then. */
     readonly early?: boolean | undefined;
   },
@@ -224,11 +229,19 @@ export function limitWords(
     : limited.until === undefined
       ? `The product did not say when the limit resets, so the runner tries now, ${at(options.now)}, by itself.`
       : `The limit reset ${at(limited.until)}, and the runner brings you back by itself.`;
+  const above = options.above ?? 0;
+  // What the conversation holds is not said twice: it is named, and the agent reads it above.
+  const unanswered =
+    above === 0
+      ? ""
+      : `What you were handed as the limit was reached and had not answered stands above in this conversation: it is named below by its ${above === 1 ? "number" : "numbers"}, and not said again. `;
   const meanwhile = early
     ? "The message follows; what else reached you meanwhile is kept, and handed to you then."
     : options.follow === 0
-      ? "Nothing reached you meanwhile."
-      : "What reached you meanwhile follows, in the order it came, what you were handed as the limit was reached and had not read among it.";
+      ? `${unanswered}Nothing ${above === 0 ? "" : "else "}reached you meanwhile.`
+      : above === 0
+        ? "What reached you meanwhile follows, in the order it came, what you were handed as the limit was reached and had not read among it."
+        : `${unanswered}What reached you since follows, in the order it came.`;
   return `${stopped} ${now} Go on with what you were doing: look at what each sub-agent left before you start it again. ${meanwhile}`;
 }
 

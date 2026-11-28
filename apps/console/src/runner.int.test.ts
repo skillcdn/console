@@ -391,9 +391,10 @@ describe("a runner and the console, together (ADR-0085, ADR-0086)", () => {
         `Why is in your own words, under the header #${asked.number} below.`,
       );
       expect(message).toContain("Read first what was kept of your work");
+      // Its own words stand under a header that says they are its own (ADR-0166).
       expect(message).toMatch(
         new RegExp(
-          `\\[console [a-z0-9]{6} #${asked.number} · reset · Mira · 14:02\\]\\nThe notes are written\\. Next: the release\\.$`,
+          `\\[console [a-z0-9]{6} #${asked.number} · reset · yourself · 14:02\\]\\nThe notes are written\\. Next: the release\\.$`,
         ),
       );
       // On the new session's record as what the agent was sent, as a supervisor's reset is.

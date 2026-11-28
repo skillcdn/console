@@ -1,5 +1,5 @@
-import { randomInt } from "node:crypto";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { randomBytes, randomInt } from "node:crypto";
+import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { type as osType, release, userInfo } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import process from "node:process";
@@ -24,6 +24,13 @@ export interface RunnerHost {
   readText(path: string): Promise<string | undefined>;
   /** Writes a file under the desk for its owner alone, its folders made on the way: a text, or bytes as they are. */
   writePrivate(path: string, value: string | Uint8Array): Promise<void>;
+  /**
+   * Puts a text in place of a file under the desk, for its owner alone, whole or not at all:
+   * written beside the file first and then given its name, so that a write cut short, by a
+   * crash or a machine that went down, leaves the file there was. For what the runner reads
+   * back when it starts: its state, and what each wake source keeps (ADR-0166).
+   */
+  replacePrivate(path: string, text: string): Promise<void>;
   /** Removes a file under the desk; one that is not there is removed already. */
   remove(path: string): Promise<void>;
   /** Opens a socket for a wake source: the messages of text it carries, until it closes. */
@@ -62,6 +69,31 @@ function alive(pid: number): boolean {
     return true;
   } catch (error) {
     return error instanceof Error && "code" in error && error.code === "EPERM";
+  }
+}
+
+/** How many times a file is given its name where the system says the one there is in use, and how long between. */
+const RENAME_TRIES = 5;
+const RENAME_PAUSE_MS = 20;
+
+/**
+ * Gives a file the name of another, in its place. On Windows the system refuses while anything
+ * else has the file there open, a scanner or the same write a moment before: tried again a few
+ * times, since such a hold lasts a moment.
+ */
+async function takeName(from: string, to: string): Promise<void> {
+  for (let tries = 1; ; tries += 1) {
+    try {
+      await rename(from, to);
+      return;
+    } catch (error) {
+      const code =
+        typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+      if (tries >= RENAME_TRIES || (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES")) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, RENAME_PAUSE_MS * tries));
+    }
   }
 }
 
@@ -116,6 +148,20 @@ export function createRunnerHost(
       await writeFile(full, value, { mode: 0o600 });
       // A file that was there keeps the mode it had: say it again.
       await chmod(full, 0o600);
+    },
+    async replacePrivate(path, text) {
+      const full = under(path);
+      await mkdir(dirname(full), { recursive: true });
+      // Beside the file, so that giving it the name moves nothing from one volume to another;
+      // under a name of its own, so that two writes at once never share one.
+      const beside = `${full}.${randomBytes(6).toString("hex")}.tmp`;
+      try {
+        await writeFile(beside, text, { mode: 0o600, flag: "wx" });
+        await takeName(beside, full);
+      } catch (error) {
+        await rm(beside, { force: true }).catch(() => undefined);
+        throw error;
+      }
     },
     async remove(path) {
       await rm(under(path), { force: true });

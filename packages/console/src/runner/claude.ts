@@ -560,6 +560,8 @@ function eventsOf(line: Json, state: Read): DriverEvent[] {
           kind: "status",
           text: "The product compacted the conversation.",
         });
+        // The runner's to know too: what the agent was handed before is a summary at best.
+        events.push({ type: "compacted" });
       } else if (line.subtype === "api_retry") {
         const attempt = typeof line.attempt === "number" ? line.attempt : null;
         events.push({
@@ -1060,7 +1062,9 @@ export function createClaudeDriver(host: DriverHost): Driver {
   return {
     name: "claude",
     product: { name: "Claude Code", tried: TRIED },
-    can: { steer: true, images: true, resume: true, set: false },
+    // A message is said taken when the product says it back off its input, into the
+    // conversation: it stands there whatever becomes of the turn (`holdsTaken`).
+    can: { steer: true, images: true, resume: true, set: false, holdsTaken: true },
     permissions: { modes: MODES, unattended: UNATTENDED_MODE, least: LEAST_MODE },
     async probe() {
       let version: string | undefined;

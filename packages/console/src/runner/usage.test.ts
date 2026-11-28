@@ -256,6 +256,25 @@ describe("what the agent is told", () => {
     expect(words).toContain("Nothing reached you meanwhile.");
   });
 
+  it("says what the conversation holds already as named and not said again, and what follows as what reached the agent since (ADR-0166)", () => {
+    const at = { now: RESETS + 60_000, moment };
+    // Some stand above, and more follows.
+    const both = limitWords({ since: NOW, until: RESETS }, { ...at, follow: 2, above: 3 });
+    expect(both).toContain(
+      "What you were handed as the limit was reached and had not answered stands above in this conversation: it is named below by its numbers, and not said again. What reached you since follows, in the order it came.",
+    );
+    expect(both).not.toContain("had not read among it");
+    // All that is handed over again stands above: one signal, and nothing else.
+    const only = limitWords({ since: NOW, until: RESETS }, { ...at, follow: 0, above: 1 });
+    expect(only).toContain(
+      "it is named below by its number, and not said again. Nothing else reached you meanwhile.",
+    );
+    // Nothing stands above: as it was said before.
+    expect(limitWords({ since: NOW, until: RESETS }, { ...at, follow: 2, above: 0 })).toBe(
+      limitWords({ since: NOW, until: RESETS }, { ...at, follow: 2 }),
+    );
+  });
+
   it("says a supervisor's message tried before the runner's own try as that, with a reset named or none", () => {
     const words = limitWords(
       { since: NOW, until: RESETS },

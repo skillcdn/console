@@ -105,6 +105,12 @@ const SOURCE_HELD_MS = 60_000;
 const SLEPT_MS = 60_000;
 /** The kinds of event that are the agent's own answer: what it said, thought or called. */
 const ANSWERS: ReadonlySet<TranscriptKind> = new Set(["assistant", "thinking", "tool_call"]);
+/**
+ * How long before its wake is on the record a message may have been written (ADR-0166): what a
+ * wake source reads for a wake, and the wakes ahead of it, are waited for half a minute at the
+ * most, and the messenger's clock and the console's differ by less than the rest.
+ */
+const RAISED_AFTER_MS = 60_000;
 /** How many signals the runner writes down as kept for the agent beside what the record sends again. */
 const MAX_KEPT = 50;
 /** How long before its moment a timer may ring: a delivery asked for at a moment is taken within it. */
@@ -188,7 +194,17 @@ export interface RunnerState {
    * runner started meanwhile takes them from the stream once more.
    */
   readonly kept?: readonly number[] | undefined;
+  /**
+   * When the conversation the agent goes on with began, in milliseconds since the epoch
+   * (ADR-0166): what it was handed before, it holds no more, and a wake source counts nothing
+   * from before as brought. Left out by a runner of before, whose conversation is taken to hold
+   * all it was handed.
+   */
+  readonly began?: number | undefined;
 }
+
+/** What a wake source keeps, as it is written down: each name with what stands under it, the oldest first. */
+export type KeptBySource = readonly (readonly [string, string])[];
 
 export interface RunnerOptions {
   readonly client: RunnerClient;
@@ -259,6 +275,17 @@ export interface RunnerOptions {
         readonly sources: readonly WakeSource[];
         readonly fetch: WakeHost["fetch"];
         readonly socket: WakeHost["socket"];
+        /**
+         * Where what a wake source keeps (`WakeHost.kept`) outlasts the runner (ADR-0166): read
+         * when the source is started, and written when it changed, a source at a time by its
+         * name. Left out, a runner started again begins with nothing kept.
+         */
+        readonly kept?:
+          | {
+              load(source: string): Promise<KeptBySource | undefined>;
+              save(source: string, kept: KeptBySource): Promise<void>;
+            }
+          | undefined;
       }
     | undefined;
   /**
@@ -376,6 +403,12 @@ interface OpenSession {
    */
   taken: (readonly RestSignal[])[];
   unread: number;
+  /**
+   * The signals the product took before it put the conversation in fewer words (ADR-0166), by
+   * number: the conversation holds a summary of them at best, so a usage limit met afterwards
+   * has them said whole again, and not named.
+   */
+  readonly summarized: Set<number>;
   /** Whether the agent was handed word that it is back from a usage limit, and has not answered since. */
   returning: boolean;
   /** How many sub-agents are at work in its background, as the driver said last (ADR-0162). */
@@ -489,6 +522,22 @@ const lineOf = (value: string | null | undefined): string | null => {
   return line.length === 0 || hasForbiddenCodePoint(line) ? null : line;
 };
 
+/** What a wake source keeps, which says whether it changed since it was last written down. */
+class Kept extends Map<string, string> {
+  changed = false;
+
+  override set(name: string, value: string): this {
+    this.changed = true;
+    return super.set(name, value);
+  }
+
+  override delete(name: string): boolean {
+    const had = super.delete(name);
+    this.changed ||= had;
+    return had;
+  }
+}
+
 export function createRunner(options: RunnerOptions): Runner {
   const { client, driver, config, log } = options;
   const timing = {
@@ -568,6 +617,25 @@ export function createRunner(options: RunnerOptions): Runner {
   let received = 0;
   let handled = 0;
   let conversation: string | undefined;
+  /**
+   * When the conversation the agent goes on with began (ADR-0166), 0 where nothing says, and
+   * whether that moment is of a conversation no session has begun yet: the session that begins
+   * it then leaves the moment as it stands.
+   */
+  let began = 0;
+  let renewed = false;
+  /**
+   * The signals the conversation holds already, by number (ADR-0166): the product of the open
+   * session took them there as a usage limit was reached, its driver vouching that what it
+   * took stands (`can.holdsTaken`), and the agent never answered. Handed over again in that
+   * session, they are named and not said a second time. Until a turn completes, the
+   * conversation is let go or put in fewer words, or the session ends: nothing says before a
+   * session's first message whether its product went on with the conversation, so a session
+   * begun after is said them whole.
+   */
+  const above = new Set<number>();
+  /** What each wake source keeps, by its name, and whether it changed since it was last written. */
+  const keeps = new Map<string, Kept>();
   /**
    * How the agent stands and why, with when the runner said so (`at`): the console is told that
    * moment with the reason, since a reason is said again the same under a state that stays, a
@@ -701,9 +769,109 @@ export function createRunner(options: RunnerOptions): Runner {
           ? {}
           : { limited: { since: limited.since, until: limited.until } }),
         ...(kept.length === 0 ? {} : { kept }),
+        ...(began === 0 ? {} : { began }),
       });
     } catch {
       log("the runner's state could not be written; it goes on from the console's record");
+    }
+  };
+
+  /**
+   * When a conversation that begins now is taken to have begun (ADR-0166): now, or, where wakes
+   * of a wake source wait to be handed over, a little before the oldest of them was raised.
+   * They are handed over in the new conversation, which holds them from then on: counted as
+   * from before it, their messages would be carried once more with the next wake. `handed` is
+   * what the conversation holds beside what waits: what a session was handed in it already,
+   * where the moment is set once the session is under way.
+   */
+  const beginsAt = (handed: readonly RestSignal[] = []): number => {
+    let at = options.now();
+    for (const signal of [...pending, ...handed]) {
+      const raised = signal.source === "messenger" ? Date.parse(signal.at) : Number.NaN;
+      if (Number.isFinite(raised)) {
+        at = Math.min(at, raised - RAISED_AFTER_MS);
+      }
+    }
+    return at;
+  };
+
+  /**
+   * The driver named the conversation its session runs in. Where it began one in place of the
+   * one it was asked to go on with (`anew`), the agent's conversation began with the session
+   * (ADR-0166): it holds what the session was handed, and nothing from before.
+   */
+  const converses = (
+    target: OpenSession,
+    event: Extract<DriverEvent, { type: "conversation" }>,
+  ): void => {
+    conversation = event.id;
+    if (event.anew === true) {
+      began = beginsAt([...target.sent, ...target.handed.flatMap((message) => message.signals)]);
+      above.clear();
+    }
+  };
+
+  /**
+   * The product put the conversation in fewer words (ADR-0166): what the agent was handed
+   * before is a summary at best, so what a wake source brought before counts no more, and what
+   * the product took is not named as standing there. What it was handed and has not taken yet
+   * it reads after, whole: the conversation is taken to hold that.
+   */
+  const summarized = (target: OpenSession): void => {
+    began = beginsAt(target.handed.flatMap((message) => message.signals));
+    above.clear();
+    for (const signal of target.taken.flat()) {
+      target.summarized.add(signal.number);
+    }
+  };
+
+  /**
+   * When the agent's conversation began, as a wake source is told it (ADR-0166): never after
+   * now. A moment ahead of the clock, kept by a runner whose machine's clock ran ahead or set
+   * back since, is none a message was written before: counted from, every wake of a place
+   * would carry again what the last one carried, for as long as the clock is behind it. It is
+   * taken as now, and kept so.
+   */
+  const beganBy = (): number => {
+    const now = options.now();
+    if (began > now) {
+      began = now;
+      void persist();
+    }
+    return began;
+  };
+
+  /**
+   * Lets go of the conversation kept: the next session begins a new one, which holds nothing
+   * the agent was handed before this moment (ADR-0166), but for what waits to be handed over.
+   */
+  const letGo = (): void => {
+    conversation = undefined;
+    began = beginsAt();
+    renewed = true;
+    above.clear();
+  };
+
+  /** Writes what the wake sources keep where it changed since it was last written. */
+  const keepKept = async (): Promise<void> => {
+    const store = options.wakes?.kept;
+    if (store === undefined) {
+      return;
+    }
+    for (const [name, kept] of keeps) {
+      if (!kept.changed) {
+        continue;
+      }
+      kept.changed = false;
+      try {
+        await store.save(name, [...kept]);
+      } catch {
+        // Kept in memory still, and written with the next change.
+        sayOnce(
+          `kept ${name}`,
+          `what the wake source ${name} keeps could not be written; it is kept while the runner runs`,
+        );
+      }
     }
   };
 
@@ -1154,6 +1322,7 @@ export function createRunner(options: RunnerOptions): Runner {
       took: false,
       taken: [],
       unread: 0,
+      summarized: new Set(),
       returning: false,
       background: 0,
       own: false,
@@ -1169,6 +1338,16 @@ export function createRunner(options: RunnerOptions): Runner {
     started.pumped = pump(started);
     session = started;
     renew = false;
+    if (resume === undefined) {
+      // A conversation of its own: it holds nothing the agent was handed before (ADR-0166).
+      // Where it was let go a moment ago, at a reset say, it began then, and what was kept
+      // for it since is handed over in it.
+      if (!renewed) {
+        began = beginsAt();
+      }
+      above.clear();
+    }
+    renewed = false;
     log(
       `session ${started.id} began${resume === undefined ? "" : ", going on with the conversation before"}`,
     );
@@ -1191,6 +1370,9 @@ export function createRunner(options: RunnerOptions): Runner {
     }
     await target.pumped;
     await hearLast(target);
+    // What was named as standing in the conversation was taken by this session's product: a
+    // session begun after is said it whole (ADR-0166).
+    above.clear();
     // What the product was handed and never took is sent again, by the console where the
     // runner itself ends and by the runner where the product had not started; else it is on
     // the record as never read.
@@ -1341,7 +1523,7 @@ export function createRunner(options: RunnerOptions): Runner {
       limited === undefined
     ) {
       await end("restarted");
-      conversation = undefined;
+      letGo();
     }
     const target = session ?? (await begin());
     if (target === undefined) {
@@ -1375,6 +1557,11 @@ export function createRunner(options: RunnerOptions): Runner {
     // what the driver says of its product.
     const takesPictures = target.driver.images?.() ?? driver.can.images;
     for (const signal of batch) {
+      // What is only named is handed over with nothing: its files stand in the desk and its
+      // pictures in the conversation, with the message the product took (ADR-0166).
+      if (above.has(signal.number)) {
+        continue;
+      }
       const taken = new Set<string>();
       for (const file of signal.attachments) {
         const picture = PICTURE_TYPES.has(file.contentType);
@@ -1421,10 +1608,15 @@ export function createRunner(options: RunnerOptions): Runner {
         ]);
       }
     }
+    // What the conversation holds already, the product having taken it there as the limit was
+    // reached, is named and not said again (ADR-0166).
+    const named = batch.filter((signal) => above.has(signal.number)).length;
     const composed = composeSignals(batch, {
       mark: target.mark,
       time: options.time,
       attached: (signal) => attached.get(signal.number) ?? [],
+      own: options.account,
+      above: (signal) => above.has(signal.number),
     });
     const intro = target.first ? introOf(target.mark, resetBy) : undefined;
     // What the runner says of its own goes ahead of the signals, under its own header: that
@@ -1440,7 +1632,13 @@ export function createRunner(options: RunnerOptions): Runner {
         ? undefined
         : runnerSays(
             target.mark,
-            limitWords(returned, { now: options.now(), moment, follow: batch.length, early }),
+            limitWords(returned, {
+              now: options.now(),
+              moment,
+              follow: batch.length - named,
+              above: named,
+              early,
+            }),
           ),
       told === undefined ? undefined : sleptOf(told, { mark: target.mark, moment }),
       composed.text,
@@ -1574,7 +1772,9 @@ export function createRunner(options: RunnerOptions): Runner {
    * Hears what the product said as its session was ended. Its words wait in the queue behind
    * whatever ended the session, and are let go there once the session is no longer the open
    * one: a message it said it took then is taken, and not sent again, and the conversation it
-   * named is the one to go on with, where that message is.
+   * named is the one to go on with, where that message is. That it began that conversation
+   * anew, or put it in fewer words, moves the moment the conversation began as it does in a
+   * session that goes on (ADR-0166): the next session goes on with what was said here.
    */
   const hearLast = async (target: OpenSession): Promise<void> => {
     let named = false;
@@ -1584,7 +1784,10 @@ export function createRunner(options: RunnerOptions): Runner {
       }
       const { event } = message;
       if (event.type === "conversation") {
-        conversation = event.id;
+        converses(target, event);
+        named = true;
+      } else if (event.type === "compacted") {
+        summarized(target);
         named = true;
       } else if (event.type === "taken") {
         await take(target);
@@ -1803,7 +2006,7 @@ export function createRunner(options: RunnerOptions): Runner {
         limited = undefined;
         await end(signal.kind === "reset" ? "reset" : "restarted");
         if (signal.kind === "reset") {
-          conversation = undefined;
+          letGo();
           resetBy = { by, ...(signal.text.trim().length > 0 ? { number: signal.number } : {}) };
           // What a product was handed and never took is tried once more, in the new
           // conversation: a product that does not start with it again is not sent it a
@@ -1908,6 +2111,17 @@ export function createRunner(options: RunnerOptions): Runner {
     const untaken = target.handed.splice(0).flatMap((message) => message.signals);
     for (const signal of untaken) {
       owed.delete(signal.number);
+    }
+    // What the product took stands in the conversation, which the agent goes on in: handed
+    // over again in this session, it is named and not said a second time (ADR-0166). Only
+    // where the driver vouches that what it said was taken stands there, and not for what was
+    // taken before the product put the conversation in fewer words.
+    if (driver.can.holdsTaken === true) {
+      for (const signal of unanswered) {
+        if (!target.summarized.has(signal.number)) {
+          above.add(signal.number);
+        }
+      }
     }
     target.taken = [];
     target.sent = [];
@@ -2038,7 +2252,7 @@ export function createRunner(options: RunnerOptions): Runner {
       return;
     }
     await end("reset");
-    conversation = undefined;
+    letGo();
     // Where a supervisor reset the agent meanwhile, the first message says so: the account's
     // words are read under their own header all the same.
     resetBy ??= {
@@ -2068,7 +2282,7 @@ export function createRunner(options: RunnerOptions): Runner {
         return;
       }
       case "conversation": {
-        conversation = event.id;
+        converses(target, event);
         await persist();
         return;
       }
@@ -2088,6 +2302,8 @@ export function createRunner(options: RunnerOptions): Runner {
         }
         target.sent = [];
         target.returning = false;
+        // The agent is done with all it was handed: nothing of it is owed a second saying.
+        above.clear();
         if (limited !== undefined) {
           // A turn completed: whatever stopped the agent is over.
           limited = undefined;
@@ -2103,6 +2319,11 @@ export function createRunner(options: RunnerOptions): Runner {
         if (pending.length > 0) {
           scheduleDeliver();
         }
+        return;
+      }
+      case "compacted": {
+        summarized(target);
+        await persist();
         return;
       }
       case "usage": {
@@ -2523,6 +2744,19 @@ export function createRunner(options: RunnerOptions): Runner {
     if (source.run === undefined || wakes === undefined) {
       return;
     }
+    // What the source kept under a runner before this one, where the machine keeps it
+    // (ADR-0166): the ids and the moments of what it brought, so that a runner started again
+    // says nothing a second time. What does not read is nothing kept.
+    const kept = new Kept();
+    try {
+      for (const [name, value] of (await wakes.kept?.load(source.name)) ?? []) {
+        kept.set(name, value);
+      }
+    } catch {
+      log(`what the wake source ${source.name} kept could not be read; it begins with nothing`);
+    }
+    kept.changed = false;
+    keeps.set(source.name, kept);
     const host: WakeHost = {
       secret: async (name) => secretValues.get(name),
       channels: options.config.channels ?? [],
@@ -2557,7 +2791,8 @@ export function createRunner(options: RunnerOptions): Runner {
         }
         return true;
       },
-      kept: new Map(),
+      kept,
+      began: beganBy,
       log,
       stands: (state, why) => sourceStands(source.name, state, why),
       fetch: wakes.fetch,
@@ -2577,7 +2812,7 @@ export function createRunner(options: RunnerOptions): Runner {
     sourceStands(source.name, "waiting");
     let wait = timing.reconnectMs;
     while (!stopped) {
-      const began = options.now();
+      const startedAt = options.now();
       try {
         await source.run(host, abort.signal);
         // Ended with no error, a connection the other side closed say: it listens no more
@@ -2592,7 +2827,7 @@ export function createRunner(options: RunnerOptions): Runner {
         }
       }
       wait =
-        options.now() - began >= SOURCE_HELD_MS
+        options.now() - startedAt >= SOURCE_HELD_MS
           ? timing.reconnectMs
           : Math.min(wait * 2, MAX_SOURCE_PAUSE_MS);
       await pause(wait);
@@ -2640,10 +2875,13 @@ export function createRunner(options: RunnerOptions): Runner {
       const kept = await options.state.load().catch(() => undefined);
       delivered = kept?.delivered ?? 0;
       conversation = kept?.conversation;
+      // A moment after now is none the conversation began at: held to the clock here, and
+      // wherever a wake source asks.
+      began = Math.min(kept?.began ?? 0, options.now());
       if (conversation !== undefined && kept?.driver !== undefined && kept.driver !== driver.name) {
         // Another product's conversation is nothing this one can go on with: asked to, it fails
         // at every turn until a supervisor resets it.
-        conversation = undefined;
+        letGo();
         log(
           `the conversation kept was begun under the driver ${kept.driver}: a new one begins under ${driver.name}`,
         );
@@ -2673,6 +2911,10 @@ export function createRunner(options: RunnerOptions): Runner {
         log(
           `the product's usage limit stopped the agent before this runner started: tried again at ${new Date(waits.until).toISOString()}`,
         );
+      }
+      if ((kept?.began ?? 0) > began) {
+        // Kept as it is taken, once everything else the file said is in place again.
+        await persist();
       }
       probe = await driver.probe();
       const left =
@@ -2786,6 +3028,7 @@ export function createRunner(options: RunnerOptions): Runner {
               if (session !== undefined) {
                 await flush(session);
               }
+              await keepKept();
             } else {
               // A timer counts no time the machine sleeps in, and rings late by as much: what
               // was to be handed over at a moment is looked for by the clock at every heartbeat.
@@ -2856,6 +3099,8 @@ export function createRunner(options: RunnerOptions): Runner {
         abort.abort();
         await listening;
         await Promise.all(sourcing);
+        // What the sources raised as they ended is kept too.
+        await keepKept();
         log(
           how === "updated"
             ? "the runner ended, for the update"

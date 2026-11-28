@@ -298,13 +298,15 @@ describe("the codex driver", () => {
     // The build a turn of a signed-in product ran through the driver with is listed as tried.
     expect(driver.product).toEqual({ name: "Codex", tried: ["0.171.0-alpha.13.2"] });
     // A message is put into the turn under way; a picture is taken as a file, by its path in
-    // the desk; the model is said with a turn.
+    // the desk; the model is said with a turn. A message it says taken is one the product
+    // said back out of the conversation, or began a turn with: it stands there (ADR-0166).
     expect(driver.can).toEqual({
       steer: true,
       images: true,
       imageFiles: true,
       resume: true,
       set: true,
+      holdsTaken: true,
     });
     expect(driver.permissions).toEqual({
       modes: ["read-only", "workspace-write", "approve-for-me", "danger-full-access"],
@@ -439,6 +441,7 @@ describe("the codex driver", () => {
       cwd: DESK,
       ...REVIEWED,
     });
+    // Gone on with: said as it is, with no word of a conversation begun.
     expect((await said(3)).at(0)).toEqual({ type: "conversation", id: THREAD });
   });
 
@@ -453,7 +456,8 @@ describe("the codex driver", () => {
       ["status", "The product could not go on with the conversation it had (no", undefined],
       "conversation",
     ]);
-    expect((await said(4)).at(1)).toEqual({ type: "conversation", id: another });
+    // Said as one begun anew: the runner counts nothing from before it as held (ADR-0166).
+    expect((await said(4)).at(1)).toEqual({ type: "conversation", id: another, anew: true });
   });
 
   it("starts a turn with a message, and says it taken when the product says it back", async () => {

@@ -76,13 +76,7 @@ import {
 } from "../runner/desk.js";
 import { quotedLines } from "../runner/message.js";
 import { ownRunnerModules } from "../runner/modules.js";
-import {
-  createRunner,
-  GIT_TOKEN_SECRET,
-  type Runner,
-  type RunnerEnd,
-  type RunnerState,
-} from "../runner/runner.js";
+import { createRunner, GIT_TOKEN_SECRET, type Runner, type RunnerEnd } from "../runner/runner.js";
 import type { ServiceCommand } from "../runner/types.js";
 import {
   hostOfLogin,
@@ -245,6 +239,7 @@ import {
   skillPathIn,
   skillsAround,
 } from "./pack.js";
+import { keptBySourceOf, keptFileOf, runnerStateOf } from "./runner-files.js";
 import { type RunnerHost, workPath } from "./runner-host.js";
 import { secretNotes } from "./secret-notes.js";
 import {
@@ -4910,69 +4905,6 @@ const serve: Command = async (args, io) => {
   return EXIT.ok;
 };
 
-/** What the runner keeps between its own restarts, as its file says it; nothing for a file that does not read. */
-function runnerStateOf(text: string | undefined): RunnerState | undefined {
-  if (text === undefined) {
-    return undefined;
-  }
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-  if (typeof json !== "object" || json === null) {
-    return undefined;
-  }
-  const delivered = "delivered" in json ? json.delivered : undefined;
-  const conversation = "conversation" in json ? json.conversation : undefined;
-  const driver = "driver" in json ? json.driver : undefined;
-  const limited = "limited" in json ? json.limited : undefined;
-  const kept: unknown = "kept" in json ? json.kept : undefined;
-  if (typeof delivered !== "number" || !Number.isSafeInteger(delivered) || delivered < 0) {
-    return undefined;
-  }
-  /**
-   * A moment in milliseconds since the epoch, or nothing for anything else: a number past what
-   * a date holds would fail the runner at every start, where it says the moment in words.
-   */
-  const momentOf = (value: unknown): number | undefined =>
-    typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value < 1e14
-      ? value
-      : undefined;
-  const since =
-    typeof limited === "object" && limited !== null && "since" in limited
-      ? momentOf(limited.since)
-      : undefined;
-  return {
-    delivered,
-    conversation:
-      typeof conversation === "string" && conversation.length > 0 && conversation.length <= 200
-        ? conversation
-        : undefined,
-    // The driver the conversation was begun under, as a registry spells one.
-    driver:
-      typeof driver === "string" && /^[a-z][a-z0-9-]{0,39}$/.test(driver) ? driver : undefined,
-    // The usage limit the agent is not back from (ADR-0150): since when, and until when where the product said.
-    ...(since === undefined || typeof limited !== "object" || limited === null
-      ? {}
-      : {
-          limited: {
-            since,
-            until: "until" in limited ? momentOf(limited.until) : undefined,
-          },
-        }),
-    // The signals the record has as delivered that the agent never read: taken from the stream once more.
-    ...(Array.isArray(kept)
-      ? {
-          kept: kept
-            .filter((number): number is number => momentOf(number) !== undefined)
-            .slice(0, 50),
-        }
-      : {}),
-  };
-}
-
 /** A line a runner says of its machine, within what the console takes one in. */
 const machineLine = (text: string): string => {
   const line = [...text]
@@ -5102,6 +5034,9 @@ const runner: Command = async (args, io) => {
     });
   }
   const statePath = workPath("runner-state.json");
+  // A wake source is named as a registry spells one, which is a file's name as it stands.
+  const keptPath = (source: string): string =>
+    workPath(`runner-kept-${source.replaceAll(/[^a-z0-9-]/g, "_")}.json`);
   const person = me.person;
   /** A runner for the desk's runner.json as it is read now: begun again whenever the file changed (ADR-0144). */
   const runnerOf = (read: Extract<Awaited<ReturnType<typeof readConfig>>, { ok: true }>) => {
@@ -5146,7 +5081,7 @@ const runner: Command = async (args, io) => {
       },
       state: {
         load: async () => runnerStateOf(await host.readText(statePath)),
-        save: (state) => host.writePrivate(statePath, `${JSON.stringify(state)}\n`),
+        save: (state) => host.replacePrivate(statePath, `${JSON.stringify(state)}\n`),
       },
       log: (line) => io.stdout(`${new Date(io.now()).toISOString()} ${line}\n`),
       // The autosave's git: in the desk, asking nobody at a terminal, its words read and let go.
@@ -5176,6 +5111,12 @@ const runner: Command = async (args, io) => {
         }),
         fetch: (url, init) => io.fetch(url, { ...init, headers: { ...init.headers } }),
         socket: (url) => host.socket(url),
+        // What a source keeps of what it brought the agent, ids and moments and never a word,
+        // in a file of its own beside the runner's state: a runner started again reads it.
+        kept: {
+          load: async (source) => keptBySourceOf(await host.readText(keptPath(source))),
+          save: (source, kept) => host.replacePrivate(keptPath(source), keptFileOf(kept)),
+        },
       },
     });
   };

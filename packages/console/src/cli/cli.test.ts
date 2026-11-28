@@ -5918,6 +5918,7 @@ describe("the runner on the command line (ADR-0085)", () => {
     user: "mira",
     readText: async () => undefined,
     writePrivate: async () => undefined,
+    replacePrivate: async () => undefined,
     remove: async () => undefined,
     socket: () => {
       throw new Error("no socket is opened here");
@@ -6035,6 +6036,78 @@ describe("the runner on the command line (ADR-0085)", () => {
       product: { driver: "claude", name: "Claude Code", version: null, tried: false },
       offers: { models: ["opus", "sonnet", "haiku", "fable"], steer: true, resume: true },
     });
+  });
+
+  it("reads what each wake source kept under the runner before, from a file of its own, whatever that file holds (ADR-0166)", async () => {
+    const { fetch } = fakeConsole({
+      "GET /api/v1/me": { body: MIRA },
+      "GET /api/v1/agents/me/secrets": { body: { items: [] } },
+      "PUT /api/v1/agents/me/runner": {
+        body: {
+          latest: 4,
+          delivered: 4,
+          settings: { model: null, effort: null },
+          state: "running",
+        },
+      },
+    });
+    // What a file of the desk may hold: what the runner wrote, and anything else at all.
+    for (const [state, kept] of [
+      [
+        JSON.stringify({
+          delivered: 4,
+          conversation: "c-1",
+          driver: "claude",
+          began: 1_762_800_000_000,
+        }),
+        JSON.stringify([
+          ["brought:D0123ABCD:", "1762800600.000100"],
+          ["carried:D0123ABCD:1762800600.000100", "woke"],
+        ]),
+      ],
+      [JSON.stringify({ delivered: 4, began: "soon" }), "{"],
+      [JSON.stringify({ delivered: 4, began: -1 }), JSON.stringify({ a: 1 })],
+      [
+        JSON.stringify({ delivered: 4, began: 1e300 }),
+        JSON.stringify([["a"], ["a", 1], "odd", null, ["n".repeat(5000), "v"], [["x"], "v"]]),
+      ],
+      [
+        undefined,
+        JSON.stringify(Array.from({ length: 5000 }, (_, index) => [`carried:C:${index}`, "said"])),
+      ],
+    ] as const) {
+      const read: string[] = [];
+      const run = harness({
+        fetch,
+        env: SIGNED_IN,
+        version: "0.5.0",
+        runner: host({
+          readText: async (path) => {
+            const file = path.replaceAll("\\", "/");
+            read.push(file);
+            return file === "runner.json"
+              ? JSON.stringify({ wake: ["slack"] })
+              : file === "work/runner-state.json"
+                ? state
+                : file === "work/runner-kept-slack.json"
+                  ? kept
+                  : undefined;
+          },
+          untilStopped: async () => undefined,
+        }),
+      });
+      expect(await runCli(["runner"], run.io), kept).toBe(EXIT.ok);
+      expect(run.out(), kept).toContain("the runner is there:");
+      expect(run.out(), kept).toContain("the runner stopped");
+      // Each source has a file of its own beside the runner's state, named for the source.
+      expect(read).toEqual(
+        expect.arrayContaining([
+          "runner.json",
+          "work/runner-state.json",
+          "work/runner-kept-slack.json",
+        ]),
+      );
+    }
   });
 });
 

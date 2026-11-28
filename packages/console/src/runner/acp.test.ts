@@ -260,6 +260,7 @@ describe("the acp driver", () => {
     const driver = driverFor(agentThat());
     expect(driver.name).toBe("acp");
     // A message waits for the turn or stops it; the rest is the agent's to offer.
+    // It says a message taken as it hands it over, and vouches for no conversation that holds it.
     expect(driver.can).toEqual({ steer: false, images: true, resume: true, set: true });
     expect(driver.permissions).toEqual({
       modes: ["allow", "deny"],
@@ -1016,7 +1017,8 @@ describe("the acp driver", () => {
         kind: "status",
         text: "This agent goes on with no conversation from one session to the next: a new one begins.",
       },
-      { type: "conversation", id: "sess-1" },
+      // Said as one begun anew: the runner counts nothing from before it as held (ADR-0166).
+      { type: "conversation", id: "sess-1", anew: true },
       { type: "running", model: "lathe-small", effort: "low", version: "2.3.1" },
     ]);
     await fresh.stop();
@@ -1248,7 +1250,7 @@ describe("the acp driver", () => {
         kind: "status",
         text: "The agent could not go on with the conversation it had (Internal error: no rollout found for sess-9): a new one begins.",
       },
-      { type: "conversation", id: "sess-1" },
+      { type: "conversation", id: "sess-1", anew: true },
       { type: "running", model: "lathe-small", effort: "low", version: "2.3.1" },
     ]);
     await session.stop();

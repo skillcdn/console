@@ -229,7 +229,15 @@ describe("the claude driver", () => {
     expect(
       claudeArguments({ cwd: "/d", env: {}, model: "a b", effort: "", resume: "c 1" }).slice(11),
     ).toEqual([]);
-    expect(plain.driver.can).toEqual({ steer: true, images: true, resume: true, set: false });
+    // A message it says taken is one the product said back off its input: it stands in the
+    // conversation whatever became of the turn (ADR-0166).
+    expect(plain.driver.can).toEqual({
+      steer: true,
+      images: true,
+      resume: true,
+      set: false,
+      holdsTaken: true,
+    });
     // The mode the desk names, in the product's own word; one that is none of the product's is
     // never leave to do more: the session starts in the mode that allows the least.
     const modeOf = (permissions: string | undefined) => {
@@ -481,6 +489,8 @@ describe("the claude driver", () => {
         ],
       },
       { type: "event", kind: "status", text: "The product compacted the conversation." },
+      // Said to the runner too (ADR-0166): what the agent was handed before is a summary now.
+      { type: "compacted" },
       {
         type: "event",
         kind: "error",
