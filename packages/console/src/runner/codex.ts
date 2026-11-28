@@ -959,6 +959,9 @@ function sessionOf(
         });
       }
     }
+    // A conversation begun where another was to be gone on with is said as that (ADR-0166):
+    // the runner counts nothing the agent was handed before as held by it.
+    const anew = opened === undefined && resume !== undefined;
     opened ??= await connection.request("thread/start", settings);
     const said = isObject(opened) ? opened : {};
     const named = isObject(said.thread) ? said.thread : {};
@@ -991,7 +994,7 @@ function sessionOf(
       effort: word(textOf(said.reasoningEffort)) ?? null,
     };
     emit(
-      { type: "conversation", id: thread },
+      { type: "conversation", id: thread, ...(anew ? { anew: true } : {}) },
       { type: "running", model: runs.model, effort: runs.effort, version },
       {
         type: "event",
@@ -1176,7 +1179,16 @@ export function createCodexDriver(host: DriverHost): Driver {
     product: { name: "Codex", tried: TRIED },
     // A message is put into the turn under way. A picture is taken as a file, by its path in
     // the desk. The model and the effort are said with a turn, and taken from the next one on.
-    can: { steer: true, images: true, imageFiles: true, resume: true, set: true },
+    // A message is said taken when the product says it back out of the conversation, or at
+    // the end of the turn it began: it stands in the conversation either way (`holdsTaken`).
+    can: {
+      steer: true,
+      images: true,
+      imageFiles: true,
+      resume: true,
+      set: true,
+      holdsTaken: true,
+    },
     permissions: { modes: MODES, unattended: UNATTENDED_MODE, least: LEAST_MODE },
     async probe() {
       // One line: what the command is called, then its version.

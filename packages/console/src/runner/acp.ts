@@ -804,8 +804,11 @@ function sessionOf(
           }
           // A turn refused on the product's usage limit: nothing goes better before a window
           // resets, and the protocol has no word for when that is. The session stays open; the
-          // runner waits, tries again by itself, and hands over again what was not answered.
-          // Read by pattern, of the agent's own error alone: not seen with an agent yet.
+          // runner waits, tries again by itself, and says again, whole, what was not answered:
+          // a message is said taken here as it is handed over, and nothing says that an agent
+          // keeps a prompt it refused, so the driver vouches for no conversation that holds it
+          // (`can.holdsTaken` is left out). Read by pattern, of the agent's own error alone:
+          // not seen with an agent yet.
           if (saysUsageLimit(words)) {
             waiting = [];
             emit({ type: "cannot_go_on", state: "failed", reason: "usage_limit" });
@@ -935,6 +938,9 @@ function sessionOf(
         text: "This agent goes on with no conversation from one session to the next: a new one begins.",
       });
     }
+    // A conversation begun where another was to be gone on with is said as that (ADR-0166):
+    // the runner counts nothing the agent was handed before as held by it.
+    const anew = session === undefined && options.resume !== undefined;
     if (session === undefined) {
       opened = await connection.request("session/new", place);
       session = isObject(opened) ? textOf(opened.sessionId) : undefined;
@@ -951,7 +957,7 @@ function sessionOf(
     const agent = agentOf(initialized);
     await stand(standingOf(opened), agent.name);
     product = agent.version ?? null;
-    emit({ type: "conversation", id: session });
+    emit({ type: "conversation", id: session, ...(anew ? { anew: true } : {}) });
     runs();
     ready = true;
     if (waiting.length > 0) {

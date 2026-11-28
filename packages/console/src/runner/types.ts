@@ -40,8 +40,13 @@ export type DriverEvent =
       readonly effort: string | null;
       readonly version: string | null;
     }
-  /** The id the product resumes the conversation from next time. */
-  | { readonly type: "conversation"; readonly id: string }
+  /**
+   * The id the product resumes the conversation from next time. With `anew`, the product was
+   * asked to go on with a conversation and began this one in its place, since it kept the other
+   * no more or goes on with none (ADR-0166): the runner then takes the agent's conversation to
+   * have begun with the session, which holds nothing it was handed before.
+   */
+  | { readonly type: "conversation"; readonly id: string; readonly anew?: boolean | undefined }
   /**
    * The product took a message: the oldest it was sent and had not said so of. Said once for
    * every message sent, when the product reads it, so that a message handed over in a turn is
@@ -242,6 +247,15 @@ export interface Driver {
     readonly resume: boolean;
     /** Whether the model and the effort are taken in a running session. */
     readonly set: boolean;
+    /**
+     * Whether a message the driver said was taken stands in the product's conversation from
+     * then on, whatever became of the turn: the driver says `taken` when the product says the
+     * message back out of its conversation, or began a turn with it. Where it does, what the
+     * product took as a usage limit was reached is named to the agent in the same session and
+     * not said a second time (ADR-0166). Left out, or false, for a driver that says `taken` when
+     * it handed the message over: the runner then says such a message whole again.
+     */
+    readonly holdsTaken?: boolean | undefined;
   };
   /**
    * The product's permission modes, in its own words: what runs without asking. `unattended` is

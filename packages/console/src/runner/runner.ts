@@ -403,6 +403,12 @@ interface OpenSession {
    */
   taken: (readonly RestSignal[])[];
   unread: number;
+  /**
+   * The signals the product took before it put the conversation in fewer words (ADR-0166), by
+   * number: the conversation holds a summary of them at best, so a usage limit met afterwards
+   * has them said whole again, and not named.
+   */
+  readonly summarized: Set<number>;
   /** Whether the agent was handed word that it is back from a usage limit, and has not answered since. */
   returning: boolean;
   /** How many sub-agents are at work in its background, as the driver said last (ADR-0162). */
@@ -619,9 +625,13 @@ export function createRunner(options: RunnerOptions): Runner {
   let began = 0;
   let renewed = false;
   /**
-   * The signals the conversation holds already, by number (ADR-0166): the product took them
-   * there as a usage limit was reached, and the agent never answered. Handed over again, they
-   * are named and not said a second time. Until a turn completes, or the conversation is let go.
+   * The signals the conversation holds already, by number (ADR-0166): the product of the open
+   * session took them there as a usage limit was reached, its driver vouching that what it
+   * took stands (`can.holdsTaken`), and the agent never answered. Handed over again in that
+   * session, they are named and not said a second time. Until a turn completes, the
+   * conversation is let go or put in fewer words, or the session ends: nothing says before a
+   * session's first message whether its product went on with the conversation, so a session
+   * begun after is said them whole.
    */
   const above = new Set<number>();
   /** What each wake source keeps, by its name, and whether it changed since it was last written. */
@@ -760,17 +770,49 @@ export function createRunner(options: RunnerOptions): Runner {
    * When a conversation that begins now is taken to have begun (ADR-0166): now, or, where wakes
    * of a wake source wait to be handed over, a little before the oldest of them was raised.
    * They are handed over in the new conversation, which holds them from then on: counted as
-   * from before it, their messages would be carried once more with the next wake.
+   * from before it, their messages would be carried once more with the next wake. `handed` is
+   * what the conversation holds beside what waits: what a session was handed in it already,
+   * where the moment is set once the session is under way.
    */
-  const beginsAt = (): number => {
+  const beginsAt = (handed: readonly RestSignal[] = []): number => {
     let at = options.now();
-    for (const signal of pending) {
+    for (const signal of [...pending, ...handed]) {
       const raised = signal.source === "messenger" ? Date.parse(signal.at) : Number.NaN;
       if (Number.isFinite(raised)) {
         at = Math.min(at, raised - RAISED_AFTER_MS);
       }
     }
     return at;
+  };
+
+  /**
+   * The driver named the conversation its session runs in. Where it began one in place of the
+   * one it was asked to go on with (`anew`), the agent's conversation began with the session
+   * (ADR-0166): it holds what the session was handed, and nothing from before.
+   */
+  const converses = (
+    target: OpenSession,
+    event: Extract<DriverEvent, { type: "conversation" }>,
+  ): void => {
+    conversation = event.id;
+    if (event.anew === true) {
+      began = beginsAt([...target.sent, ...target.handed.flatMap((message) => message.signals)]);
+      above.clear();
+    }
+  };
+
+  /**
+   * The product put the conversation in fewer words (ADR-0166): what the agent was handed
+   * before is a summary at best, so what a wake source brought before counts no more, and what
+   * the product took is not named as standing there. What it was handed and has not taken yet
+   * it reads after, whole: the conversation is taken to hold that.
+   */
+  const summarized = (target: OpenSession): void => {
+    began = beginsAt(target.handed.flatMap((message) => message.signals));
+    above.clear();
+    for (const signal of target.taken.flat()) {
+      target.summarized.add(signal.number);
+    }
   };
 
   /**
@@ -1254,6 +1296,7 @@ export function createRunner(options: RunnerOptions): Runner {
       took: false,
       taken: [],
       unread: 0,
+      summarized: new Set(),
       returning: false,
       background: 0,
       own: false,
@@ -1301,6 +1344,9 @@ export function createRunner(options: RunnerOptions): Runner {
     }
     await target.pumped;
     await hearLast(target);
+    // What was named as standing in the conversation was taken by this session's product: a
+    // session begun after is said it whole (ADR-0166).
+    above.clear();
     // What the product was handed and never took is sent again, by the console where the
     // runner itself ends and by the runner where the product had not started; else it is on
     // the record as never read.
@@ -1485,6 +1531,11 @@ export function createRunner(options: RunnerOptions): Runner {
     // what the driver says of its product.
     const takesPictures = target.driver.images?.() ?? driver.can.images;
     for (const signal of batch) {
+      // What is only named is handed over with nothing: its files stand in the desk and its
+      // pictures in the conversation, with the message the product took (ADR-0166).
+      if (above.has(signal.number)) {
+        continue;
+      }
       const taken = new Set<string>();
       for (const file of signal.attachments) {
         const picture = PICTURE_TYPES.has(file.contentType);
@@ -1695,7 +1746,9 @@ export function createRunner(options: RunnerOptions): Runner {
    * Hears what the product said as its session was ended. Its words wait in the queue behind
    * whatever ended the session, and are let go there once the session is no longer the open
    * one: a message it said it took then is taken, and not sent again, and the conversation it
-   * named is the one to go on with, where that message is.
+   * named is the one to go on with, where that message is. That it began that conversation
+   * anew, or put it in fewer words, moves the moment the conversation began as it does in a
+   * session that goes on (ADR-0166): the next session goes on with what was said here.
    */
   const hearLast = async (target: OpenSession): Promise<void> => {
     let named = false;
@@ -1705,7 +1758,10 @@ export function createRunner(options: RunnerOptions): Runner {
       }
       const { event } = message;
       if (event.type === "conversation") {
-        conversation = event.id;
+        converses(target, event);
+        named = true;
+      } else if (event.type === "compacted") {
+        summarized(target);
         named = true;
       } else if (event.type === "taken") {
         await take(target);
@@ -2031,9 +2087,15 @@ export function createRunner(options: RunnerOptions): Runner {
       owed.delete(signal.number);
     }
     // What the product took stands in the conversation, which the agent goes on in: handed
-    // over again, it is named and not said a second time (ADR-0166).
-    for (const signal of unanswered) {
-      above.add(signal.number);
+    // over again in this session, it is named and not said a second time (ADR-0166). Only
+    // where the driver vouches that what it said was taken stands there, and not for what was
+    // taken before the product put the conversation in fewer words.
+    if (driver.can.holdsTaken === true) {
+      for (const signal of unanswered) {
+        if (!target.summarized.has(signal.number)) {
+          above.add(signal.number);
+        }
+      }
     }
     target.taken = [];
     target.sent = [];
@@ -2194,7 +2256,7 @@ export function createRunner(options: RunnerOptions): Runner {
         return;
       }
       case "conversation": {
-        conversation = event.id;
+        converses(target, event);
         await persist();
         return;
       }
@@ -2234,10 +2296,7 @@ export function createRunner(options: RunnerOptions): Runner {
         return;
       }
       case "compacted": {
-        // The conversation goes on in fewer words: what the agent was handed before is a
-        // summary at best, so what a wake source brought before counts no more (ADR-0166).
-        began = options.now();
-        above.clear();
+        summarized(target);
         await persist();
         return;
       }
