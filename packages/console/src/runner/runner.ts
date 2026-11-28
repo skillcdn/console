@@ -568,9 +568,19 @@ export function createRunner(options: RunnerOptions): Runner {
   let received = 0;
   let handled = 0;
   let conversation: string | undefined;
-  let stands: { state: "running" | "stopped" | "refused" | "failed"; reason: AgentStateReason } = {
+  /**
+   * How the agent stands and why, with when the runner said so (`at`): the console is told that
+   * moment with the reason, since a reason is said again the same under a state that stays, a
+   * turn that completed after another say, and nothing else tells the two apart.
+   */
+  let stands: {
+    state: "running" | "stopped" | "refused" | "failed";
+    reason: AgentStateReason;
+    at: number;
+  } = {
     state: "running",
     reason: "started",
+    at: options.now(),
   };
   let said = "";
   let settings: { model: string | null; effort: string | null } = { model: null, effort: null };
@@ -698,7 +708,7 @@ export function createRunner(options: RunnerOptions): Runner {
   };
 
   const setState = (state: typeof stands.state, reason: AgentStateReason): void => {
-    stands = { state, reason };
+    stands = { state, reason, at: options.now() };
     push({ t: "heartbeat" });
   };
 
@@ -2271,18 +2281,28 @@ export function createRunner(options: RunnerOptions): Runner {
    * Why the agent stands as it does, and until when where the runner knows: when its usage
    * limit resets. A console of before the word `usage_limit` refuses a heartbeat that says it,
    * and with it everything else the heartbeat carries: such a console is said `crashed`, the
-   * nearest word it takes, and no moment.
+   * nearest word it takes, and no moment. With it, when the runner said so, which a console of
+   * before reads past.
    */
-  const saidOfState = (): { reason: AgentStateReason; until?: string | null } => {
+  const saidOfState = (): {
+    reason: AgentStateReason;
+    until?: string | null;
+    reasonAt: string;
+  } => {
+    // A moment kept by a runner before this one is taken as it reads; one that is no moment is now.
+    const at =
+      Number.isFinite(stands.at) && Math.abs(stands.at) <= 8.64e15 ? stands.at : options.now();
+    const reasonAt = new Date(at).toISOString();
     if (stands.reason !== "usage_limit") {
-      return { reason: stands.reason };
+      return { reason: stands.reason, reasonAt };
     }
     if (plainWords) {
-      return { reason: "crashed" };
+      return { reason: "crashed", reasonAt };
     }
     return {
       reason: stands.reason,
       until: limited?.until === undefined ? null : new Date(limited.until).toISOString(),
+      reasonAt,
     };
   };
 
@@ -2337,7 +2357,7 @@ export function createRunner(options: RunnerOptions): Runner {
       if (answer.state === "stopped" && !held && answer.latest <= handled) {
         held = true;
         await end("stopped");
-        stands = { state: "stopped", reason: "stop" };
+        stands = { state: "stopped", reason: "stop", at: options.now() };
       }
     } catch (error) {
       if (stopped) {
@@ -2648,7 +2668,8 @@ export function createRunner(options: RunnerOptions): Runner {
           tries: 1,
           until: known === undefined ? now + timing.coolDownMs : known + timing.resetMarginMs,
         };
-        stands = { state: "failed", reason: "usage_limit" };
+        // Said as of when the limit was reached, which the runner before this one kept.
+        stands = { state: "failed", reason: "usage_limit", at: kept.limited.since };
         log(
           `the product's usage limit stopped the agent before this runner started: tried again at ${new Date(waits.until).toISOString()}`,
         );
@@ -2683,7 +2704,7 @@ export function createRunner(options: RunnerOptions): Runner {
           delivered = Math.max(delivered, first.delivered);
           if (first.state === "stopped") {
             held = true;
-            stands = { state: "stopped", reason: "stop" };
+            stands = { state: "stopped", reason: "stop", at: options.now() };
           }
           break;
         } catch (error) {

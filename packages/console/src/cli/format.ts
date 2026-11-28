@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { reasonMoment } from "../agent-state.js";
 import { usageNear, usageSaidTogether, usageStanding, usedHundredths } from "../agent-usage.js";
 import { describeEvent } from "../feed-words.js";
 import { NOTIFICATION_KINDS, type NotificationKind } from "../notifications.js";
@@ -290,21 +291,28 @@ export function formatOwnWakeLine(wake: RestOwnWake): string {
 }
 
 /**
- * How an agent account stands (ADR-0085), in a few words: the state, why, since when, until when
- * where its runner said, as when a usage limit resets (ADR-0150), and when its runner was last
- * heard from.
+ * How an agent account stands (ADR-0085), in a few words: the state, since when, until when
+ * where its runner said, as when a usage limit resets (ADR-0150), why, and when its runner was
+ * last heard from. The moment after `since` is the state's alone, and the reason stands apart
+ * from it, after `why:`: with when it was said where that is another moment than the state's,
+ * a turn that completed or a new conversation under a state that stayed, and with none where
+ * it came with the state or the console keeps no moment for it.
  */
 export function formatAgentState(agent: RestAgent): string {
   const state = agent.state ?? null;
   if (state === null) {
     return "no runner has been heard from yet";
   }
-  const reason = state.reason === null ? "" : ` (${state.reason.replaceAll("_", " ")})`;
+  const said = reasonMoment(state);
   const until =
     state.until === undefined || state.until === null ? "" : `, until ${moment(state.until)}`;
+  const why =
+    state.reason === null
+      ? ""
+      : `; why: ${state.reason.replaceAll("_", " ")}${said === undefined ? "" : `, said ${moment(said)}`}`;
   const heard =
     state.heardAt === null ? "" : `; its runner was last heard from ${moment(state.heardAt)}`;
-  return `${state.state}${reason} since ${moment(state.since)}${until}${heard}`;
+  return `${state.state} since ${moment(state.since)}${until}${why}${heard}`;
 }
 
 /**

@@ -4805,7 +4805,9 @@ describe("configuring, as the person", () => {
     expect(await runCli(["agent", "mira"], full.io)).toBe(EXIT.ok);
     expect(full.out()).toContain(
       [
-        `state: refused (model refused) since ${WHEN}; its runner was last heard from ${WHEN}`,
+        // The moment after `since` is the state's; the reason stands apart from it, and an
+        // answer that names no moment for it, a console's of before, has it with none.
+        `state: refused since ${WHEN}; why: model refused; its runner was last heard from ${WHEN}`,
         `usage: 5-hour 82% used, near its limit, resets 2026-10-09T13:00:00.000Z; weekly near its limit (as its product said ${WHEN})`,
         "runner: 0.5.0 on mac-mini (macOS 15.1), as mira",
         "product: Claude Code 2.1.0, a version the driver was not tried with",

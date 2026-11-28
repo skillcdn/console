@@ -2084,8 +2084,15 @@ export const en = {
         refused: "Refused",
         failed: "Failed",
         unheard: "Not heard from",
-        /** What stands before and after the moment a state began: "since 14:02". */
+        /** What stands before and after the moment a state began, beside the state's badge: "since 14:02". */
         since: { before: "since ", after: "" },
+        /**
+         * The same where no badge stands beside the moment, with the state's own word, so that
+         * the moment reads as the state's and not the reason's: "running since 14:02".
+         */
+        sinceAs: (state: string) => ({ before: `${state.toLowerCase()} since `, after: "" }),
+        /** What stands before and after the moment a reason was said, after the reason: "a turn completed (14:02)". */
+        reasonAt: { before: " (", after: ")" },
         /** What stands before and after the moment a state ends by itself, as when a usage limit resets: "until 03:30". */
         until: { before: "until ", after: "" },
         heard: "runner last heard from",

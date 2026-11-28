@@ -399,6 +399,12 @@ export const agentRunners = pgTable(
     state: text({ enum: AGENT_STATES }),
     reason: text(),
     stateAt: instant(),
+    /**
+     * When the reason was said: with the state where the two came together, and later where the
+     * reason changed under a state that stayed, a turn that completed or a new conversation
+     * under `running`. Null for a row of before, whose reason no moment is known of.
+     */
+    reasonAt: instant(),
     /** Until when it stands so, where its runner said (ADR-0150): when a usage limit resets; null where nothing says. */
     stateUntil: instant(),
     heardAt: instant(),

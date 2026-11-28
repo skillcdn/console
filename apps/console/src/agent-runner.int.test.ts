@@ -13,6 +13,7 @@ import {
   restConnectionSchema,
   restErrorSchema,
   restEventsSchema,
+  restRunnerHeartbeatInputSchema,
   restRunnerHeartbeatSchema,
   restSignalSchema,
   restSignalsSchema,
@@ -23,11 +24,12 @@ import { eq } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { drizzleOf } from "./db/client.js";
-import { noteUnheardRunners } from "./db/queries/agent-runners.js";
+import { noteUnheardRunners, recordHeartbeat, sendSignal } from "./db/queries/agent-runners.js";
 import { putMessengerAccount, removeMessengerAccount } from "./db/queries/messenger-accounts.js";
+import { findPerson } from "./db/queries/people.js";
 import { purgeInstall } from "./db/queries/plugins.js";
 import { ensureWorkspace } from "./db/queries/workspaces.js";
-import { people, pluginInstalls } from "./db/schema.js";
+import { agentRunners, people, pluginInstalls } from "./db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { RUNNER_UNHEARD_MS, RunnerWatch } from "./jobs/runner-watch.js";
 import { Plugins } from "./plugins/registry.js";
@@ -1578,5 +1580,128 @@ describe("who wrote at a messenger, as the console answers an agent account (ADR
     expect((await ask(fromPages(alice), { messenger: "slack", accounts })).status).toBe(404);
     expect((await ask(fromPages(bob), { messenger: "slack", accounts })).status).toBe(404);
     expect((await ask({}, { messenger: "slack", accounts })).status).toBe(401);
+  });
+});
+
+describe("when the reason an agent account stands for was said", () => {
+  const at = (clock: string) => new Date(`2027-01-10T${clock}.000Z`);
+  /** A heartbeat taken at a moment of the test's own clock, as the route takes one. */
+  const say = async (over: Record<string, unknown>, now: Date) => {
+    const [row] = await drizzleOf(testDatabase.database)
+      .select()
+      .from(people)
+      .where(eq(people.handle, "mira"));
+    const account = await findPerson(testDatabase.database, row?.workspaceId ?? "", row?.id ?? "");
+    if (account === undefined) {
+      throw new Error("no account");
+    }
+    await recordHeartbeat(testDatabase.database, {
+      account,
+      heartbeat: restRunnerHeartbeatInputSchema.parse(beat(over)),
+      now,
+    });
+    return account;
+  };
+  /** The two moments as the console answers them: since when the state stands, and when the reason was said. */
+  const moments = async () => {
+    const state = (await agentOf({ cookie: alice })).state;
+    return [
+      state?.state,
+      state?.reason,
+      state?.since.slice(11, 19),
+      state?.reasonAt?.slice(11, 19),
+    ];
+  };
+
+  it("is the state's moment where the two came together, and its own where the reason changed under a state that stayed", async () => {
+    // No stop stands, and the agent runs from a moment of the test's clock on.
+    await signal(fromPages(alice), { kind: "restart" });
+    await say({ state: "refused", reason: "model_refused" }, at("09:00:00"));
+    await say({ reason: "started" }, at("09:10:00"));
+    expect(await moments()).toEqual(["running", "started", "09:10:00", "09:10:00"]);
+
+    // A runner of before says no moment. The same reason again changes neither moment.
+    await say({ reason: "started" }, at("09:11:00"));
+    expect(await moments()).toEqual(["running", "started", "09:10:00", "09:10:00"]);
+    // Another reason under the state that stays is dated when it is first said; the state
+    // keeps since when it stands, which the feed counts from.
+    await say({ reason: "reset" }, at("12:00:00"));
+    await say({ reason: "reset" }, at("12:01:00"));
+    expect(await moments()).toEqual(["running", "reset", "09:10:00", "12:00:00"]);
+
+    // A runner of this version says when it said the reason: the same reason, said anew.
+    await say({ reason: "reset", reasonAt: at("14:12:00").toISOString() }, at("14:12:05"));
+    expect(await moments()).toEqual(["running", "reset", "09:10:00", "14:12:00"]);
+    await say({ reason: "reset", reasonAt: at("14:12:00").toISOString() }, at("14:12:35"));
+    expect(await moments()).toEqual(["running", "reset", "09:10:00", "14:12:00"]);
+  });
+
+  it("holds what a runner says of the moment between when the state began and now", async () => {
+    // A clock ahead of the console's: never a moment to come.
+    await say({ reason: "completed", reasonAt: at("15:00:00").toISOString() }, at("14:30:00"));
+    expect(await moments()).toEqual(["running", "completed", "09:10:00", "14:30:00"]);
+    // One from before the state began is the state's own moment.
+    await say({ reason: "resumed", reasonAt: at("08:00:00").toISOString() }, at("14:31:00"));
+    expect(await moments()).toEqual(["running", "resumed", "09:10:00", "09:10:00"]);
+    // What is no moment is refused with the heartbeat, as any field that is none.
+    const refused = await send(bearer(command), "PUT", RUNNER, beat({ reasonAt: "yesterday" }));
+    expect(refused.status).toBe(400);
+    expect(await moments()).toEqual(["running", "resumed", "09:10:00", "09:10:00"]);
+  });
+
+  it("is the console's own moment for a change of state, a supervisor's stop and a runner not heard from", async () => {
+    // A change of state is dated by the console's clock, whatever the runner's says.
+    const account = await say(
+      {
+        state: "failed",
+        reason: "usage_limit",
+        reasonAt: at("15:59:58").toISOString(),
+        until: at("19:00:00").toISOString(),
+      },
+      at("16:00:00"),
+    );
+    expect(await moments()).toEqual(["failed", "usage_limit", "16:00:00", "16:00:00"]);
+    // A supervisor's stop is the console's word: the runner's reason, and its moment, wait.
+    const stop = {
+      account,
+      by: undefined,
+      source: "person",
+      key: undefined,
+      set: undefined,
+    } as const;
+    await sendSignal(testDatabase.database, {
+      ...stop,
+      kind: "stop",
+      text: "",
+      now: at("17:00:00"),
+    });
+    expect(await moments()).toEqual(["stopped", "stop", "17:00:00", "17:00:00"]);
+    await say({ reason: "completed", reasonAt: at("16:30:00").toISOString() }, at("17:01:00"));
+    expect(await moments()).toEqual(["stopped", "stop", "17:00:00", "17:00:00"]);
+    await sendSignal(testDatabase.database, {
+      ...stop,
+      kind: "restart",
+      text: "",
+      now: at("17:02:00"),
+    });
+    await say({ reason: "resumed", reasonAt: at("17:02:30").toISOString() }, at("17:03:00"));
+    expect(await moments()).toEqual(["running", "resumed", "17:03:00", "17:03:00"]);
+    // Not heard from: noted by the console, at its moment.
+    await noteUnheardRunners(testDatabase.database, {
+      before: at("17:30:00"),
+      now: at("18:00:00"),
+    });
+    expect(await moments()).toEqual(["unheard", "no_heartbeat", "18:00:00", "18:00:00"]);
+  });
+
+  it("answers no moment for a reason of before the console kept one", async () => {
+    await drizzleOf(testDatabase.database).update(agentRunners).set({ reasonAt: null });
+    const state = (await agentOf({ cookie: bob })).state;
+    expect(state).toMatchObject({ state: "unheard", reason: "no_heartbeat", reasonAt: null });
+    // And keeps none while a runner of before says the same reason again.
+    await say({ state: "running", reason: "started" }, at("19:00:00"));
+    await drizzleOf(testDatabase.database).update(agentRunners).set({ reasonAt: null });
+    await say({ state: "running", reason: "started" }, at("19:00:30"));
+    expect(await moments()).toEqual(["running", "started", "19:00:00", undefined]);
   });
 });

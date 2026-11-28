@@ -893,8 +893,9 @@ async function seedAgents(
 }
 
 /**
- * How long each agent account has stood as it does, and when its runner was last heard from,
- * written back in time; and the one that is unheard, which the console itself notes of a runner
+ * How long each agent account has stood as it does, when its reason was said, with the state
+ * unless the account says later, and when its runner was last heard from, written back in
+ * time; and the one that is unheard, which the console itself notes of a runner
  * that went quiet, after a while nobody here waits for. The one thing the REST API cannot make.
  */
 async function agePreviewAgents(harness: Harness, now: Date): Promise<void> {
@@ -905,9 +906,11 @@ async function agePreviewAgents(harness: Harness, now: Date): Promise<void> {
     }
     const since = new Date(now.getTime() - agent.since * 60_000).toISOString();
     const heard = new Date(now.getTime() - agent.heard * 60_000).toISOString();
+    const said = new Date(now.getTime() - (agent.said ?? agent.since) * 60_000).toISOString();
     await handle.execute(sql`
       update agent_runners
       set state_at = ${since}::timestamptz,
+          reason_at = ${said}::timestamptz,
           heard_at = ${heard}::timestamptz
           ${agent.state === "unheard" ? sql`, state = 'unheard', reason = 'no_heartbeat'` : sql``}
       where person_id = (select id from people where handle = ${agent.handle})

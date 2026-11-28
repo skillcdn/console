@@ -1976,6 +1976,8 @@ export const ko: Messages = {
         failed: "실패",
         unheard: "응답 없음",
         since: { before: "", after: "부터" },
+        sinceAs: (state) => ({ before: "", after: `부터 ${state}` }),
+        reasonAt: { before: " (", after: ")" },
         until: { before: "", after: "까지" },
         heard: "러너의 마지막 응답",
         reasons: {

@@ -53,6 +53,8 @@ export const AGENTS: readonly {
   /** How long ago it came to stand so, and was last heard from, in minutes. */
   readonly since: number;
   readonly heard: number;
+  /** How long ago its reason was said, in minutes, where that was later than it came to stand so. */
+  readonly said?: number;
 }[] = [
   {
     handle: "mira",
@@ -65,6 +67,8 @@ export const AGENTS: readonly {
     machine: "studio-2",
     since: 95,
     heard: 0,
+    // It went on with its conversation a while after it started: a reason with a moment of its own.
+    said: 20,
   },
   {
     handle: "juno",

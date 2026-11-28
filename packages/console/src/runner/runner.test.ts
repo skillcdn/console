@@ -532,6 +532,7 @@ describe("the runner", () => {
     expect(console.beats[0]).toEqual({
       state: "running",
       reason: "started",
+      reasonAt: expect.stringMatching(/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$/),
       delivered: 3,
       session: null,
       machine: { name: "mac-mini", os: "Darwin 24.1.0", user: "mira" },
@@ -548,6 +549,31 @@ describe("the runner", () => {
     });
     // And again, while nothing happens.
     await until("a second heartbeat", () => console.beats.length >= 2);
+  });
+
+  it("says with the reason when it said it, a moment that moves with the reason under a state that stays", async () => {
+    const began = Date.now();
+    const { console, product } = setup();
+    await until("the first heartbeat", () => console.beats.length >= 1);
+    const first = Date.parse(console.beats[0]?.reasonAt ?? "");
+    expect(first).toBeGreaterThanOrEqual(began);
+    expect(first).toBeLessThanOrEqual(Date.now());
+    // Said again as it was, heartbeat after heartbeat, while the reason stands.
+    await until("a second heartbeat", () => console.beats.length >= 2);
+    expect(console.beats.at(-1)).toMatchObject({
+      reason: "started",
+      reasonAt: console.beats[0]?.reasonAt,
+    });
+    // A reset under the state that stays: the agent runs on, and the reason is dated anew.
+    await sleep(15);
+    const reset = Date.now();
+    console.signal({ kind: "reset", text: "Start over from the board." });
+    await sessionOf(product);
+    await until("the state", () => console.beats.at(-1)?.reason === "reset");
+    const last = console.beats.at(-1);
+    expect(last).toMatchObject({ state: "running", reason: "reset" });
+    expect(Date.parse(last?.reasonAt ?? "")).toBeGreaterThanOrEqual(reset);
+    expect(Date.parse(last?.reasonAt ?? "")).toBeGreaterThan(first);
   });
 
   it("begins a session when there is something to deliver, and hands it over under a header", async () => {

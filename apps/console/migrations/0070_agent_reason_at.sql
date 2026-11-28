@@ -1,0 +1,1 @@
+ALTER TABLE "agent_runners" ADD COLUMN "reason_at" timestamp with time zone;
