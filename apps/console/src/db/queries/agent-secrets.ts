@@ -14,7 +14,7 @@ import { type PersonRecord, personColumns, toPerson } from "./people.js";
 
 /** What is wrong with what was asked of a secret. `code` is what the API answers with. */
 export class SecretError extends DomainError {
-  constructor(code: "secret.not_found" | "secret.too_many" | "secret.unreadable") {
+  constructor(code: keyof typeof SECRET_ERROR_WORDS) {
     super(code, SECRET_ERROR_WORDS[code]);
   }
 }
@@ -24,6 +24,11 @@ const SECRET_ERROR_WORDS = {
   "secret.too_many": "the account keeps as many secrets as one may",
   "secret.unreadable":
     "the value cannot be opened with this deployment's key; it is set again by whoever has it",
+  "secret.exists":
+    "the account keeps a secret of that name already; it is taken under another name, or in its place where that is asked",
+  "secret.offer_not_found": "no such offer waits for the account",
+  "secret.too_many_offers":
+    "as many offers wait for the account as may; one is taken, left or runs out first",
 } as const;
 
 /** A secret as its listing says it: never its value. */
@@ -69,7 +74,7 @@ const toRecord = (row: {
 });
 
 /** What is sealed: the value with the account and the name it is for, so that a row moved to another opens for nobody. */
-const sealedFor = (accountId: string, name: string, value: string): string =>
+export const sealedFor = (accountId: string, name: string, value: string): string =>
   JSON.stringify({ a: accountId, n: name, v: value });
 
 /** The value a sealed row holds, when it was sealed for this account and this name under this key. */
@@ -152,42 +157,73 @@ export async function setSecret(
     readonly now: Date;
   },
 ): Promise<SecretRecord> {
-  const { accountId, name, actor, seeded, now } = input;
   return drizzleOf(database).transaction(async (tx) => {
-    // The account's row, so that two secrets set at once cannot both be the last one allowed.
-    await tx.select({ id: people.id }).from(people).where(eq(people.id, accountId)).for("update");
-    const [held] = await tx
-      .select({ count: count() })
-      .from(agentSecrets)
-      .where(eq(agentSecrets.personId, accountId));
-    const [there] = await tx
-      .select({ name: agentSecrets.name })
-      .from(agentSecrets)
-      .where(and(eq(agentSecrets.personId, accountId), eq(agentSecrets.name, name)))
-      .limit(1);
-    if (there === undefined && (held?.count ?? 0) >= input.limit) {
-      throw new SecretError("secret.too_many");
-    }
-    const written = {
-      sealed: secrets.seal("agent-secret", sealedFor(accountId, name, input.value)),
-      expiresOn: input.expiresOn,
-      seeded,
-      setById: actor.id,
-      setAt: now,
-      // A value set anew has a day of its own to be told of.
-      warnedOn: null,
-    };
-    const [row] = await tx
-      .insert(agentSecrets)
-      .values({ personId: accountId, name, ...written, createdAt: now })
-      .onConflictDoUpdate({ target: [agentSecrets.personId, agentSecrets.name], set: written })
-      .returning(columns);
-    if (row === undefined) {
-      throw new Error("secret upsert returned no row");
-    }
-    await note(tx, { accountId, name, action: "set", actor, seeded, now });
-    return toRecord(row);
+    await lockStore(tx, input.accountId);
+    return keepSecret(tx, secrets, input);
   });
+}
+
+/** The account's row, so that two secrets set at once cannot both be the last one allowed. */
+export async function lockStore(tx: Transaction, accountId: string): Promise<void> {
+  await tx.select({ id: people.id }).from(people).where(eq(people.id, accountId)).for("update");
+}
+
+/**
+ * What `setSecret` does, in a transaction that holds the account's row (`lockStore`): for the
+ * store's own routes, and for an offer the account takes (ADR-0169), whose value is moved into
+ * the store in the transaction that ends the offer. With `fresh`, a name the account keeps
+ * already is refused, `secret.exists`, and nothing is written.
+ */
+export async function keepSecret(
+  tx: Transaction,
+  secrets: Secrets,
+  input: {
+    readonly accountId: string;
+    readonly name: string;
+    readonly value: string;
+    readonly expiresOn: string | null;
+    readonly actor: Actor;
+    readonly seeded: boolean;
+    readonly limit: number;
+    readonly fresh?: boolean | undefined;
+    readonly now: Date;
+  },
+): Promise<SecretRecord> {
+  const { accountId, name, actor, seeded, now } = input;
+  const [held] = await tx
+    .select({ count: count() })
+    .from(agentSecrets)
+    .where(eq(agentSecrets.personId, accountId));
+  const [there] = await tx
+    .select({ name: agentSecrets.name })
+    .from(agentSecrets)
+    .where(and(eq(agentSecrets.personId, accountId), eq(agentSecrets.name, name)))
+    .limit(1);
+  if (there !== undefined && input.fresh === true) {
+    throw new SecretError("secret.exists");
+  }
+  if (there === undefined && (held?.count ?? 0) >= input.limit) {
+    throw new SecretError("secret.too_many");
+  }
+  const written = {
+    sealed: secrets.seal("agent-secret", sealedFor(accountId, name, input.value)),
+    expiresOn: input.expiresOn,
+    seeded,
+    setById: actor.id,
+    setAt: now,
+    // A value set anew has a day of its own to be told of.
+    warnedOn: null,
+  };
+  const [row] = await tx
+    .insert(agentSecrets)
+    .values({ personId: accountId, name, ...written, createdAt: now })
+    .onConflictDoUpdate({ target: [agentSecrets.personId, agentSecrets.name], set: written })
+    .returning(columns);
+  if (row === undefined) {
+    throw new Error("secret upsert returned no row");
+  }
+  await note(tx, { accountId, name, action: "set", actor, seeded, now });
+  return toRecord(row);
 }
 
 /**

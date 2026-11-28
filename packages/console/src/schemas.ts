@@ -52,6 +52,7 @@ import {
   MAX_RUNNER_USAGE_WINDOWS,
   MAX_SEAL_REASON_LENGTH,
   MAX_SECRET_LENGTH,
+  MAX_SECRET_OFFER_NOTE_LENGTH,
   MAX_SERVICE_PARAMETERS,
   MAX_SERVICE_VALUE_LENGTH,
   MAX_SIGNAL_KEY_LENGTH,
@@ -105,6 +106,7 @@ import {
   RUN_ENDINGS,
   RUN_STATUSES,
   SECRET_ACCESSES,
+  SECRET_OFFER_STATES,
   SERVICE_ROLES,
   SESSION_ENDS,
   SESSION_KINDS,
@@ -1437,6 +1439,65 @@ export const restAgentSecretAccessesSchema = z.object({
   more: z.boolean(),
 });
 export type RestAgentSecretAccesses = z.infer<typeof restAgentSecretAccessesSchema>;
+
+/**
+ * What `POST /api/v1/agents/<handle>/secret-offers` is sent (ADR-0169): the name the offerer
+ * proposes, the value, up to `MAX_AGENT_SECRET_BYTES` of UTF-8, what it is for in a line, and
+ * optionally the day the value ends on.
+ */
+export const restAgentSecretOfferInputSchema = z.object({
+  name: z.string().check(z.refine(isSecretName)),
+  value: z.string().check(z.minLength(1), z.maxLength(MAX_AGENT_SECRET_BYTES)),
+  note: z.optional(z.nullable(line(MAX_SECRET_OFFER_NOTE_LENGTH))),
+  expiresOn: z.optional(z.nullable(day)),
+});
+export type RestAgentSecretOfferInput = z.infer<typeof restAgentSecretOfferInputSchema>;
+
+/**
+ * A secret offered to an agent account (ADR-0169), as its listing says it: never its value. The
+ * name the offerer proposed, what they said it is for, who offered it and through which agent,
+ * how it stands, until when it waits, and, once the account took it, the name it keeps it under.
+ */
+export const restAgentSecretOfferSchema = z.object({
+  id: uuid,
+  name: z.string(),
+  note: z.nullable(z.string()),
+  /** Who offered it; `null` for someone who is no longer there. */
+  by: z.nullable(restPersonSchema),
+  /** The agent they offered it through, when they acted with a token; `null` when they did it themselves. */
+  agent: z.nullable(z.string()),
+  expiresOn: z.nullable(day),
+  state: z.enum(SECRET_OFFER_STATES),
+  at: instant,
+  /** Until when it waits: past it, the offer is gone as one left is. */
+  endsAt: instant,
+  /** When the account took or left it, or its days ran out; `null` while it waits. */
+  decidedAt: z.nullable(instant),
+  /** The name the account keeps it under, once taken; `null` otherwise. */
+  takenAs: z.nullable(z.string()),
+});
+export type RestAgentSecretOffer = z.infer<typeof restAgentSecretOfferSchema>;
+
+/**
+ * `GET /api/v1/agents/me/secret-offers`, the offers that wait for the account itself, and
+ * `GET /api/v1/agents/<handle>/secret-offers`, the account's record of them for a supervisor,
+ * the newest first.
+ */
+export const restAgentSecretOffersSchema = z.object({
+  items: z.array(restAgentSecretOfferSchema),
+});
+export type RestAgentSecretOffers = z.infer<typeof restAgentSecretOffersSchema>;
+
+/**
+ * What `POST /api/v1/agents/me/secret-offers/<id>/take` is sent: the name to keep the value
+ * under, where another than the one offered, and whether it takes the place of a secret the
+ * account keeps under that name already.
+ */
+export const restAgentSecretOfferTakeInputSchema = z.object({
+  as: z.optional(z.string().check(z.refine(isSecretName))),
+  replace: z.optional(z.boolean()),
+});
+export type RestAgentSecretOfferTakeInput = z.infer<typeof restAgentSecretOfferTakeInputSchema>;
 
 /**
  * `GET /api/v1/me/manager`: whom whoever asks reports to, a person or an agent account, `null`

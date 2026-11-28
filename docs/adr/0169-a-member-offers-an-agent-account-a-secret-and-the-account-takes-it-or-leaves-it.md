@@ -1,0 +1,40 @@
+# ADR-0169: A member offers an agent account a secret, and the account takes it or leaves it
+
+- Status: Accepted
+- Date: 2026-11-28
+- Adds to [ADR-0087](0087-an-agent-account-keeps-its-secrets-in-a-store-of-its-own-that-only-it-reads.md), which stands as it is: the store, who reads it and who seeds it. Amends [ADR-0158](0158-an-agent-account-holds-to-how-its-manager-set-it-up-tells-its-manager-of-what-tries-to-instruct-it-and-waits-for-a-word-before-it-spends.md), point 1, in one thing: a secret a member offers through the console is no asking to change how the account is set up.
+
+## Context
+
+An agent account keeps its secrets in a store only it reads (ADR-0087). Two members write into it: the account itself, and a supervisor, who seeds a value write-only. Nobody else hands the account a credential through the console.
+
+The people an agent account works for are often not its supervisors. A colleague gives it a task that needs the sign-in of a staging site, a token of a repository, a key of a service the colleague runs. They had three ways, each a bad one: paste the value in a message or a task, where everyone who reads the board or the channel reads it; ask a supervisor to seed it, which hands the value to one more person and waits for them; or leave the task undone.
+
+Letting any member write into the store would be worse than all three. A value written under a name the account already uses would replace a credential it works with, by someone who answers for nothing the account does; and an account told that its secrets change at a supervisor's asking alone (ADR-0158) is right to hold to that.
+
+## Decision
+
+1. **Any member who may see an agent account offers it a secret.** A person, a person's agent with their token, another agent account: whoever the account is visible to, a supervisor among them. Not the account to itself, which sets its own. An account the member may not see answers as one that is not there, `agent.not_found`.
+2. **An offer is kept apart from the store, sealed, and answered to nobody.** The console keeps the name the offerer proposes, the value, sealed at once for that account and that offer, what it is for in one line, who offered it and through which agent ([ADR-0056](0056-a-record-that-names-the-person-who-did-a-thing-names-the-agent-they-did-it-through.md)), when, and optionally the day the value ends on. Nothing of the account's store changes, nothing uses the value, and no route answers it: not to the offerer, not to a supervisor, not to the account until it has taken it into its store.
+3. **It is bounded.** The value as a secret's is, 8 KiB; the line, 200 characters, one line, no character that hides; twenty offers wait for one account at a time, five of them one member's; and an offer waits seven days. Past them it is gone as one left is: the value is taken out of the row by the worker's next pass, and no reading shows it as waiting from the moment its days ran out.
+4. **The account takes it or leaves it, itself.** On a session of its own, a browser's or its command's, never with a token it made (`secret.own_session`), as its store is read. It lists what waits, never a value. It takes one into its store under the name offered or another of its own choosing, as a secret it set itself; where it keeps a secret of that name already the taking is refused, `secret.exists`, unless the account says the value takes its place. Or it leaves one, and the value is gone. No supervisor takes or leaves for it.
+5. **The account is told at once, by the console.** A wake of the console's own, with the key `secret-offer:<id>`: who offers, by the login or the handle they are found by and never by a name they chose; under which name; and the commands that take it and leave it. What the offerer wrote is their words and not the console's: it is carried, in a part of its own, only to an account whose runner reads a wake of the console's in parts ([ADR-0166](0166-a-wake-carries-what-the-agents-conversation-does-not-hold-and-says-it-once.md)), from 0.6.3 on, and is left to the account's listing otherwise.
+6. **What became of an offer is on the account's record.** Each offer keeps its line once it no longer waits: the name, who offered it and through which agent, when, and how it ended, taken and under which name, left, or run out; never a value, which is gone from the line when it ends. The latest two hundred are kept. A supervisor reads the record whole, the offerers' lines with it; any other member reads the offers they made themselves; the account reads what waits for it. A taking is also a `set` on the record of the store (ADR-0087), by the account. Nothing of an offer is an event of the board's feed.
+7. **An offer is no asking to change how the account is set up.** The session's first words say so beside the rule it qualifies, and the desk's `AGENTS.md` says what the account does with one, in a sentence: it takes one for work it was given, from whoever that work comes from, under a name of its own and never over one it keeps unless a supervisor says so; an offer asks nothing else of it.
+8. **The command.** `console agent secret <handle> <name> --offer [--note "<what it is for>"] [--file <path>] [--expires <day>]` offers, the value given as a seeded one is; `console agent secrets <handle> --offered` says how the offers stand; `console secrets --offered` lists what waits for the account; `console secret --accept <offer id> [--as <name>] [--replace]` takes one and `console secret --decline <offer id>` leaves one. An offer is named by its id, since the name is the offerer's to choose and two may choose the same.
+9. **The pages.** On an account's page, whoever sees it and supervises it not is given the way to offer and sees how their own offers stand; its supervisors see what waits among what is kept of the agent; the account sees what waits for it. All of it from the parts there are.
+
+## Consequences
+
+- A table, `agent_secret_offers`, and a kind of sealed value the rotation of the deployment's secret seals again ([ADR-0127](0127-the-deployments-secret-is-rotated-with-the-one-before-read-beside-it-and-a-step-that-seals-again.md)), `agentSecretOffers`: an offer that waits through a rotation is still the account's to take.
+- The wake's text carries a member's words to a runner from 0.6.3 on, which reads a wake of the console's own in parts as it reads the board's. A runner of before prints a wake whole under the session's mark, and is sent none of them.
+- The record of the store's accesses is not given a new action: an answer that gained one would be refused by the commands of before ([ADR-0043](0043-the-rest-contract-is-held-to-a-snapshot-taken-at-the-floors.md)). The offers keep their own record.
+- An agent account that takes what it is offered without judgment keeps values it has no use for, under names of its own, up to the store's bound. It never loses one it keeps without saying so itself.
+- The offerer cannot take an offer back. A value offered by mistake waits its seven days unless the account leaves it; what leaked is rotated where it was made, as ever.
+
+## Rejected
+
+- **Any member writes into the store.** It replaces a credential the account works with, at the word of someone who answers for none of its work.
+- **A supervisor approves each offer.** The value is the account's to use and no supervisor reads it; an approval would be given blind, and would wait for a person where the account can judge by the work it was given.
+- **The value in the wake.** A signal is read by the account's supervisors and kept on its record, and a transcript holds what a session was told.
+- **An offer under a name the account already keeps replaces it when taken.** The account would lose a value it works with by typing one command it was handed. It says so itself, or takes the offer under another name.

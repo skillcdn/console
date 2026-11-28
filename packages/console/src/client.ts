@@ -24,6 +24,10 @@ import {
   type RestAgentSecret,
   type RestAgentSecretAccesses,
   type RestAgentSecretInput,
+  type RestAgentSecretOffer,
+  type RestAgentSecretOfferInput,
+  type RestAgentSecretOffers,
+  type RestAgentSecretOfferTakeInput,
   type RestAgentSecrets,
   type RestAgentSecretValue,
   type RestAgentSession,
@@ -163,6 +167,8 @@ import {
   restAgentProposalsSchema,
   restAgentSchema,
   restAgentSecretAccessesSchema,
+  restAgentSecretOfferSchema,
+  restAgentSecretOffersSchema,
   restAgentSecretSchema,
   restAgentSecretsSchema,
   restAgentSecretValueSchema,
@@ -798,6 +804,21 @@ export interface ConsoleClient {
     input: RestAgentSecretInput,
   ): Promise<RestAgentSecret>;
   removeAgentSecret(handle: string, name: string): Promise<void>;
+  /**
+   * A secret offered to an agent account (ADR-0169), by any member who sees it: kept sealed
+   * apart from its store until the account takes it or leaves it, and answered to nobody. The
+   * answer is the offer as its listing says it, never the value.
+   */
+  offerAgentSecret(handle: string, input: RestAgentSecretOfferInput): Promise<RestAgentSecretOffer>;
+  /** The account's record of what it was offered, the newest first, for a supervisor: never a value. */
+  agentSecretOffers(handle: string, signal?: AbortSignal): Promise<RestAgentSecretOffers>;
+  /**
+   * What the account itself was offered and has not taken or left, on a session of its own; one
+   * taken into its store, under the name offered or another; one left.
+   */
+  secretOffers(signal?: AbortSignal): Promise<RestAgentSecretOffers>;
+  takeSecretOffer(id: string, input?: RestAgentSecretOfferTakeInput): Promise<RestAgentSecret>;
+  leaveSecretOffer(id: string): Promise<void>;
   /** The invitation that leads a machine to an agent account (ADR-0088), as it stands; for a supervisor. */
   agentInvitation(handle: string, signal?: AbortSignal): Promise<RestAgentInvitationState>;
   /** Makes the invitation, in place of the one there was: the code this once, and the command to run with it. */
@@ -1742,6 +1763,38 @@ export function createClient(options: ClientOptions = {}): ConsoleClient {
       request("PUT", `${base}${agentPath(handle, "secrets", name)}`, input, restAgentSecretSchema),
     removeAgentSecret: (handle, name) =>
       request("DELETE", `${base}${agentPath(handle, "secrets", name)}`, undefined, undefined),
+    offerAgentSecret: (handle, input) =>
+      request(
+        "POST",
+        `${base}${agentPath(handle, "secret-offers")}`,
+        input,
+        restAgentSecretOfferSchema,
+      ),
+    agentSecretOffers: (handle, signal) =>
+      request(
+        "GET",
+        `${base}${agentPath(handle, "secret-offers")}`,
+        undefined,
+        restAgentSecretOffersSchema,
+        signal,
+      ),
+    secretOffers: (signal) =>
+      request(
+        "GET",
+        `${base}${agentPath("me", "secret-offers")}`,
+        undefined,
+        restAgentSecretOffersSchema,
+        signal,
+      ),
+    takeSecretOffer: (id, input) =>
+      request(
+        "POST",
+        `${base}${agentPath("me", "secret-offers", id, "take")}`,
+        input ?? {},
+        restAgentSecretSchema,
+      ),
+    leaveSecretOffer: (id) =>
+      request("DELETE", `${base}${agentPath("me", "secret-offers", id)}`, undefined, undefined),
     agentSecretAccesses: (handle, query, signal) =>
       request(
         "GET",

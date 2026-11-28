@@ -8,6 +8,7 @@ import type {
   RestAgent,
   RestAgentRunner,
   RestAgentSecret,
+  RestAgentSecretOffer,
   RestArtifact,
   RestCategory,
   RestComment,
@@ -347,6 +348,32 @@ export function formatSecretLine(secret: RestAgentSecret): string {
     ...(secret.expiresOn === null ? [] : [`ends on ${secret.expiresOn}`]),
   ];
   return `${secret.name}  (${facts.join(", ")})`;
+}
+
+/**
+ * One secret offered to an agent account (ADR-0169): the offer's id, the name proposed, who
+ * offers it and through which agent, and how it stands; and, on a line of its own, what the
+ * offerer said it is for, as their words. Never its value.
+ */
+export function formatSecretOffer(offer: RestAgentSecretOffer): string {
+  const who = offer.by === null ? "someone who is gone" : calledOf(offer.by);
+  const ended = moment(offer.decidedAt ?? offer.endsAt);
+  const stands =
+    offer.state === "waiting"
+      ? `waits until ${moment(offer.endsAt)}`
+      : offer.state === "taken"
+        ? `taken ${ended}${offer.takenAs === null || offer.takenAs === offer.name ? "" : ` as ${offer.takenAs}`}`
+        : offer.state === "left"
+          ? `left ${ended}`
+          : `ran out ${ended}`;
+  const facts = [
+    `from ${who}${offer.agent === null ? "" : ` through ${offer.agent}`}`,
+    `offered ${moment(offer.at)}`,
+    stands,
+    ...(offer.expiresOn === null ? [] : [`ends on ${offer.expiresOn}`]),
+  ];
+  const line = `${offer.id}  ${offer.name}  (${facts.join(", ")})`;
+  return offer.note === null ? line : `${line}\n  ${who} says of it: ${offer.note}`;
 }
 
 /** The provider a listing names, as people call it. */

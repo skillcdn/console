@@ -61,6 +61,16 @@ export const MAX_PERSON_NAME_LENGTH = 80;
 export const MAX_AGENT_SECRET_NAME_LENGTH = 64;
 export const MAX_AGENT_SECRET_BYTES = 8 * 1024;
 export const MAX_AGENT_SECRETS = 200;
+/**
+ * A secret a member offers an agent account (ADR-0169): what it is for, in a line; how many
+ * offers wait for one account at once, and how many of them one member's; how long one waits
+ * before it is gone; and how many the account's record of them keeps once they no longer wait.
+ */
+export const MAX_SECRET_OFFER_NOTE_LENGTH = 200;
+export const MAX_SECRET_OFFERS_WAITING = 20;
+export const MAX_SECRET_OFFERS_BY_ONE = 5;
+export const SECRET_OFFER_DAYS = 7;
+export const MAX_SECRET_OFFERS_KEPT = 200;
 /** What a signal says to an agent (ADR-0085): a few paragraphs. */
 export const MAX_SIGNAL_LENGTH = 8000;
 /** What a wake a runner raises itself is about, in a line: a thread at a messenger, say. */

@@ -31,6 +31,8 @@ import {
   AgentElsewhereList,
   AgentRunnerFacts,
   AgentSecretList,
+  AgentSecretOfferForm,
+  AgentSecretOfferList,
   AgentSessionList,
   AgentStateBadge,
   AgentUsage,
@@ -4204,6 +4206,81 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     expect(seen).toContain('type="password"');
     expect(seen).toContain("only the account reads it back");
     expect(seen.match(/>Remove</g)).toHaveLength(2);
+  });
+
+  it("lists the secrets offered to an account by name, with who offers each and how it stands (ADR-0169)", () => {
+    const offer = {
+      id: "0199c4d8-0000-7000-8000-0000000000a1",
+      name: "mail.password",
+      note: "for the support mailbox",
+      by: alice,
+      agent: null,
+      expiresOn: null,
+      state: "waiting",
+      at: WHEN,
+      endsAt: "2026-10-16T10:00:00.000Z",
+      decidedAt: null,
+      takenAs: null,
+    } as const;
+    const offers = (
+      <AgentSecretOfferList
+        offers={[
+          offer,
+          {
+            ...offer,
+            id: "0199c4d8-0000-7000-8000-0000000000a2",
+            name: "git.token",
+            by: null,
+            state: "taken",
+            takenAs: "git.spare",
+          },
+          { ...offer, id: "0199c4d8-0000-7000-8000-0000000000a3", name: "old", state: "lapsed" },
+          { ...offer, id: "0199c4d8-0000-7000-8000-0000000000a4", name: "no", state: "left" },
+        ]}
+      />
+    );
+    const seen = renderToStaticMarkup(offers);
+    expect(seen).toContain(
+      '<ul class="sc-divided sc-agent-secret-list" aria-label="Offered secrets">',
+    );
+    expect(seen).toContain("<code>mail.password</code>");
+    expect(seen).toContain("Alice Example");
+    expect(seen).toContain("Someone who is gone");
+    expect(seen).toContain("as git.spare");
+    for (const state of ["Waiting", "Taken", "Ran out", "Left"]) {
+      expect(seen).toContain(`>${state}</span>`);
+    }
+    // A row says the name, who and when: what the offerer wrote of it is not drawn here.
+    expect(seen).not.toContain("support mailbox");
+    const korean = renderToStaticMarkup(
+      <LanguageContext.Provider value={KOREAN}>{offers}</LanguageContext.Provider>,
+    );
+    for (const state of ["대기 중", "받음", "기한 지남", "받지 않음"]) {
+      expect(korean).toContain(`>${state}</span>`);
+    }
+    expect(korean).toContain("git.spare(으)로");
+  });
+
+  it("offers an account a secret from a form whose value is typed unseen (ADR-0169)", () => {
+    const form = <AgentSecretOfferForm account="Mira" onOffer={() => undefined} />;
+    const seen = renderToStaticMarkup(form);
+    expect(seen).toContain('<form class="sc-form" aria-label="Offer a secret">');
+    expect(seen).toContain('type="password"');
+    expect(seen).toContain('autoComplete="new-password"');
+    expect(seen).toContain(">What it is for</span>");
+    expect(seen).toContain('maxLength="200"');
+    expect(seen).toContain(
+      "Mira is told, and takes it or leaves it. The value is typed here once and shown to nobody; an offer not taken is gone after 7 days.",
+    );
+    // With no name and no value, there is nothing to offer yet.
+    expect(seen).toContain(
+      '<button disabled="" type="submit" class="sc-button sc-button-primary">Offer</button>',
+    );
+    expect(
+      renderToStaticMarkup(
+        <LanguageContext.Provider value={KOREAN}>{form}</LanguageContext.Provider>,
+      ),
+    ).toContain("받지 않은 제안은 7일 뒤 사라집니다.");
   });
 
   it("shows the invitation under the account: the one line once, and never the code again (ADR-0088)", () => {

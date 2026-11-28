@@ -20,6 +20,8 @@ import {
   AgentElsewhereList,
   AgentRunnerFacts,
   AgentSecretList,
+  AgentSecretOfferForm,
+  AgentSecretOfferList,
   AgentSessionList,
   AgentStateBadge,
   AgentUsage,
@@ -679,6 +681,68 @@ function AgentSessions(props: {
   );
 }
 
+/** How many offers that no longer wait a member is shown of their own, beside those that wait. */
+const OFFERS_SHOWN_AFTER = 3;
+
+/**
+ * Under an agent's plate, for whoever sees the account and supervises it not (ADR-0169): the
+ * way to offer it a secret, and how their own offers stand. For the account itself, what it was
+ * offered that waits, which it takes or leaves with its command.
+ */
+function AgentOffers(props: {
+  readonly client: ConsoleClient;
+  readonly agent: RestAgent;
+  readonly handle: string;
+  /** Whether the page is the account's own. */
+  readonly own: boolean;
+}) {
+  const words = useWords().agents.page.offers;
+  const { client, agent, handle, own } = props;
+  const { busy, error, act } = useAction();
+  const read = useCallback(
+    (signal: AbortSignal) =>
+      own ? client.secretOffers(signal) : client.agentSecretOffers(handle, signal),
+    [client, handle, own],
+  );
+  const found = useRead(read);
+  const all = found.value?.items ?? [];
+  const waiting = all.filter((offer) => offer.state === "waiting");
+  const shown = own
+    ? waiting
+    : [
+        ...waiting,
+        ...all.filter((offer) => offer.state !== "waiting").slice(0, OFFERS_SHOWN_AFTER),
+      ];
+  if (own && shown.length === 0) {
+    return null;
+  }
+  return (
+    <section className="sc-panel" aria-label={own ? words.title : words.offerTitle}>
+      <h2 className="sc-section-title">{own ? words.title : words.offerTitle}</h2>
+      {error !== undefined && <Callout tone="danger">{error}</Callout>}
+      {shown.length > 0 && <AgentSecretOfferList offers={shown} />}
+      {own ? (
+        <p className="sc-field-hint">{words.own}</p>
+      ) : (
+        <AgentSecretOfferForm
+          account={personName(agent.person)}
+          busy={busy}
+          onOffer={(offer) =>
+            void act(async () => {
+              await client.offerAgentSecret(handle, {
+                name: offer.name,
+                value: offer.value,
+                ...(offer.note === undefined ? {} : { note: offer.note }),
+              });
+              found.again();
+            })
+          }
+        />
+      )}
+    </section>
+  );
+}
+
 /** What is kept of the agent: its runner, where it is signed in, what it runs with, its secrets by name, its persona. */
 function AgentSettings(props: {
   readonly client: ConsoleClient;
@@ -699,6 +763,13 @@ function AgentSettings(props: {
     [client, handle],
   );
   const secrets = useRead(readSecrets);
+  const readOffers = useCallback(
+    (signal: AbortSignal) => client.agentSecretOffers(handle, signal),
+    [client, handle],
+  );
+  const offers = useRead(readOffers);
+  /** What members offered the account that it has neither taken nor left (ADR-0169). */
+  const offered = (offers.value?.items ?? []).filter((offer) => offer.state === "waiting");
   const readSignIns = useCallback(
     (signal: AbortSignal) =>
       viaToken ? Promise.resolve(undefined) : client.agentSignIns(handle, signal),
@@ -894,6 +965,13 @@ function AgentSettings(props: {
             }
           />
         </section>
+        {offered.length > 0 && (
+          <section className="sc-panel" aria-label={page.offers.title}>
+            <h2 className="sc-section-title">{page.offers.title}</h2>
+            <AgentSecretOfferList offers={offered} />
+            <p className="sc-field-hint">{page.offers.waits(personName(agent.person))}</p>
+          </section>
+        )}
       </div>
     </div>
   );
@@ -910,6 +988,8 @@ export interface AgentPageProps {
   readonly providers?: readonly RestProvider[] | undefined;
   /** The agent's plate, which the console draws as it draws a person's. */
   readonly work: (agent: RestAgent) => ReactNode;
+  /** The member who looks at the page, by their id: the account itself is offered no secret of its own. */
+  readonly me?: string | undefined;
 }
 
 /**
@@ -1007,7 +1087,18 @@ export function AgentPage(props: AgentPageProps) {
         </nav>
       )}
       {view === "work" ? (
-        props.work(agent)
+        <>
+          {props.work(agent)}
+          {/* A supervisor seeds a secret among what is kept of the agent; anyone else offers one. */}
+          {!agent.supervised && props.me !== undefined && (
+            <AgentOffers
+              client={client}
+              agent={agent}
+              handle={handle}
+              own={props.me === person.id}
+            />
+          )}
+        </>
       ) : view === "closed" ? (
         <EmptyState title={words.notSupervised.title} body={words.notSupervised.body} />
       ) : view === "live" ? (

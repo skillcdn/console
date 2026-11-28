@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -4286,6 +4287,221 @@ describe("configuring, as the person", () => {
     expect(removed.out()).toBe("The secret mail.password of @mira is removed.\n");
     const unsaid = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["agent", "secret", "mira"], unsaid.io)).toBe(EXIT.usage);
+  });
+
+  it("offers an agent account a secret for any member, and says how the offers stand (ADR-0169)", async () => {
+    const id = randomUUID();
+    const offered = {
+      id,
+      name: "mail.password",
+      note: "for the support mailbox",
+      by: PERSON,
+      agent: "Claude Code on laptop",
+      expiresOn: "2027-11-10",
+      state: "waiting",
+      at: WHEN,
+      endsAt: "2026-10-16T10:00:00.000Z",
+      decidedAt: null,
+      takenAs: null,
+    };
+    const taken = {
+      ...offered,
+      id: randomUUID(),
+      note: null,
+      agent: null,
+      expiresOn: null,
+      state: "taken",
+      decidedAt: "2026-10-10T08:00:00.000Z",
+      takenAs: "mail.spare",
+    };
+    const refusal = {
+      status: 403,
+      body: { error: { code: "auth.forbidden", message: "Only a supervisor may do this." } },
+    };
+    const { fetch, calls } = fakeConsole({
+      "POST /api/v1/agents/mira/secret-offers": { status: 201, body: offered },
+      "GET /api/v1/agents/mira/secret-offers": [
+        { body: { items: [offered, taken] } },
+        { body: { items: [] } },
+      ],
+      "PUT /api/v1/agents/mira/secrets/mail.password": refusal,
+    });
+    // The value is typed unseen or piped, as a seeded one is, and is said nowhere.
+    const value = `drawn-${randomUUID()}`;
+    const offer = harness({ fetch, env: SIGNED_IN, readStdin: async () => `${value}\n` });
+    expect(
+      await runCli(
+        [
+          "agent",
+          "secret",
+          "@mira",
+          "mail.password",
+          "--offer",
+          "--note",
+          " for the support mailbox ",
+          "--expires",
+          "2027-11-10",
+        ],
+        offer.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe("POST /api/v1/agents/mira/secret-offers");
+    expect(calls.at(-1)?.body).toEqual({
+      name: "mail.password",
+      value,
+      note: "for the support mailbox",
+      expiresOn: "2027-11-10",
+    });
+    expect(offer.out()).toBe(
+      `Offered to @mira, which is told and takes it into its store or leaves it: ${id}  mail.password  (from alice through Claude Code on laptop, offered ${WHEN}, waits until 2026-10-16T10:00:00.000Z, ends on 2027-11-10)\n  alice says of it: for the support mailbox\nNothing @mira keeps changed, and nobody is answered the value. How it stands: console agent secrets mira --offered\n`,
+    );
+    expect(offer.out()).not.toContain(value);
+    // With nothing said of it, nothing is sent of a note.
+    const bare = harness({ fetch, env: SIGNED_IN, readStdin: async () => `${value}\n` });
+    expect(await runCli(["agent", "secret", "mira", "mail.password", "--offer"], bare.io)).toBe(
+      EXIT.ok,
+    );
+    expect(calls.at(-1)?.body).toEqual({ name: "mail.password", value });
+
+    // How the offers stand: the record for a supervisor, one's own offers for anyone else.
+    const stand = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "secrets", "mira", "--offered"], stand.io)).toBe(EXIT.ok);
+    expect(stand.out()).toContain(
+      `${id}  mail.password  (from alice through Claude Code on laptop`,
+    );
+    expect(stand.out()).toContain(
+      `${taken.id}  mail.password  (from alice, offered ${WHEN}, taken 2026-10-10T08:00:00.000Z as mail.spare)\n`,
+    );
+    const none = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["agent", "secrets", "mira", "--offered"], none.io)).toBe(EXIT.ok);
+    expect(none.out()).toBe("Nothing was offered to @mira that is yours to read.\n");
+
+    // Whoever seeds without supervising the account is told what is theirs to do in its place.
+    const seeding = harness({ fetch, env: SIGNED_IN, readStdin: async () => `${value}\n` });
+    expect(await runCli(["agent", "secret", "mira", "mail.password"], seeding.io)).toBe(
+      EXIT.failed,
+    );
+    expect(seeding.err()).toBe(
+      'auth.forbidden: only a supervisor of @mira sets a secret in its store. Any member may offer one, which @mira takes or leaves itself: say the same again with --offer, and with --note "<what it is for>".\n',
+    );
+    expect(seeding.err()).not.toContain(value);
+
+    // A mistake is answered with a sentence, and nothing is asked of the console.
+    const asked = calls.length;
+    for (const [args, says] of [
+      [["agent", "secret", "mira", "x", "--note", "why"], "--note says what an offered secret"],
+      [["agent", "secret", "mira", "x", "--offer", "--remove"], "Say one of --offer and --remove."],
+      [["agent", "secret", "mira", "--offer"], "Say whose and which"],
+    ] as const) {
+      const wrong = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli([...args], wrong.io), args.join(" ")).toBe(EXIT.usage);
+      expect(wrong.err()).toContain(says);
+      expect(wrong.err()).toContain("console help agent secret");
+    }
+    expect(calls).toHaveLength(asked);
+  });
+
+  it("lists what an agent account was offered, and takes an offer or leaves it (ADR-0169)", async () => {
+    const id = randomUUID();
+    const offered = {
+      id,
+      name: "git.token",
+      note: "the token of the docs repository",
+      by: { ...PERSON, login: "acme-juno", kind: "agent", handle: "juno" },
+      agent: null,
+      expiresOn: null,
+      state: "waiting",
+      at: WHEN,
+      endsAt: "2026-10-16T10:00:00.000Z",
+      decidedAt: null,
+      takenAs: null,
+    };
+    const kept = { name: "git.spare", setAt: WHEN, seeded: false, expiresOn: null };
+    const { fetch, calls } = fakeConsole({
+      "GET /api/v1/agents/me/secret-offers": [
+        { body: { items: [offered] } },
+        { body: { items: [] } },
+      ],
+      [`POST /api/v1/agents/me/secret-offers/${id}/take`]: [
+        {
+          status: 409,
+          body: { error: { code: "secret.exists", message: "the account keeps a secret" } },
+        },
+        {
+          status: 409,
+          body: { error: { code: "secret.exists", message: "the account keeps a secret" } },
+        },
+        { body: kept },
+      ],
+      [`DELETE /api/v1/agents/me/secret-offers/${id}`]: { status: 204 },
+    });
+    const waits = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["secrets", "--offered"], waits.io)).toBe(EXIT.ok);
+    expect(waits.out()).toBe(
+      `${id}  git.token  (from @juno, offered ${WHEN}, waits until 2026-10-16T10:00:00.000Z)\n  @juno says of it: the token of the docs repository\nTake one into your store: console secret --accept <offer id> [--as <name>] [--replace]  |  leave one: console secret --decline <offer id>\n`,
+    );
+    const none = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["secrets", "--offered"], none.io)).toBe(EXIT.ok);
+    expect(none.out()).toBe("No offered secret waits for you.\n");
+
+    // A name the account keeps already: the offer still waits, and the two ways on are said.
+    const there = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["secret", "--accept", id], there.io)).toBe(EXIT.failed);
+    expect(calls.at(-1)?.body).toEqual({});
+    expect(there.err()).toBe(
+      "secret.exists: you keep a secret of the name it was offered under already, and the offer still waits. Take it under another name with --as <name>, or in the place of the one you keep with --replace.\n",
+    );
+    const named = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["secret", "--accept", id, "--as", "git.spare"], named.io)).toBe(
+      EXIT.failed,
+    );
+    expect(named.err()).toContain("you keep a secret named git.spare already");
+    const taken = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(["secret", "--accept", id, "--as", "git.spare", "--replace"], taken.io),
+    ).toBe(EXIT.ok);
+    expect(calls.at(-1)?.body).toEqual({ as: "git.spare", replace: true });
+    expect(taken.out()).toBe(`Taken into your store: git.spare  (set ${WHEN})\n`);
+    const left = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["secret", "--decline", id], left.io)).toBe(EXIT.ok);
+    expect(calls.at(-1)?.key).toBe(`DELETE /api/v1/agents/me/secret-offers/${id}`);
+    expect(left.out()).toBe(`The offer ${id} is left, and its value is gone.\n`);
+
+    // What the console refuses is said as it says it.
+    const gone = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["secret", "--decline", randomUUID()], gone.io)).toBe(EXIT.failed);
+
+    // A mistake is answered with a sentence, and nothing is asked of the console.
+    const asked = calls.length;
+    for (const [args, says] of [
+      [["secret", "--accept"], "Say which offer, by its id as console secrets --offered lists it"],
+      [
+        ["secret", "--accept", id, "--decline"],
+        "Say one of --accept, --decline, --set and --remove.",
+      ],
+      [["secret", "--accept", id, "--set"], "Say one of --accept, --decline, --set and --remove."],
+      [["secret", "--decline", id, "--as", "x"], "--as and --replace go with --accept"],
+      [["secret", "git.token", "--replace"], "--as and --replace go with --accept."],
+      [["secrets", "offered"], ""],
+    ] as const) {
+      const wrong = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli([...args], wrong.io), args.join(" ")).toBe(EXIT.usage);
+      expect(wrong.err()).toContain(says);
+    }
+    expect(calls).toHaveLength(asked);
+    // The forms have a page of their own, which the page of the command names.
+    const help = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["help", "secret", "decline"], help.io)).toBe(EXIT.ok);
+    expect(
+      help
+        .out()
+        .startsWith(
+          "console secret --accept <offer id> [--as <name>] [--replace]\nconsole secret --decline <offer id>\n\n",
+        ),
+    ).toBe(true);
+    const page = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["help", "secret"], page.io)).toBe(EXIT.ok);
+    expect(page.out()).toContain("\n  accept, decline: A secret a member offered you");
   });
 
   it("sends an agent account a signal for a supervisor, and reads the record of them (ADR-0085)", async () => {

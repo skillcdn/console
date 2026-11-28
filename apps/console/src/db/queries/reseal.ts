@@ -2,6 +2,7 @@ import { and, asc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import type { Rotation, SealPurpose } from "../../auth/secrets.js";
 import { type Database, type Drizzle, drizzleOf } from "../client.js";
 import {
+  agentSecretOffers,
   agentSecrets,
   packConnects,
   pluginKeyedSecrets,
@@ -25,6 +26,7 @@ export const SEALED_KINDS = [
   "pluginSecrets",
   "pluginKeyedSecrets",
   "agentSecrets",
+  "agentSecretOffers",
 ] as const;
 
 export type SealedKind = (typeof SEALED_KINDS)[number];
@@ -295,6 +297,35 @@ const agentStore: SealedStore<AgentSecretKey> = {
     ).length === 1,
 };
 
+// A secret offered to an agent account and still waiting (ADR-0169): sealed for the account
+// and the offer, and sealed again as it was. One that no longer waits holds no value.
+const agentOffers: SealedStore<string> = {
+  kind: "agentSecretOffers",
+  purpose: "agent-secret",
+  page: async (db, after) =>
+    (
+      await db
+        .select({ key: agentSecretOffers.id, sealed: agentSecretOffers.sealed })
+        .from(agentSecretOffers)
+        .where(
+          and(
+            isNotNull(agentSecretOffers.sealed),
+            after === undefined ? undefined : gt(agentSecretOffers.id, after),
+          ),
+        )
+        .orderBy(asc(agentSecretOffers.id))
+        .limit(PAGE)
+    ).flatMap((row) => (row.sealed === null ? [] : [{ key: row.key, sealed: row.sealed }])),
+  write: async (db, id, was, next) =>
+    (
+      await db
+        .update(agentSecretOffers)
+        .set({ sealed: next })
+        .where(and(eq(agentSecretOffers.id, id), eq(agentSecretOffers.sealed, was)))
+        .returning({ id: agentSecretOffers.id })
+    ).length === 1,
+};
+
 /** Reads one kind through, page by page, and writes again what only the secret before opens. */
 async function pass<Key>(
   db: Drizzle,
@@ -369,6 +400,7 @@ export async function resealAll(database: Database, rotation: Rotation): Promise
     await resealKind(db, rotation, pluginSettings),
     await resealKind(db, rotation, pluginKeyedSettings),
     await resealKind(db, rotation, agentStore),
+    await resealKind(db, rotation, agentOffers),
   ];
 }
 

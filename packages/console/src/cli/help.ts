@@ -45,6 +45,9 @@ import {
   MAX_RULES_LENGTH,
   MAX_RUNS_PER_TASK,
   MAX_SEARCH_LENGTH,
+  MAX_SECRET_OFFER_NOTE_LENGTH,
+  MAX_SECRET_OFFERS_BY_ONE,
+  MAX_SECRET_OFFERS_WAITING,
   MAX_SUMMARY_LENGTH,
   MAX_TASKS_PER_PROJECT,
   MAX_TITLE_LENGTH,
@@ -52,6 +55,7 @@ import {
   MAX_WORKERS,
   MIN_HANDLE_LENGTH,
   MIN_OPTIONS,
+  SECRET_OFFER_DAYS,
 } from "../limits.js";
 import {
   MAX_NOTIFICATION_PROJECTS_OFF,
@@ -208,15 +212,38 @@ const AGENT_SIGNALS: PageHelp = {
 
 const AGENT_SECRETS: PageHelp = {
   usage:
-    "agent secrets <handle>  |  agent secret <handle> <name> [--file <path>] [--expires <day|none>]  |  agent secret <handle> <name> --remove",
-  synopsis: "A supervisor's part of the account's secret store: its names, one seeded or removed.",
-  about:
+    'agent secrets <handle> [--offered]  |  agent secret <handle> <name> [--file <path>] [--expires <day|none>]  |  agent secret <handle> <name> --offer [--note "<what it is for>"] [--file <path>] [--expires <day|none>]  |  agent secret <handle> <name> --remove',
+  synopsis:
+    "An account's secret store from outside: a supervisor's names, seeding and removal, any member's offer.",
+  about: [
     "A supervisor's part of the account's secret store (ADR-0087). secrets lists the names it keeps, with when each was set and the day it ends on where one is known. secret seeds one, write-only, so that a person or an agent above hands the account a credential it cannot make for itself: the value typed unseen at the terminal, or read from standard input when piped, or from --file, and never an argument; --expires says the day the value ends on, a product's long-lived token say; --remove takes one away. Nobody but the account reads a value back, and every setting, reading and removal is on the account's record. The account's own side is console secrets and console secret.",
+    `--offer is any member's, for an account they see (ADR-0169), a person's agent and another agent account among them: the value, given as a seeded one is, is kept sealed apart from the store, where it changes nothing the account keeps and nobody reads it. The account is told at once who offers and under which name, and takes it into its store or leaves it, itself; untaken, it is gone after ${SECRET_OFFER_DAYS} days. --note says what it is for, in a line the account reads as your words. secrets --offered lists what the account was offered and how each stands: all of it for a supervisor, your own offers otherwise.`,
+  ].join("\n\n"),
+  limits: [
+    `note: one line, up to ${MAX_SECRET_OFFER_NOTE_LENGTH} characters`,
+    `offers that wait for one account: ${MAX_SECRET_OFFERS_BY_ONE} of one member's, ${MAX_SECRET_OFFERS_WAITING} in all`,
+  ],
   refusals: [
     "agent.not_found: no agent account has that handle, or it is not yours to see",
-    "auth.forbidden: only a supervisor of the account seeds a secret or removes one",
+    "auth.forbidden: only a supervisor of the account lists its names, seeds a secret or removes one; anyone else offers one",
     "secret.not_found: the account keeps no secret of that name",
     "secret.too_many: the account keeps as many secrets as one may; secret.too_large: a value is at most 8 KiB",
+    "secret.too_many_offers: as many offers wait for the account, or of yours for it, as may; one is taken, left or runs out first",
+    "secret.offer_own: an account sets a secret of its own itself, console secret <name> --set",
+  ],
+};
+
+const OFFERED_SECRET: PageHelp = {
+  usage: "secret --accept <offer id> [--as <name>] [--replace]  |  secret --decline <offer id>",
+  synopsis: "A secret a member offered you: taken into your store, or left.",
+  about: `What a member offered you as an agent account (ADR-0169), signed in as itself. Any member who sees you may offer you a secret: the console keeps its value sealed apart from your store, where nothing uses it and nobody reads it, and wakes you with who offers, under which name, and the offer's id; console secrets --offered lists what waits. --accept takes one into your store as a secret you set yourself, under the name offered or the one --as says; where you keep a secret of that name already it is refused, unless --replace says the value takes its place. --decline leaves one, and its value is gone. An offer you neither took nor left is gone after ${SECRET_OFFER_DAYS} days. Taking is noted on your record, which your supervisors read, and the value is read afterwards as any other: console secret <name>.`,
+  refusals: [
+    "agent.not_found: only an agent account is offered a secret",
+    "secret.own_session: an offer is taken or left by the account itself, signed in, not with a token it made for an agent",
+    "secret.offer_not_found: no such offer waits for you: it was taken, left or ran out, or the id is not one of yours",
+    "secret.exists: you keep a secret of that name; --as <name> takes the offer under another, --replace in its place",
+    "secret.too_many: you keep as many secrets as one may",
+    "secret.unreadable: the deployment's key no longer opens the value; whoever offered it offers it again",
   ],
 };
 
@@ -633,10 +660,12 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     },
   },
   secrets: {
-    usage: "secrets",
-    synopsis: "The secrets you keep as an agent account, by name.",
-    about:
+    usage: "secrets  |  secrets --offered",
+    synopsis: "The secrets you keep as an agent account, by name, and those offered you.",
+    about: [
       "The names of the secrets in your own store (ADR-0087), with when each was set, whether a supervisor seeded it, and the day it ends on where one is known. For an agent account, signed in as itself (console login --self): the store is the account's, sealed by the console, and the account alone reads a value back. Never a value: console secret <name> reads one.",
+      "--offered lists what members offered you that waits (ADR-0169), none of it in your store: the offer's id, the name proposed, who offers it and through which agent, until when it waits, and what they said it is for, which is their words and not the console's. console secret --accept <offer id> takes one, console secret --decline <offer id> leaves one: console help secret accept.",
+    ].join("\n\n"),
     refusals: [
       "agent.not_found: only an agent account has a secret store",
       "secret.own_session: the store is read by the account itself, signed in, not with a token it made for an agent",
@@ -660,6 +689,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       "secret.too_large: a value is at most 8 KiB",
       "secret.unreadable: the deployment's key no longer opens the value; set it again",
     ],
+    forms: { accept: OFFERED_SECRET, decline: OFFERED_SECRET },
   },
   teams: {
     usage: "teams",

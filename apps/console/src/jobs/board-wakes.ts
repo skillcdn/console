@@ -2,6 +2,7 @@ import { MAX_OWN_WAKES_PER_HOUR } from "@skillcdn/console/api";
 import type { Database } from "../db/client.js";
 import { drizzleOf } from "../db/client.js";
 import { RunnerError, sendSignal } from "../db/queries/agent-runners.js";
+import { lapseSecretOffers } from "../db/queries/agent-secret-offers.js";
 import { dueOwnWakes, OwnWakeGone, takeOwnWake } from "../db/queries/agent-wakes.js";
 import {
   accountsToBrief,
@@ -230,6 +231,9 @@ export class BoardWakes {
           const scheduled = { now, today, clock: clockIn(settings.timeZone, now) };
           woke += await this.#brief(workspaceId, settings.weekStart, scheduled);
           woke += await this.#warn(workspaceId, scheduled);
+          // An offered secret whose days ran out (ADR-0169): its value is gone from the row
+          // from here on, whoever reads the account's listing or does not. Nobody is woken.
+          await lapseSecretOffers(this.#database, workspaceId, now);
           woke += await this.#own(workspaceId, now);
         }
         return { woke, more, failed };

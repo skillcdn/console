@@ -768,6 +768,13 @@ async function seedAgents(
     await own.setSecret("slack.token", { value: "invented-for-the-preview" });
     await admin.seedAgentSecret("mira", "preview.password", { value: "invented-for-the-preview" });
     await own.secret("git.token");
+    // What a colleague who supervises her not handed her, which she has neither taken nor left
+    // (ADR-0169): her supervisor's page and her own show it waiting.
+    await cast.as("dana").offerAgentSecret("mira", {
+      name: "staging.password",
+      value: "invented-for-the-preview",
+      note: "The staging site's sign-in, for the release check.",
+    });
 
     const before = await runner.beginAgentSession({
       product,

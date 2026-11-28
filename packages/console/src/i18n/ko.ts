@@ -189,6 +189,12 @@ export const ko: Messages = {
     "secret.unreadable": "이 배포의 키로 값을 열 수 없습니다. 값을 가진 사람이 다시 넣어야 합니다.",
     "secret.own_session":
       "시크릿 저장소는 계정 자신이 로그인해서 읽습니다. 계정이 만든 토큰으로는 읽을 수 없습니다.",
+    "secret.exists":
+      "계정에 같은 이름의 시크릿이 이미 있습니다. 계정이 다른 이름으로 받거나, 바꾸겠다고 한 경우에만 그 자리에 받습니다.",
+    "secret.offer_not_found": "계정에 대기 중인 그런 제안이 없습니다.",
+    "secret.too_many_offers":
+      "이 계정에 대기할 수 있는 만큼의 제안이 이미 있습니다. 하나를 받거나, 받지 않거나, 기한이 지나야 합니다.",
+    "secret.offer_own": "계정 자신의 시크릿은 계정이 직접 넣습니다.",
     "agent.own_command":
       "계정 자신만 할 수 있는 요청입니다. 계정으로 로그인한 명령의 러너가 요청합니다.",
     "signal.not_offered": "에이전트의 제품이 제공하지 않는 모델 또는 추론 강도입니다.",
@@ -1962,6 +1968,24 @@ export const ko: Messages = {
       notFound: {
         title: "그런 에이전트 계정이 없습니다",
         body: "없는 계정이거나, 볼 수 없는 계정입니다.",
+      },
+      offers: {
+        title: "제안된 시크릿",
+        offerTitle: "시크릿 제안",
+        offerAria: "시크릿 제안",
+        intro: (name: string, days: number) =>
+          `${name}에게 알려지며, 받을지 말지는 계정이 직접 정합니다. 값은 여기에 한 번 입력하면 누구에게도 보이지 않으며, 받지 않은 제안은 ${days}일 뒤 사라집니다.`,
+        waits: (name: string) =>
+          `받을지 말지는 ${name} 계정이 직접 정합니다. 값은 보이지 않습니다.`,
+        own: "명령으로 받거나 받지 않습니다: console secrets --offered",
+        name: "이름",
+        namePlaceholder: "mail.password",
+        value: "값",
+        note: "용도",
+        offer: "제안",
+        someone: "지금은 없는 사람",
+        takenAs: (name: string) => `${name}(으)로`,
+        state: { waiting: "대기 중", taken: "받음", left: "받지 않음", lapsed: "기한 지남" },
       },
       notSupervised: {
         title: "감독자만 볼 수 있습니다",

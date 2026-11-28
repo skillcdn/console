@@ -13,17 +13,22 @@ import { reasonMoment } from "../agent-state.js";
 import {
   type AgentState,
   type FileUpload,
+  isSecretName,
+  MAX_AGENT_SECRET_NAME_LENGTH,
   MAX_FILE_BYTES,
+  MAX_SECRET_OFFER_NOTE_LENGTH,
   MAX_SIGNAL_ATTACHMENTS,
   MAX_SIGNAL_LENGTH,
   type RestAgent,
   type RestAgentRunner,
   type RestAgentSecret,
+  type RestAgentSecretOffer,
   type RestAgentSession,
   type RestAgentUsageWindow,
   type RestPerson,
   type RestSignal,
   type RestTranscriptEvent,
+  SECRET_OFFER_DAYS,
   usageNear,
   usageSaidTogether,
   usedHundredths,
@@ -2618,6 +2623,130 @@ export function AgentElsewhereList(props: {
       )}
       <p className="sc-field-hint">{words.intro}</p>
     </div>
+  );
+}
+
+export interface AgentSecretOfferListProps {
+  readonly offers: readonly RestAgentSecretOffer[];
+}
+
+/** What a secret offered to an account stands as, in the tone a badge says it in. */
+const OFFER_TONES = {
+  waiting: "accent",
+  taken: "success",
+  left: "neutral",
+  lapsed: "neutral",
+} as const;
+
+/**
+ * The secrets offered to an agent account (ADR-0169), a row each: the name proposed, who offers
+ * it and when, and how the offer stands. Never a value.
+ */
+export function AgentSecretOfferList(props: AgentSecretOfferListProps) {
+  const words = useWords().agents.page.offers;
+  return (
+    <ul className="sc-divided sc-agent-secret-list" aria-label={words.title}>
+      {props.offers.map((offer) => (
+        <li key={offer.id} className="sc-small sc-agent-secret">
+          <code>{offer.name}</code>
+          <span className="sc-muted">
+            {offer.by === null ? words.someone : personName(offer.by)}
+            {" · "}
+            <Time iso={offer.at} precision="day" />
+            {offer.takenAs !== null && offer.takenAs !== offer.name && (
+              <>
+                {" · "}
+                {words.takenAs(offer.takenAs)}
+              </>
+            )}
+          </span>
+          <Badge tone={OFFER_TONES[offer.state]} kind="state">
+            {words.state[offer.state]}
+          </Badge>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export interface AgentSecretOfferFormProps {
+  /** What the account is called, for the line that says what becomes of an offer. */
+  readonly account: string;
+  readonly busy?: boolean | undefined;
+  /** Offers a secret: the account takes it or leaves it, and nobody reads the value back. */
+  readonly onOffer: (offer: {
+    readonly name: string;
+    readonly value: string;
+    readonly note: string | undefined;
+  }) => void;
+}
+
+/** The way a member offers an agent account a secret (ADR-0169): its name, its value, typed unseen, and what it is for. */
+export function AgentSecretOfferForm(props: AgentSecretOfferFormProps) {
+  const words = useWords().agents.page.offers;
+  const [name, setName] = useState("");
+  const [value, setValue] = useState("");
+  const [note, setNote] = useState("");
+  const busy = props.busy === true;
+  const ready = isSecretName(name.trim()) && value.length > 0;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!ready || busy) {
+      return;
+    }
+    props.onOffer({
+      name: name.trim(),
+      value,
+      note: note.trim().length === 0 ? undefined : note.trim(),
+    });
+    setName("");
+    setValue("");
+    setNote("");
+  };
+  return (
+    <form className="sc-form" aria-label={words.offerAria} onSubmit={submit}>
+      <div className="sc-field-row">
+        <label className="sc-field">
+          <span className="sc-field-label">{words.name}</span>
+          <input
+            className="sc-input"
+            placeholder={words.namePlaceholder}
+            value={name}
+            maxLength={MAX_AGENT_SECRET_NAME_LENGTH}
+            autoComplete="off"
+            spellCheck={false}
+            aria-invalid={name.trim() !== "" && !isSecretName(name.trim())}
+            onChange={(event) => setName(event.target.value.toLowerCase())}
+          />
+        </label>
+        <label className="sc-field">
+          <span className="sc-field-label">{words.value}</span>
+          <input
+            className="sc-input"
+            type="password"
+            value={value}
+            autoComplete="new-password"
+            onChange={(event) => setValue(event.target.value)}
+          />
+        </label>
+      </div>
+      <label className="sc-field">
+        <span className="sc-field-label">{words.note}</span>
+        <input
+          className="sc-input"
+          value={note}
+          maxLength={MAX_SECRET_OFFER_NOTE_LENGTH}
+          autoComplete="off"
+          onChange={(event) => setNote(event.target.value)}
+        />
+      </label>
+      <p className="sc-field-hint">{words.intro(props.account, SECRET_OFFER_DAYS)}</p>
+      <div className="sc-form-actions">
+        <Button type="submit" variant="primary" disabled={busy || !ready}>
+          {words.offer}
+        </Button>
+      </div>
+    </form>
   );
 }
 

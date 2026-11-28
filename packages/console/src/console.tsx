@@ -3586,6 +3586,7 @@ function WorkspacePage(props: {
         client={client}
         viaToken={holdsToken(data)}
         providers={data.me?.signIn}
+        me={data.me?.person?.id}
         work={(agent) => (
           <AgentWork agent={agent} data={data} components={components} week={route.week} />
         )}

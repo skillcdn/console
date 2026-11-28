@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { AUTH_ROUTES, SIGN_IN_PARAM } from "@skillcdn/console/api";
 import { and, asc, count, eq, sql } from "drizzle-orm";
@@ -6,11 +7,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createRotation, createSecrets } from "../auth/secrets.js";
 import { ConfigError, loadConfig } from "../config/config.js";
 import { drizzleOf } from "../db/client.js";
+import {
+  leaveSecretOffer,
+  offerSecret,
+  takeSecretOffer,
+} from "../db/queries/agent-secret-offers.js";
 import { readSecret, setSecret } from "../db/queries/agent-secrets.js";
 import { startPackConnect } from "../db/queries/pack-connects.js";
 import { resealAll, type SEALED_KINDS } from "../db/queries/reseal.js";
 import {
   agentSecretAccesses,
+  agentSecretOffers,
   agentSecrets,
   packConnects,
   people,
@@ -43,6 +50,9 @@ let h: Harness;
 let workspaceId: string;
 let projectId: string;
 let aliceId: string;
+/** The offer that waits through the rotation, and what it holds: drawn when the test runs. */
+let offerId: string;
+const OFFERED = `offered ${randomUUID()}`;
 
 const before = createSecrets(OLD);
 const now = createSecrets(NEW);
@@ -89,6 +99,14 @@ async function sealedValues(): Promise<Record<(typeof SEALED_KINDS)[number], str
         .from(agentSecrets)
         .orderBy(asc(agentSecrets.name))
     ).map((row) => row.sealed),
+    agentSecretOffers: some(
+      (
+        await handle
+          .select({ sealed: agentSecretOffers.sealed })
+          .from(agentSecretOffers)
+          .orderBy(asc(agentSecretOffers.id))
+      ).map((row) => row.sealed),
+    ),
   };
 }
 
@@ -209,6 +227,35 @@ beforeAll(async () => {
       now: NOW,
     });
   }
+  // A secret offered to the account that still waits (ADR-0169), sealed as the console of
+  // before sealed it, and one the account left, which holds no value any more.
+  const offered = {
+    accountId: aliceId,
+    note: null,
+    expiresOn: null,
+    actor: { id: aliceId },
+    waiting: 20,
+    byOne: 5,
+    days: 7,
+    kept: 200,
+    now: NOW,
+  };
+  const waits = await offerSecret(testDatabase.database, before, {
+    ...offered,
+    name: "x-offered",
+    value: OFFERED,
+  });
+  offerId = waits.id;
+  const left = await offerSecret(testDatabase.database, before, {
+    ...offered,
+    name: "x-left",
+    value: `left ${randomUUID()}`,
+  });
+  await leaveSecretOffer(testDatabase.database, {
+    accountId: aliceId,
+    offerId: left.id,
+    now: NOW,
+  });
   // One the console of now has set already: the step leaves it as it is.
   await setSecret(testDatabase.database, now, {
     accountId: aliceId,
@@ -319,7 +366,7 @@ describe("a rotation of the deployment's secret", () => {
     // reader needs is in the line, and a second one says it in words: read as "nothing left",
     // the answer had the real secret before taken out, and every value lost with it.
     expect(left).toBe(0);
-    const all = 5 + MANY + (MANY - 1) + 2;
+    const all = 6 + MANY + (MANY - 1) + 2;
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatchObject({
       level: 40,
@@ -354,8 +401,8 @@ describe("a rotation of the deployment's secret", () => {
     expect(lines[0]).toMatchObject({
       level: 40,
       msg: "sealed again",
-      resealed: 5 + MANY + (MANY - 1),
-      openedByPrevious: 5 + MANY + (MANY - 1),
+      resealed: 6 + MANY + (MANY - 1),
+      openedByPrevious: 6 + MANY + (MANY - 1),
       unopened: 2,
       left: 0,
       kinds: {
@@ -366,11 +413,13 @@ describe("a rotation of the deployment's secret", () => {
         pluginSecrets: { values: 3, resealed: 1, unopened: 2, left: 0 },
         pluginKeyedSecrets: { values: MANY, resealed: MANY, unopened: 0, left: 0 },
         agentSecrets: { values: MANY, resealed: MANY - 1, unopened: 0, left: 0 },
+        // The one that waits: the one the account left holds nothing to seal.
+        agentSecretOffers: { values: 1, resealed: 1, unopened: 0, left: 0 },
       },
     });
     // No value and no secret is in what the step said.
     const said = JSON.stringify(lines);
-    for (const word of [OLD, NEW, "the organization's token", "value 7", "token 7"]) {
+    for (const word of [OLD, NEW, "the organization's token", "value 7", "token 7", OFFERED]) {
       expect(said).not.toContain(word);
     }
 
@@ -417,6 +466,26 @@ describe("a rotation of the deployment's secret", () => {
     expect(datesAfter).toEqual(datesBefore);
     const [accessesAfter] = await handle.select({ count: count() }).from(agentSecretAccesses);
     expect((accessesAfter?.count ?? 0) - (accessesBefore?.count ?? 0)).toBe(3);
+
+    // The offer that waited is the account's to take still, with the new secret alone.
+    expect(before.open("agent-secret", sealed.agentSecretOffers[0] ?? "")).toBeUndefined();
+    await takeSecretOffer(testDatabase.database, now, {
+      accountId: aliceId,
+      offerId,
+      as: undefined,
+      replace: false,
+      actor: { id: aliceId },
+      limit: MANY + 1,
+      now: NOW,
+    });
+    expect(
+      await readSecret(testDatabase.database, now, {
+        accountId: aliceId,
+        name: "x-offered",
+        actor: { id: aliceId },
+        now: NOW,
+      }),
+    ).toMatchObject({ value: OFFERED });
   });
 
   it("finds nothing to do when it is run again", async () => {

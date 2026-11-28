@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import {
   agentPath,
   MAX_OWN_WAKES,
   projectPath,
   REST_ROUTES,
   restAgentSchema,
+  restAgentSecretOfferSchema,
   restErrorSchema,
   restEventsSchema,
   restOwnWakeRaisedSchema,
@@ -16,7 +18,7 @@ import { eq } from "drizzle-orm";
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { drizzleOf } from "./db/client.js";
-import { agentRunners, workspaces } from "./db/schema.js";
+import { agentRunners, agentSecretOffers, workspaces } from "./db/schema.js";
 import { createTestDatabase, DEV_DATABASE_URL, type TestDatabase } from "./db/testing.js";
 import { BoardWakes } from "./jobs/board-wakes.js";
 import { createFixtureProvider } from "./testing/fixture-provider.js";
@@ -393,5 +395,46 @@ describe("the wakes an agent account raises for itself (ADR-0145)", () => {
     expect(over.status).toBe(409);
     // One it keeps already is still changed.
     expect((await keep({ at: "2026-11-19T01:00:00.000Z", key: "later-0" })).status).toBe(201);
+  });
+});
+
+describe("a secret offered to an agent account, in the worker's pass (ADR-0169)", () => {
+  it("ends an offer whose days ran out, its value gone from the row, and wakes nobody for it", async () => {
+    now = new Date("2026-11-25T03:00:00.000Z");
+    const made = await send(bob, "POST", agentPath("mira", "secret-offers"), {
+      name: "late.key",
+      value: `value-${randomUUID()}`,
+    });
+    expect(made.status).toBe(201);
+    const offer = restAgentSecretOfferSchema.parse(await made.json());
+    const row = async () =>
+      (
+        await drizzleOf(testDatabase.database)
+          .select({
+            state: agentSecretOffers.state,
+            sealed: agentSecretOffers.sealed,
+            decidedAt: agentSecretOffers.decidedAt,
+          })
+          .from(agentSecretOffers)
+          .where(eq(agentSecretOffers.id, offer.id))
+      )[0];
+    const told = async () =>
+      (await scheduled()).filter((signal) => signal.key?.startsWith("secret-offer:") === true);
+    expect(await told()).toHaveLength(1);
+    // A minute before its days are over, the pass leaves it as it is.
+    now = new Date(new Date(offer.endsAt).getTime() - 60_000);
+    await wakes.sweep();
+    expect(await row()).toMatchObject({ state: "waiting", decidedAt: null });
+    expect((await row())?.sealed).toMatch(/^v1\./);
+    // Once they are over, the value is gone from the row, at the moment they ran out.
+    now = new Date(new Date(offer.endsAt).getTime() + 1_000);
+    await wakes.sweep();
+    expect(await row()).toEqual({
+      state: "lapsed",
+      sealed: null,
+      decidedAt: new Date(offer.endsAt),
+    });
+    // The account was told of the offer once, and of its end never.
+    expect(await told()).toHaveLength(1);
   });
 });

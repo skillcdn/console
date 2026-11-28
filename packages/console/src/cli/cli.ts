@@ -193,6 +193,7 @@ import {
   formatRun,
   formatRunLine,
   formatSecretLine,
+  formatSecretOffer,
   formatSignalLine,
   formatTask,
   formatTaskFollow,
@@ -5353,11 +5354,24 @@ const SECRET_FLAGS: OptionSpec = {
   expires: { type: "string" },
 };
 
+/** What ends the listing of the offers that wait: the two things the account does with one. */
+const OFFERED_NEXT =
+  "Take one into your store: console secret --accept <offer id> [--as <name>] [--replace]  |  leave one: console secret --decline <offer id>";
+
 // An agent account's own secret store (ADR-0087): the names it keeps, for the account itself,
-// signed in as itself.
+// signed in as itself; and, with --offered, what members offered it that waits (ADR-0169).
 const secrets: Command = async (args, io) => {
-  const { values } = parse(args, {}, false);
+  const { values } = parse(args, { offered: { type: "boolean" } }, false);
   const session = await open(io, values);
+  if (on(values, "offered")) {
+    const offered = await session.client.secretOffers();
+    answer(io, session, offered, () =>
+      offered.items.length === 0
+        ? "No offered secret waits for you."
+        : [...offered.items.map((item) => formatSecretOffer(item)), OFFERED_NEXT].join("\n"),
+    );
+    return EXIT.ok;
+  }
   const found = await session.client.secrets();
   answer(io, session, found, () =>
     found.items.length === 0
@@ -5369,10 +5383,65 @@ const secrets: Command = async (args, io) => {
 
 const SECRET_USAGE =
   "Say which secret: console secret <name>  |  secret <name> --set [--file <path>] [--expires <day|none>]  |  secret <name> --remove";
+const OFFER_USAGE =
+  "Say which offer, by its id as console secrets --offered lists it: console secret --accept <offer id> [--as <name>] [--replace]  |  secret --decline <offer id>";
+
+/**
+ * An offer the account takes into its store or leaves (ADR-0169): named by its id, since the
+ * name an offerer proposed is theirs to choose and two may propose the same.
+ */
+async function offeredSecret(io: CliIo, values: Values, positionals: readonly string[]) {
+  const taking = on(values, "accept");
+  if ((taking && on(values, "decline")) || on(values, "set") || on(values, "remove")) {
+    throw misuse("Say one of --accept, --decline, --set and --remove.");
+  }
+  const as = text(values, "as");
+  if (!taking && (as !== undefined || on(values, "replace"))) {
+    throw misuse(
+      "--as and --replace go with --accept: an offer that is left is kept under no name.",
+    );
+  }
+  const id = theOne(positionals, OFFER_USAGE);
+  const session = await open(io, values);
+  if (!taking) {
+    await session.client.leaveSecretOffer(id);
+    answer(io, session, { left: id }, () => `The offer ${id} is left, and its value is gone.`);
+    return EXIT.ok;
+  }
+  let kept: Awaited<ReturnType<ConsoleClient["takeSecretOffer"]>>;
+  try {
+    kept = await session.client.takeSecretOffer(id, {
+      ...(as === undefined ? {} : { as }),
+      ...(on(values, "replace") ? { replace: true } : {}),
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "secret.exists") {
+      throw failed(
+        `secret.exists: you keep a secret ${as === undefined ? "of the name it was offered under" : `named ${as}`} already, and the offer still waits. Take it under another name with --as <name>, or in the place of the one you keep with --replace.`,
+      );
+    }
+    throw error;
+  }
+  answer(io, session, kept, () => `Taken into your store: ${formatSecretLine(kept)}`);
+  return EXIT.ok;
+}
 
 // One secret of the account's own: its value, read and noted; or set, typed unseen; or removed.
+// And one offered to it, taken or left.
 const secret: Command = async (args, io) => {
-  const { values, positionals } = parse(args, SECRET_FLAGS);
+  const { values, positionals } = parse(args, {
+    ...SECRET_FLAGS,
+    accept: { type: "boolean" },
+    decline: { type: "boolean" },
+    as: { type: "string" },
+    replace: { type: "boolean" },
+  });
+  if (on(values, "accept") || on(values, "decline")) {
+    return offeredSecret(io, values, positionals);
+  }
+  if (text(values, "as") !== undefined || on(values, "replace")) {
+    throw misuse(`--as and --replace go with --accept. ${OFFER_USAGE}`);
+  }
   const name = theOne(positionals, SECRET_USAGE);
   const session = await open(io, values);
   if (on(values, "remove")) {
@@ -5401,9 +5470,22 @@ const secret: Command = async (args, io) => {
 // A supervisor's part of an agent account's store (ADR-0087): the names; a secret seeded,
 // write-only, which only the account reads back; one removed. Never a value.
 const agentSecrets = async (args: readonly string[], io: CliIo): Promise<number> => {
-  const { values, positionals } = parse(args, {});
-  const handle = handleOf(theOne(positionals, "Say whose: console agent secrets <handle>"));
+  const { values, positionals } = parse(args, { offered: { type: "boolean" } });
+  const handle = handleOf(
+    theOne(positionals, "Say whose: console agent secrets <handle> [--offered]"),
+  );
   const session = await open(io, values);
+  if (on(values, "offered")) {
+    // What the account was offered (ADR-0169): its record whole for a supervisor, and for any
+    // other member what they offered it themselves.
+    const offered = await session.client.agentSecretOffers(handle);
+    answer(io, session, offered, () =>
+      offered.items.length === 0
+        ? `Nothing was offered to @${handle} that is yours to read.`
+        : offered.items.map((item) => formatSecretOffer(item)).join("\n"),
+    );
+    return EXIT.ok;
+  }
   let found: Awaited<ReturnType<ConsoleClient["agentSecrets"]>>;
   try {
     found = await session.client.agentSecrets(handle);
@@ -5429,13 +5511,48 @@ const agentSecrets = async (args: readonly string[], io: CliIo): Promise<number>
 };
 
 const agentSecret = async (args: readonly string[], io: CliIo): Promise<number> => {
-  const { values, positionals } = parse(args, SECRET_FLAGS);
+  const { values, positionals } = parse(args, {
+    ...SECRET_FLAGS,
+    offer: { type: "boolean" },
+    note: { type: "string" },
+  });
   const [given, name] = theTwo(
     positionals,
-    "Say whose and which: console agent secret <handle> <name> [--file <path>] [--expires <day|none>]  |  agent secret <handle> <name> --remove",
+    'Say whose and which: console agent secret <handle> <name> [--file <path>] [--expires <day|none>]  |  agent secret <handle> <name> --offer [--note "<what it is for>"] [--file <path>] [--expires <day|none>]  |  agent secret <handle> <name> --remove',
   );
   const handle = handleOf(given);
+  const offering = on(values, "offer");
+  const said = text(values, "note")?.trim();
+  if (offering && on(values, "remove")) {
+    throw misuse("Say one of --offer and --remove.");
+  }
+  if (said !== undefined && !offering) {
+    throw misuse("--note says what an offered secret is for, and goes with --offer.");
+  }
   const session = await open(io, values);
+  if (offering) {
+    // Any member's (ADR-0169): the value waits, sealed, for the account to take or leave, and
+    // nothing of what the account keeps changes.
+    const expiresOn = expiryOf(io, values);
+    const value = await secretValue(
+      io,
+      values,
+      `Value of ${name} to offer @${handle} (typed unseen; Enter ends it): `,
+    );
+    const offered = await session.client.offerAgentSecret(handle, {
+      name,
+      value,
+      ...(said === undefined || said === "" ? {} : { note: said }),
+      ...(expiresOn === undefined ? {} : { expiresOn }),
+    });
+    answer(io, session, offered, () =>
+      [
+        `Offered to @${handle}, which is told and takes it into its store or leaves it: ${formatSecretOffer(offered)}`,
+        `Nothing @${handle} keeps changed, and nobody is answered the value. How it stands: console agent secrets ${handle} --offered`,
+      ].join("\n"),
+    );
+    return EXIT.ok;
+  }
   if (on(values, "remove")) {
     await session.client.removeAgentSecret(handle, name);
     answer(
@@ -5453,10 +5570,21 @@ const agentSecret = async (args: readonly string[], io: CliIo): Promise<number> 
     `Value of ${name} for @${handle} (typed unseen; Enter ends it): `,
   );
   const host = await gitHostFor(session.client, name);
-  const kept = await session.client.seedAgentSecret(handle, name, {
-    value,
-    ...(expiresOn === undefined ? {} : { expiresOn }),
-  });
+  let kept: Awaited<ReturnType<ConsoleClient["seedAgentSecret"]>>;
+  try {
+    kept = await session.client.seedAgentSecret(handle, name, {
+      value,
+      ...(expiresOn === undefined ? {} : { expiresOn }),
+    });
+  } catch (error) {
+    // Whoever supervises the account not is told what is theirs to do in its place.
+    if (error instanceof ApiError && error.code === "auth.forbidden") {
+      throw failed(
+        `auth.forbidden: only a supervisor of @${handle} sets a secret in its store. Any member may offer one, which @${handle} takes or leaves itself: say the same again with --offer, and with --note "<what it is for>".`,
+      );
+    }
+    throw error;
+  }
   const notes = secretNotes(name, value, host);
   answer(io, session, kept, () =>
     [`Seeded for @${handle}, which alone reads it back: ${formatSecretLine(kept)}`, ...notes].join(

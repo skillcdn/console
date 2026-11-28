@@ -15,7 +15,8 @@ import { MAX_SIGNAL_LENGTH } from "./limits.js";
 export type WakePart = { readonly says: string } | { readonly words: string };
 
 /**
- * The first version whose runner reads a wake of the board's in parts (ADR-0166): the console's
+ * The first version whose runner reads a wake of the board's, and one of the console's own
+ * (ADR-0169), in parts (ADR-0166): the console's
  * lines under the session's mark, and what a member wrote, a comment say, in a block. A runner
  * of before prints such a text whole under its header, as the console's own words, so the
  * console writes one in parts only for an account whose runner last said this version or a

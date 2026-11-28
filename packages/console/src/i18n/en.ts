@@ -233,6 +233,12 @@ export const en = {
       "The value cannot be opened with this deployment's key. Whoever has it sets it again.",
     "secret.own_session":
       "The secret store is read by the account itself, signed in, not with a token it made.",
+    "secret.exists":
+      "The account keeps a secret of that name already. It takes the offer under another name, or in its place where it says so.",
+    "secret.offer_not_found": "No such offer waits for the account.",
+    "secret.too_many_offers":
+      "As many offers wait for the account as may. One is taken, left or runs out first.",
+    "secret.offer_own": "An account sets a secret of its own itself.",
     "agent.own_command":
       "This is asked by the account itself: its runner, on the command signed in as the account.",
     "signal.not_offered": "The model or the effort is none of those the agent's product offers.",
@@ -2071,6 +2077,23 @@ export const en = {
       notFound: {
         title: "No such agent account",
         body: "It is not there, or it is not yours to see.",
+      },
+      offers: {
+        title: "Offered secrets",
+        offerTitle: "Offer a secret",
+        offerAria: "Offer a secret",
+        intro: (name: string, days: number) =>
+          `${name} is told, and takes it or leaves it. The value is typed here once and shown to nobody; an offer not taken is gone after ${days} days.`,
+        waits: (name: string) => `${name} takes each or leaves it. Never a value.`,
+        own: "Take one or leave one with your command: console secrets --offered",
+        name: "Name",
+        namePlaceholder: "mail.password",
+        value: "Value",
+        note: "What it is for",
+        offer: "Offer",
+        someone: "Someone who is gone",
+        takenAs: (name: string) => `as ${name}`,
+        state: { waiting: "Waiting", taken: "Taken", left: "Left", lapsed: "Ran out" },
       },
       notSupervised: {
         title: "For its supervisors",

@@ -23,6 +23,7 @@ import {
   type RestTaskLink,
   RUN_STATUSES,
   SECRET_ACCESSES,
+  SECRET_OFFER_STATES,
   SESSION_ENDS,
   SESSION_KINDS,
   SIGNAL_KINDS,
@@ -800,6 +801,56 @@ export const agentSecretAccesses = pgTable(
     check(
       "agent_secret_accesses_action_check",
       sql`${table.action} in (${sql.raw(literals(SECRET_ACCESSES))})`,
+    ),
+  ],
+);
+
+/**
+ * A secret a member offers an agent account (ADR-0169): kept apart from the account's store
+ * until the account takes it or leaves it. The value is sealed for the account and this offer,
+ * answered to nobody, and gone, `sealed` null, once the offer no longer waits: taken, left, or
+ * its days run out. The row stays as the account's record of what it was offered, by whom and
+ * what became of it, read by the account and its supervisors: the name and the note, never a
+ * value. Not an event of the board's feed.
+ */
+export const agentSecretOffers = pgTable(
+  "agent_secret_offers",
+  {
+    id: id(),
+    /** The account it is offered to. */
+    personId: uuid()
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    /** The name the offerer proposes: the account keeps it under this one, or under another it says. */
+    name: text().notNull(),
+    /** The value, sealed for this account and this offer; null once the offer no longer waits. */
+    sealed: text(),
+    /** What it is for, in a line of the offerer's own words; null where they said nothing. */
+    note: text(),
+    /** The day the value ends on, where the offerer says one; null otherwise. */
+    expiresOn: date(),
+    /** Who offered it, and the agent they did it through when they acted with a token (ADR-0056). */
+    offeredById: uuid().references(() => people.id),
+    agent: text(),
+    state: text({ enum: SECRET_OFFER_STATES }).notNull().default("waiting"),
+    /** The name the account keeps it under, once taken. */
+    takenAs: text(),
+    /** Until when it waits. */
+    endsAt: instant().notNull(),
+    /** When the account took or left it, or its days were found run out. */
+    decidedAt: instant(),
+    createdAt: instant().notNull(),
+  },
+  (table) => [
+    index("agent_secret_offers_person_idx").on(table.personId, table.createdAt),
+    check(
+      "agent_secret_offers_state_check",
+      sql`${table.state} in (${sql.raw(literals(SECRET_OFFER_STATES))})`,
+    ),
+    // Only an offer that waits holds a value.
+    check(
+      "agent_secret_offers_sealed_check",
+      sql`(${table.state} = 'waiting') = (${table.sealed} is not null)`,
     ),
   ],
 );

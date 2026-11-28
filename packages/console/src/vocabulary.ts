@@ -232,6 +232,15 @@ export const SECRET_ACCESSES = ["set", "read", "removed"] as const;
 export type SecretAccess = (typeof SECRET_ACCESSES)[number];
 
 /**
+ * How a secret offered to an agent account stands (ADR-0169): it waits for the account; the
+ * account took it into its store; the account left it; or its days ran out. Only one that waits
+ * holds a value.
+ */
+export const SECRET_OFFER_STATES = ["waiting", "taken", "left", "lapsed"] as const;
+
+export type SecretOfferState = (typeof SECRET_OFFER_STATES)[number];
+
+/**
  * How an agent account stands, in one word (ADR-0085): `running`, its runner heard from and the
  * agent at work or ready for it; `stopped`, by a supervisor, until one starts it again; `refused`,
  * the model would not answer; `failed`, its product could not start or sign in; `unheard`, its

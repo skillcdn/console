@@ -498,6 +498,13 @@
       "when": 1795839519239,
       "tag": "0070_agent_reason_at",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1795843073962,
+      "tag": "0071_agent_secret_offers",
+      "breakpoints": true
     }
   ]
 }
