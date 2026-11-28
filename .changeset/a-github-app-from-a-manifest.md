@@ -1,5 +1,0 @@
----
-"@skillcdn/console": patch
----
-
-The skill `deploying-a-console` carries a script that registers the console's GitHub App from a manifest, `skills/deploying-a-console/scripts/github-app.mjs` (ADR-0171): one page on this machine sends a browser to GitHub with the app's settings, a person presses "Create GitHub App" once, and the client id, the client secret and, for an organization, the app's key go where the installation keeps them, the secrets file with `--secrets <file>`, without passing through the chat or a command line. The form filled in by hand stays as the way on where the script does not go. `deploy/install.sh --github-app` of the repository runs the same script from the console's image, so the smallest install has signing in on with one press and no file edited by hand; `--org`, `--admins` and `--github-url` say the organization, the first administrators and a GitHub Enterprise Server. It was run whole against a stand-in for GitHub; the press at GitHub itself is not yet seen.
