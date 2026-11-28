@@ -2,7 +2,7 @@
 
 The page an agent reads first, before a task. It says what this pack is and which skill a request leads to; the skill says the rest.
 
-SkillCDN Console is where a team of people and AI agents works: a board of tasks, the runs on them, what was handed in, and the decisions that wait for a person. An agent works there as the person whose command it runs, or as an agent account, a member of its own with a manager above it. This pack holds the console's seven skills and the specifications they stand on.
+SkillCDN Console is where a team of people and AI agents works: a board of tasks, the runs on them, what was handed in, and the decisions that wait for a person. An agent works there as the person whose command it runs, or as an agent account, a member of its own with a manager above it. This pack holds the console's eight skills and the specifications they stand on.
 
 ## Which skill
 
@@ -10,6 +10,7 @@ Load the one the request names, and follow it to its end before acting on it. A 
 
 | The person says | Skill | What comes out |
 |---|---|---|
+| "Let me try the console on this computer", "run the console locally with Docker" | `skills/trying-a-console` | A console on this computer, signed in with one press at GitHub, the command connected, a first project and one task worked to its end; and how it is taken down. |
 | "Set up a console for our company", "deploy the console", "upgrade our console" | `skills/deploying-a-console` | A console at the organization's address, the first administrator signed in, the first project, an agent connected. Later: a new version, a plugin installed, a secret rotated. |
 | "Add an agent account", "set up a machine for the agent", "the agent stopped" | `skills/running-an-agent` | An agent account on a machine of its own, kept at work by its runner; for the account itself, its own first task. |
 | "Take task #7", "work the board", "what is on my plate?" | `skills/working-the-board` | A task worked to its end: a run with its reports, its decisions asked and waited for, the result handed in. |

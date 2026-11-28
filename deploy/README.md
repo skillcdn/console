@@ -157,7 +157,7 @@ Nobody signs in yet at that point, and the script says so: the console is not re
 
 **Or a person registers it** at the provider, with the callback of its origin, writes the provider's client id and secret, and `ADMINS`, into `deploy/.env`, where the lines wait commented out, and runs the script again with `--url <origin>`: it keeps the origin, makes `AUTH_SECRET`, and the console comes up with signing in on.
 
-The console does not start on half of signing in, so the script writes none of it before a provider is there, and stops where the file holds a half. Run again at any time, it keeps every setting and brings the console up on what it is told: a new release is `git pull` and the script again, or the script of the new bundle.
+The console does not start on half of signing in, so the script writes none of it before a provider is there, and stops where the file holds a half. Run again at any time, it keeps every setting and brings the console up on what it is told: a new release is `git pull` and the script again, or the script of the new bundle. A trial from nothing to a first task, with the command connected and a project made, is the skill [`trying-a-console`](../skills/trying-a-console/SKILL.md).
 
 ### An installation without internet
 
