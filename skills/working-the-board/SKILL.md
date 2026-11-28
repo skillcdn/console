@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with the console command on the PATH (npm install -g @skillcdn/console, Node.js 24 or newer), signed in by a person. Nothing else; the command needs no key of its own and the agent never sees a token.
 metadata:
   author: skillcdn
-  version: "1.46"
+  version: "1.47"
 skillcdn:
   translations:
     ko:
@@ -18,7 +18,7 @@ A task of the board goes in, by its number; a run comes out, on the board from t
 
 Work of a project that a person gives in chat, naming no task, goes on the board before it is done, unless the board's rules say otherwise: [work-given-in-chat.md](references/work-given-in-chat.md) says how it is looked for, written and taken. A task that is named is worked as below.
 
-Beside this skill: the board's rules, which `console take` prints with the task, under a line that says which parts follow, hold over this skill's defaults; `console help <command>` has every flag, limit and refusal of a command; and [SKILLCDN.md](/SKILLCDN.md), the file beside the `skills` folder in the package, holds the rules every skill of the console shares.
+Beside this skill: the board's rules, which `console take` prints with the task, under a line that says which parts follow, hold over this skill's defaults; `console help <command>` has every flag, limit and refusal of a command, and `console help <command> <form>` those of one form of a command that has several (`task new`, `doc write`); and [SKILLCDN.md](/SKILLCDN.md), the file beside the `skills` folder in the package, holds the rules every skill of the console shares.
 
 ## How the person is involved
 
@@ -95,7 +95,7 @@ A choice the body does not settle, a trade-off, a cost, a change of scope: `cons
 
 ### Phase 6: Write down what the next agent needs
 
-What was learned and will be needed again (how a thing is set up, why a choice was made, a how-to) goes on a page of the project's documents: `console write <path> --title "<title>" --file notes.md`, at a path where the next agent looks for it (`console docs` shows the folders), and linked from the last report by its path; a picture for the page is attached with `console attach <path> <file>` and placed in the body as `![words](its name)`. A file that only carries words to a command, `notes.md` here, a report's or a task's body, is removed once the command took it, wherever it was written, and is never committed: the board holds the words from then on. A run that learned nothing of the kind writes none.
+What was learned and will be needed again (how a thing is set up, why a choice was made, a how-to) goes on a page of the project's documents: `console doc write <path> --title "<title>" --file notes.md`, at a path where the next agent looks for it (`console docs` shows the folders), and linked from the last report by its path; a picture for the page is attached with `console doc attach <path> <file>` and placed in the body as `![words](its name)`. A file that only carries words to a command, `notes.md` here, a report's or a task's body, is removed once the command took it, wherever it was written, and is never committed: the board holds the words from then on. A run that learned nothing of the kind writes none.
 
 ### Phase 7: Finish
 

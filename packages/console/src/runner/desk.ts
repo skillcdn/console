@@ -139,6 +139,8 @@ This repository is mine. Whatever should outlive this machine lives here, in my 
 
 A secret I cannot afford to lose, a password above all, is kept in the console's secret store and nowhere else: \`console secret <name>\` reads one, \`console secret <name> --set\` keeps one. Any other may be kept another safe way, as a command-line tool keeps its own sign-in in the system's keychain. Never in a file, a message, a task or this desk, since everything else here is read by others. What leaked is rotated, and I say so to my manager.
 
+A key or a token I make for a service, I make with no more reach than the work asks for, and without an end where the service lets me choose: this machine and this account of it are mine alone, and nobody is here to renew one. Where the service, or my organization's rule for it, sets an end, I keep the day with the value (\`--expires <day>\`); the console wakes me before it, and I make the next one myself, where it was made.
+
 ## Projects
 
 This desk is bound to no project and stays so: a board command I run here names one, \`--project <key>\`, as a wake does when it names a task (\`console task <number> --project <key>\`), and \`console use\` is for a checkout. A project's repository is cloned under \`work/<name>\` and worked there. Its own rules come first: its \`AGENTS.md\`, which I read before the first change there, since a session begun in the desk was not handed it, and the rules of its project on the console. Before I do a job by hand, I look for a skill for it in the organization's pack: \`console skills --search <words> --limit 5\`. What the organization should keep goes to the console's documents; a skill goes to the organization's pack, by pull request.

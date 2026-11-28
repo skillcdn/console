@@ -7,7 +7,7 @@ import { type CliIo, EXIT, keepRunning, ownWakeMoment, runCli } from "./cli.js";
 import { NO_LINE_TO_RUN } from "./command-words.js";
 import { type CredentialStore, type Credentials, CredentialsError } from "./credentials.js";
 import type { DirectorySettings, DirectoryStore } from "./directory.js";
-import { COMMAND_HELP } from "./help.js";
+import { HELP_BOUNDS } from "./help.js";
 import type { Install } from "./install.js";
 import type { NoticeStore, VersionNotice } from "./notices.js";
 import type { RunnerHost } from "./runner-host.js";
@@ -393,32 +393,25 @@ describe("the console command", () => {
     const { fetch } = fakeConsole({});
     const whole = harness({ fetch });
     expect(await runCli([], whole.io)).toBe(EXIT.ok);
-    expect(whole.out()).toContain("console take <number|id>");
-    expect(whole.out()).toContain("Exit codes");
-    // The overview is a map: every command in a line with what it does in a sentence, and the
-    // forms of a many-formed command without their flags; the command in full is its own help.
+    // The overview is the table of the commands (ADR-0167): a row for the commands that go
+    // together, a few words on them, no flag; what holds everywhere is a page of its own. The
+    // table itself and its bound are held by help.test.ts.
     expect(whole.out()).toContain(
-      "  console take <number|id> [--agent <name>]\n      Takes a task: a run begins",
+      "\nWorking a task\n  whoami                      who you act as, at which console, in which project\n",
     );
-    expect(whole.out()).toContain("task new <title> [flags]");
-    // Every command is on the map, but those a person or a machine runs for itself: the desk a
-    // person writes once, the console of their own they serve, and an agent account's runner.
-    for (const [name, help] of Object.entries(COMMAND_HELP)) {
-      if (name !== "desk" && name !== "serve" && name !== "runner") {
-        expect(whole.out()).toContain(`  console ${help.overview ?? help.usage}\n`);
-      }
-    }
-    expect(whole.out()).not.toContain(
-      "--token-stdin takes a token made by hand instead, typed unseen",
-    );
-    expect(whole.out()).not.toContain("--parent <number|id>");
-    // A map stays one: what the agent accounts added (ADR-0084, ADR-0087) is five commands, a
-    // line each, and what the notifications added (ADR-0157) four.
-    expect(whole.out().length).toBeLessThan(11_900);
-    // What holds everywhere: every exit code, the fourth included.
-    expect(whole.out()).toContain("4 the\ncommand and the console do not go together");
+    expect(whole.out()).toContain("\n  take                        takes a task: a run begins");
+    expect(whole.out()).toContain("\n  tasks  task                 the tasks; one, or new, edit");
+    expect(whole.out()).not.toContain("--agent");
+    expect(whole.out()).not.toContain("Exit codes");
+    expect(whole.out()).toContain("console help <command> [<form>]");
+    expect(new TextEncoder().encode(whole.out()).length).toBeLessThanOrEqual(HELP_BOUNDS.overview);
+    const everywhere = harness({ fetch });
+    expect(await runCli(["help", "everywhere"], everywhere.io)).toBe(EXIT.ok);
+    // What holds everywhere: every exit code, the fourth included, and what any command may meet.
+    expect(everywhere.out()).toContain("4 the\ncommand and the console do not go together");
+    expect(everywhere.out()).toContain("auth.required: the token is not one the console knows");
     // Where the skill is, when the command knows; else where to ask.
-    expect(whole.out()).toContain("first command of a run (console whoami says where it is)");
+    expect(whole.out()).toContain("first command of a run (console whoami says where it is).");
     const located = harness({
       fetch,
       skillsDir: "/usr/lib/node_modules/@skillcdn/console/skills/",
@@ -427,20 +420,45 @@ describe("the console command", () => {
     expect(located.out()).toContain(
       "first command of a run:\n/usr/lib/node_modules/@skillcdn/console/skills/working-the-board/SKILL.md",
     );
-    // A command on a run says in its own help how the run is named, and what it refuses when it cannot tell.
+    // A command's page: its forms a line each, with every flag, then what to know, its limits
+    // and its refusals. A command on a run says how the run is named, and what it refuses when
+    // it cannot tell.
     const report = harness({ fetch });
     expect(await runCli(["help", "report"], report.io)).toBe(EXIT.ok);
-    expect(report.out()).toContain("report - [--run <id>]");
+    expect(
+      report
+        .out()
+        .startsWith(
+          "console report <markdown> [--run <id>]\nconsole report --file <path> [--run <id>]\nconsole report - [--run <id>]\n\n",
+        ),
+    ).toBe(true);
     expect(report.out()).toContain("run.ambiguous: several runs of yours are open");
-    expect(whole.out()).toContain(
-      "  console report <markdown>  |  report --file <path>  |  report -\n",
-    );
     const login = harness({ fetch });
     expect(await runCli(["help", "login"], login.io)).toBe(EXIT.ok);
-    expect(login.out()).toContain("--token-stdin takes a token made by hand instead, typed unseen");
+    expect(login.out()).toContain("--token-stdin: a token made by hand on the Agents page");
+    // A command of several forms says the first on its page and names the others, each with a
+    // page of its own: the flags of a form are on that page, and --help after a form opens it.
     const task = harness({ fetch });
     expect(await runCli(["help", "task"], task.io)).toBe(EXIT.ok);
-    expect(task.out()).toContain("--parent <number|id>");
+    expect(task.out()).not.toContain("--parent <number|id>");
+    expect(task.out()).toContain("each in full with console help task <form>:");
+    const taskNew = harness({ fetch });
+    expect(await runCli(["help", "task", "new"], taskNew.io)).toBe(EXIT.ok);
+    expect(
+      taskNew.out().startsWith("console task new <title> [--body <markdown>|--file <path>]"),
+    ).toBe(true);
+    expect(taskNew.out()).toContain("--parent <number|id>");
+    const formFlagged = harness({ fetch });
+    expect(await runCli(["task", "new", "--help"], formFlagged.io)).toBe(EXIT.ok);
+    expect(formFlagged.out()).toBe(taskNew.out());
+    const ofPlugin = harness({ fetch });
+    expect(await runCli(["plugin", "hello", "records", "--help"], ofPlugin.io)).toBe(EXIT.ok);
+    expect(ofPlugin.out().startsWith("console plugin <key> records <collection>")).toBe(true);
+    const noForm = harness({ fetch });
+    expect(await runCli(["help", "task", "delete"], noForm.io)).toBe(EXIT.usage);
+    expect(noForm.err()).toBe(
+      "Not a form of console task: delete. Its forms with a page: new, edit, archive, restore, follow, mute. console help task says each in a line.\n",
+    );
     const one = harness({ fetch });
     expect(await runCli(["help", "ask"], one.io)).toBe(EXIT.ok);
     expect(one.out()).toContain("--option");
@@ -453,22 +471,80 @@ describe("the console command", () => {
     expect(await runCli(["--version"], version.io)).toBe(EXIT.ok);
     expect(version.out()).toBe("console 0.1.1 (@skillcdn/console)\n");
     expect(await runCli(["help"], version.io)).toBe(EXIT.ok);
-    expect(version.out()).toContain("console 0.1.1: the board");
+    expect(version.out()).toContain("console 0.1.1: your organization's board");
     const nameless = harness({ fetch });
     expect(await runCli(["version"], nameless.io)).toBe(EXIT.ok);
     expect(nameless.out()).toContain("version unknown");
     const flagged = harness({ fetch });
     expect(await runCli(["report", "--help"], flagged.io)).toBe(EXIT.ok);
-    expect(flagged.out()).toContain("console report");
-    const unknown = harness({ fetch });
-    expect(await runCli(["nonsense"], unknown.io)).toBe(EXIT.usage);
-    expect(unknown.err()).toContain("Not a command: nonsense");
-    const bogus = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["tasks", "--bogus"], bogus.io)).toBe(EXIT.usage);
-    expect(bogus.err()).toContain("--bogus");
-    const missing = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["take"], missing.io)).toBe(EXIT.usage);
-    expect(missing.err()).toContain("console take <number|id>");
+    expect(flagged.out()).toBe(report.out());
+  });
+
+  it("answers a mistake with a sentence and where the rest is, never with a page (ADR-0167)", async () => {
+    const { fetch, calls } = fakeConsole({});
+    const said = async (...args: string[]): Promise<string> => {
+      const ran = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, ran.io), args.join(" ")).toBe(EXIT.usage);
+      expect(ran.out()).toBe("");
+      return ran.err();
+    };
+    // A word that is no command: the nearest there are, and where all are listed.
+    expect(await said("taks")).toBe(
+      "Not a command: taks. Nearest: take, tasks, task. console help lists the commands.\n",
+    );
+    expect(await said("nonsense")).toBe(
+      "Not a command: nonsense. console help lists the commands.\n",
+    );
+    expect(await said("help", "nonsense")).toBe(
+      "Not a command: nonsense. console help lists the commands.\n",
+    );
+    // An option that is none of the command's: those it takes, so that the next try needs no
+    // page, and the page for the rest. The parser's own advice on other things is not said.
+    expect(await said("tasks", "--bogus")).toBe(
+      "Not an option of this command: --bogus. Its own are --state, --open, --mine, --unassigned, --category, --goal, --due, --search, --archived, --limit, --offset; --json, --project, --url and --account go with every command.\nIts forms and flags: console help tasks\n",
+    );
+    expect(await said("categories", "--bogus")).toBe(
+      "Not an option of this command: --bogus. It takes none of its own; --json, --project, --url and --account go with every command.\nIts forms and flags: console help categories\n",
+    );
+    // A word that begins with a dash and was meant as a word is told how it is given.
+    expect(await said("report", "-5 degrees")).toContain(
+      "A word that begins with - and is no option goes after --.",
+    );
+    expect(await said("categories", "extra")).toBe(
+      "This command takes no word beside its options: extra.\nIts forms and flags: console help categories\n",
+    );
+    expect(await said("tasks", "--state")).toBe(
+      "Option '--state <value>' argument missing\nIts forms and flags: console help tasks\n",
+    );
+    // What a command asks for is said with the form to type, and the page of the form tried.
+    expect(await said("take")).toBe(
+      "Say which task: console take <number|id> [--rules <mark>]\nIts forms and flags: console help take\n",
+    );
+    expect(await said("task", "edit")).toContain("\nIts forms and flags: console help task edit\n");
+    expect(await said("plugin", "hello", "revoke")).toContain(
+      "\nIts forms and flags: console help plugin revoke\n",
+    );
+    expect(await said("agent")).toBe(
+      "Say which agent account, or what to do: console agent <handle>, or console agent new|tell|interrupt|stop|restart|reset|wake|set|signals|messages|secrets|secret|invite|setup ...\nIts forms and flags: console help agent\n",
+    );
+    // A word of before names the page of what took its place.
+    expect(await said("archive")).toBe(
+      "Say which page: console doc archive <path>\nIts forms and flags: console help doc archive\n",
+    );
+    // Nothing of this asks the console anything.
+    expect(calls).toEqual([]);
+    // A refusal of the console is no misuse, and names no page.
+    const refused = harness({
+      fetch: fakeConsole({
+        [`GET ${IN}/tasks/99`]: {
+          status: 404,
+          body: { error: { code: "task.not_found", message: "The task was not found." } },
+        },
+      }).fetch,
+      env: SIGNED_IN,
+    });
+    expect(await runCli(["task", "99"], refused.io)).toBe(EXIT.failed);
+    expect(refused.err()).toBe("task.not_found: The task was not found.\n");
   });
 
   it("needs a console and a token, and says how to sign in without them", async () => {
@@ -3170,6 +3246,7 @@ describe("the console command", () => {
     expect(
       await runCli(
         [
+          "doc",
           "write",
           "guides/onboarding",
           "--title",
@@ -3189,21 +3266,77 @@ describe("the console command", () => {
       baseVersion: 1,
     });
     // Without a title, the page keeps its own; a page that is not there yet needs one.
-    expect(await runCli(["write", "guides/onboarding", "--body", "# Again"], h.io)).toBe(EXIT.ok);
-    expect(await runCli(["write", "guides/new-page", "--body", "# New"], h.io)).toBe(EXIT.usage);
+    expect(await runCli(["doc", "write", "guides/onboarding", "--body", "# Again"], h.io)).toBe(
+      EXIT.ok,
+    );
+    expect(await runCli(["doc", "write", "guides/new-page", "--body", "# New"], h.io)).toBe(
+      EXIT.usage,
+    );
     expect(h.err()).toContain("Say its title");
-    expect(await runCli(["write", "guides/onboarding"], h.io)).toBe(EXIT.usage);
+    expect(await runCli(["doc", "write", "guides/onboarding"], h.io)).toBe(EXIT.usage);
 
     expect(
-      await runCli(["attach", "guides/onboarding", "./report.md", "--label", "the report"], h.io),
+      await runCli(
+        ["doc", "attach", "guides/onboarding", "./report.md", "--label", "the report"],
+        h.io,
+      ),
     ).toBe(EXIT.ok);
     expect(h.out()).toContain(
       "Attached report.md (12 bytes) to guides/onboarding: 1 file on the page.",
     );
-    expect(await runCli(["archive", "guides/onboarding"], h.io)).toBe(EXIT.ok);
+    expect(await runCli(["doc", "archive", "guides/onboarding"], h.io)).toBe(EXIT.ok);
     expect(h.out()).toContain("Archived guides/onboarding (Onboarding)");
-    expect(await runCli(["restore", "guides/onboarding"], h.io)).toBe(EXIT.ok);
+    expect(await runCli(["doc", "restore", "guides/onboarding"], h.io)).toBe(EXIT.ok);
     expect(h.out()).toContain("Restored guides/onboarding (Onboarding).");
+  });
+
+  it("takes the words of before as the forms that took their place, and a page called by a form's word as a page (ADR-0167)", async () => {
+    const page = {
+      id: "0199c4d8-0000-7000-8000-000000000061",
+      path: "write",
+      title: "How we write",
+      version: 1,
+      updatedBy: PERSON,
+      agent: "Claude Code",
+      archivedAt: null,
+      createdAt: WHEN,
+      updatedAt: WHEN,
+      body: "Plainly.",
+      createdBy: PERSON,
+      links: [],
+      backlinks: [],
+      files: [],
+    };
+    const { fetch, calls } = fakeConsole({
+      [`GET ${IN}/docs/write`]: { body: page },
+      [`PUT ${IN}/docs/write`]: { status: 201, body: page },
+      [`POST ${IN}/docs/write/archive`]: { body: { ...page, archivedAt: WHEN } },
+      [`POST ${IN}/docs/write/restore`]: { body: page },
+    });
+    const ran = async (...args: string[]): Promise<string> => {
+      const h = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, h.io), args.join(" ")).toBe(EXIT.ok);
+      return h.out();
+    };
+    // A word of before runs as it did, and says nothing of itself.
+    expect(await ran("write", "write", "--title", "How we write", "--body", "Plainly.")).toContain(
+      "Wrote write (How we write), version 1",
+    );
+    expect(await ran("archive", "write")).toContain("Archived write (How we write)");
+    expect(await ran("restore", "write")).toBe("Restored write (How we write).\n");
+    // A form's word alone, or before a flag, is a page's path: the page called write is read.
+    expect(await ran("doc", "write")).toContain("write: How we write\n");
+    expect(JSON.parse(await ran("doc", "write", "--json"))).toMatchObject({ path: "write" });
+    // With a path after it the word is the form, of the page named.
+    expect(await ran("doc", "archive", "write")).toContain("Archived write (How we write)");
+    expect(calls.map((call) => call.key)).toEqual([
+      `PUT ${IN}/docs/write`,
+      `POST ${IN}/docs/write/archive`,
+      `POST ${IN}/docs/write/restore`,
+      `GET ${IN}/docs/write`,
+      `GET ${IN}/docs/write`,
+      `POST ${IN}/docs/write/archive`,
+    ]);
   });
 
   it("writes what followed a decision, and reads the record", async () => {
@@ -4024,7 +4157,7 @@ describe("configuring, as the person", () => {
     expect(said.out()).toContain("bob is an agent account from now on, with everything it did.");
     // The flag is in the command's own help, with the refusal it answers.
     const help = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["help", "agent"], help.io)).toBe(EXIT.ok);
+    expect(await runCli(["help", "agent", "new"], help.io)).toBe(EXIT.ok);
     expect(help.out()).toContain("[--seed <seed>] [--convert]");
     expect(help.out()).toContain("agent.login_is_member");
   });
@@ -4386,7 +4519,7 @@ describe("configuring, as the person", () => {
     expect(calls.length).toBe(before);
     // The command is in the help of its family.
     const help = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["help", "agent"], help.io)).toBe(EXIT.ok);
+    expect(await runCli(["help", "agent", "messages"], help.io)).toBe(EXIT.ok);
     expect(help.out()).toContain(
       "agent messages <source>:<conversation>[:<thread>] [--limit <n>] [--after <moment>]",
     );
@@ -5640,10 +5773,11 @@ describe("configuring, as the person", () => {
     expect(help.out()).toContain("category.in_use");
     const whole = harness({ fetch });
     expect(await runCli(["help"], whole.io)).toBe(EXIT.ok);
-    expect(whole.out()).toContain("Configuring, as the person");
-    expect(whole.out()).toContain("project new <key> <name> [flags]");
+    expect(whole.out()).toContain(
+      "  workspace  person  team  project  member  category    for an administrator or an owner",
+    );
     const project = harness({ fetch });
-    expect(await runCli(["help", "project"], project.io)).toBe(EXIT.ok);
+    expect(await runCli(["help", "project", "new"], project.io)).toBe(EXIT.ok);
     expect(project.out()).toContain('project new <key> "<name>"');
   });
 });
@@ -7473,8 +7607,9 @@ describe("a person's desk on the command line (ADR-0115)", () => {
     expect(own.out()).toContain("console desk [<directory>] [--web]");
     expect(own.out()).toContain("A desk is bound to no project");
     expect(own.out()).toContain(
-      "An agent account's desk is settled by console agent setup; in that desk, desk . --web writes the shell of its pages and nothing else.",
+      "In an agent account's desk, which console agent setup settles, desk . --web writes that shell and nothing else.",
     );
+    expect(own.out()).toContain("\n  check: Says whether the records a desk keeps read right.\n");
     // What it writes is the least, and what a desk keeps is its member's to say (ADR-0122).
     expect(own.out()).toContain(
       "It writes the least: README.md; AGENTS.md, the instructions of an agent that works for you there; CLAUDE.md, which points a product to them; and .gitignore.",
@@ -7496,9 +7631,10 @@ describe("a person's desk on the command line (ADR-0115)", () => {
     const other = harness({ fetch, skillsDir: SKILLS });
     expect(await runCli(["help", "serve"], other.io)).toBe(EXIT.ok);
     expect(other.out()).not.toContain("shipped with this command");
+    // The table names what a machine runs for itself in one row, last.
     const map = harness({ fetch });
     expect(await runCli([], map.io)).toBe(EXIT.ok);
-    expect(map.out()).not.toContain("console desk");
+    expect(map.out()).toContain("\nA machine's own\n  serve  desk  runner  ");
   });
 });
 
@@ -10330,28 +10466,28 @@ describe("what the board told a member, on the command line (ADR-0157)", () => {
       },
     });
     const followed = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["follow", "7"], followed.io)).toBe(EXIT.ok);
+    expect(await runCli(["task", "follow", "7"], followed.io)).toBe(EXIT.ok);
     // The task is read for what it is called, then the choice is kept by its id.
     expect(calls.map((call) => call.key)).toEqual([`GET ${IN}/tasks/7`, FOLLOW]);
     expect(calls.at(-1)?.body).toEqual({ on: true });
     expect(followed.out()).toBe(
-      "Notifications of #7 Fix the parser are on: you are told of everything that happens on it. Turn them off: console mute 7\n",
+      "Notifications of #7 Fix the parser are on: you are told of everything that happens on it. Turn them off: console task mute 7\n",
     );
     const back = harness({ fetch, env: SIGNED_IN });
-    expect(await runCli(["mute", "7"], back.io)).toBe(EXIT.ok);
+    expect(await runCli(["task", "mute", "7"], back.io)).toBe(EXIT.ok);
     expect(calls.at(-1)?.body).toEqual({ on: false });
     expect(back.out()).toBe(
-      "Notifications of #7 Fix the parser are off, as your settings have it. Turn them on: console follow 7\n",
+      "Notifications of #7 Fix the parser are off, as your settings have it. Turn them on: console task follow 7\n",
     );
     const muted = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["mute", "7"], muted.io)).toBe(EXIT.ok);
     expect(muted.out()).toBe(
-      "Notifications of #7 Fix the parser are off: you are told of nothing of it. Turn them on: console follow 7\n",
+      "Notifications of #7 Fix the parser are off: you are told of nothing of it. Turn them on: console task follow 7\n",
     );
     const again = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["follow", "7"], again.io)).toBe(EXIT.ok);
     expect(again.out()).toBe(
-      "Notifications of #7 Fix the parser are on, as your settings have it: you are told of it by the kinds you have on (console notify). Turn them off: console mute 7\n",
+      "Notifications of #7 Fix the parser are on, as your settings have it: you are told of it by the kinds you have on (console notify). Turn them off: console task mute 7\n",
     );
     // By its id, in the project the flag names; --json is the console's own answer.
     const elsewhere = harness({ fetch, env: SIGNED_IN });
@@ -10370,14 +10506,17 @@ describe("what the board told a member, on the command line (ADR-0157)", () => {
       },
     });
     for (const word of ["follow", "mute"]) {
-      for (const args of [[word], [word, "7", "8"]]) {
+      // Under the task, and by the word of before alike.
+      for (const args of [["task", word], ["task", word, "7", "8"], [word], [word, "7", "8"]]) {
         const h = harness({ fetch, env: SIGNED_IN });
         expect(await runCli(args, h.io), args.join(" ")).toBe(EXIT.usage);
-        expect(h.err()).toContain(`Say which task: console ${word} <number|id>`);
+        expect(h.err()).toBe(
+          `Say which task: console task ${word} <number|id>\nIts forms and flags: console help task ${word}\n`,
+        );
       }
       // Turning one back is the other word: there is no flag for it.
       const flagged = harness({ fetch, env: SIGNED_IN });
-      expect(await runCli([word, "7", "--off"], flagged.io)).toBe(EXIT.usage);
+      expect(await runCli(["task", word, "7", "--off"], flagged.io)).toBe(EXIT.usage);
     }
     expect(calls).toHaveLength(0);
     const missing = harness({ fetch, env: SIGNED_IN });
@@ -10498,10 +10637,14 @@ describe("what the board told a member, on the command line (ADR-0157)", () => {
     expect(notify.out()).not.toContain("--via");
     expect(notify.out()).toContain("is chosen at that plugin");
     for (const word of ["follow", "mute"]) {
+      // One page for the two, opened by either word, and by the word of before.
       const one = harness({ fetch });
-      expect(await runCli(["help", word], one.io)).toBe(EXIT.ok);
-      expect(one.out()).toContain(`console ${word} <number|id>
+      expect(await runCli(["help", "task", word], one.io)).toBe(EXIT.ok);
+      expect(one.out()).toContain(`console task ${word} <number|id>
 `);
+      const old = harness({ fetch });
+      expect(await runCli(["help", word], old.io)).toBe(EXIT.ok);
+      expect(old.out()).toBe(one.out());
       expect(one.out()).not.toContain("--off");
       expect(one.out()).toContain("a console older than the command has no notifications yet");
     }
