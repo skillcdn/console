@@ -122,13 +122,34 @@ describe("the pack made of the console's answers (ADR-0124)", () => {
     }
   });
 
-  it("lists the pack from the one answer the console has, a folder's README as its overview, and asks nothing for it", async () => {
+  it("lists the pack from the one answer the console has, the skills with the documents counted, and asks nothing for it", async () => {
     // No read is given to the console: the listing, and the skills a refusal names, come from the mount.
     const listed = await readPack(packOf({}), { read: "skills" }, { words: CONSOLE_WORDS });
     expect(listed.text).toContain("review/SKILL.md: Reviews a change.");
     expect(listed.text).toContain("SKILL.md: The root's own.");
-    expect(listed.text).toContain("docs/guide.md");
-    expect(listed.text).toMatch(/docs\/README\.md.*overview/i);
+    // The read lists the skills and counts the documents outside them (SkillCDN 0.6.3), from
+    // the totals the pack gives with its listing.
+    expect(listed.text).toContain("2 skills and 2 documents in acme/skills (commit 0123456):");
+    expect(listed.text).toContain("1. skill: review (review/SKILL.md)");
+    expect(listed.text).toContain(
+      "The 2 documents outside the skills are not listed here: console skills <folder> lists a folder with what it holds, and console skills --search finds them by what they say.",
+    );
+    expect(listed.text).not.toContain("docs/guide.md");
+    // The pack itself lists what a search without words lists: the skills first, then the
+    // documents, a folder's README as its overview.
+    const all = await packOf({}).find({});
+    if (all.status !== "ready") {
+      throw new Error("the listing is ready");
+    }
+    expect(all.totals).toEqual({ skills: 2, documents: 2 });
+    expect(all.items.map((item) => [item.kind, item.path])).toEqual([
+      ["skill", "review/SKILL.md"],
+      ["skill", "SKILL.md"],
+      ["document", "docs/README.md"],
+      ["document", "docs/guide.md"],
+    ]);
+    expect(all.items[2]).toMatchObject({ overview: true });
+    expect(all.items[3]).not.toHaveProperty("overview");
     const missing = packOf({
       skill: async () => refusedWith("not_found", "skill.not_found"),
     });

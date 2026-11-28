@@ -22,7 +22,7 @@
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('web/dist',{recursive:true,force:true})\""
   },
   "devDependencies": {
-    "@skillcdn/cli": "^0.6.2",
+    "@skillcdn/cli": "^0.6.3",
     "@types/node": "catalog:",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
@@ -41,14 +41,14 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.11",
-    "@skillcdn/brand": "^0.6.2",
-    "@skillcdn/client": "^0.6.2",
+    "@skillcdn/brand": "^0.6.3",
+    "@skillcdn/client": "^0.6.3",
     "@skillcdn/console": "workspace:*",
-    "@skillcdn/core": "^0.6.2",
-    "@skillcdn/indexer": "^0.6.2",
-    "@skillcdn/reader": "^0.6.2",
+    "@skillcdn/core": "^0.6.3",
+    "@skillcdn/indexer": "^0.6.3",
+    "@skillcdn/reader": "^0.6.3",
     "drizzle-orm": "^0.45.4",
-    "hono": "^4.13.18",
+    "hono": "^4.13.21",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
     "zod": "catalog:"

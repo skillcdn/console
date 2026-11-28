@@ -39,10 +39,10 @@
     "snapshot:rest": "turbo run build --filter=@skillcdn/console && node scripts/check-rest-compat.mjs --write"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.8",
+    "@biomejs/biome": "^2.6.9",
     "@changesets/changelog-github": "^1.0.1",
     "@changesets/cli": "^3.0.3",
-    "@skillcdn/cli": "^0.6.2",
+    "@skillcdn/cli": "^0.6.3",
     "turbo": "^2.11.13",
     "typescript": "catalog:"
   }

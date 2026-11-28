@@ -216,8 +216,10 @@ function listingOf(
     commit: mount.commit,
     items: items.slice(from, end),
     diagnostics: index.diagnostics,
-    // The counts stand in the instructions above the first page.
-    totals: null,
+    // The listing the command prints is of the skills alone (SkillCDN 0.6.3): the documents
+    // outside them are counted from these, with what reads them, and a page that ends before
+    // the skills do says how many are left.
+    totals: { skills: index.skills.length, documents: index.documents.length },
     nextCursor: end < items.length ? listingCursor(end, mount.commit) : null,
   };
 }
@@ -399,8 +401,8 @@ export function consolePack(
 
 /**
  * The listing of a pack as the command prints it. Where the pack answered, `text` is what the
- * skillcdn command prints for it, what a client is told on connect and then every skill and
- * document, between the lines of the console's own: where the pack is and how it answered,
+ * skillcdn command prints for it, what a client is told on connect and then every skill, the
+ * documents counted, between the lines of the console's own: where the pack is and how it answered,
  * where a person connects an agent of their own, and where the console's own skills are on this
  * machine. Where it did not, why, with that last line still.
  */

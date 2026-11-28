@@ -1897,6 +1897,7 @@ async function readThrough(
   options: {
     readonly words: ToolWords;
     readonly nextPart?: ((cursor: string) => string) | undefined;
+    readonly browseFolder?: ((path: string) => string) | undefined;
     readonly data?: boolean | undefined;
     readonly beside?: readonly (string | undefined)[] | undefined;
   },
@@ -1906,6 +1907,7 @@ async function readThrough(
       words: options.words,
       json: session.json,
       nextPart: options.nextPart,
+      browseFolder: options.browseFolder,
       room: roomFor(owner, options.beside ?? []),
     });
   } catch (error) {
@@ -2185,28 +2187,54 @@ async function readSkills(
     });
     return EXIT.ok;
   }
+  // The command that reads the next page of a folder or of a search (SkillCDN 0.6.3): this
+  // one again, asked as it was, with the cursor the page ended on. Where a word of it has no
+  // spelling both shells take, the command that was run is run again, and the line says why.
+  const nextPage =
+    (asked: readonly string[]) =>
+    (next: string): string =>
+      commandLine(extras.command, [
+        ...asked,
+        ...(limit === undefined ? [] : ["--limit", limit]),
+        "--cursor",
+        next,
+        ...(extras.again ?? []),
+      ]) ??
+      `the command you ran, with --cursor ${commandWord(next) ?? JSON.stringify(next)} in place of any it had, each word quoted for your shell. ${NO_LINE_TO_RUN}`;
   if (words !== undefined) {
-    // One page of what the words find; more is said, and asked for with --cursor.
+    // One page of what the words find, which ends with the command that reads the next where
+    // more was found. How a skill is loaded stands above it then, so that the command is last.
     const found = await readThrough(
       io,
       session,
       owner,
       pack,
       { read: "find", words, path: folder, cursor, limit },
-      { words: toolWords, beside: [loading] },
+      {
+        words: toolWords,
+        beside: [loading],
+        nextPart: nextPage([
+          "--search",
+          words,
+          ...(given === undefined ? [] : [given]),
+          ...(within === undefined ? [] : ["--path", within]),
+        ]),
+      },
     );
-    say(jsonOfRead(session, pack, found), () => `${found.text}\n${loading}`);
+    say(jsonOfRead(session, pack, found), () =>
+      found.next === undefined ? `${found.text}\n${loading}` : `${loading}\n${found.text}`,
+    );
     return EXIT.ok;
   }
   // One page of the folder, or of a file's outline, as the skillcdn command browses: a page
-  // that ends before the folder does names the cursor that continues it.
+  // that ends before the folder does ends with the command that reads the next.
   const browsed = await readThrough(
     io,
     session,
     owner,
     pack,
     { read: "browse", path: folder, cursor, limit },
-    { words: toolWords },
+    { words: toolWords, nextPart: nextPage(given === undefined ? [] : [given]) },
   );
   say(jsonOfRead(session, pack, browsed), () => browsed.text);
   return EXIT.ok;
@@ -2351,6 +2379,12 @@ async function readSkill(
       nextPart: (next) =>
         commandLine(command, [given, "--cursor", next, ...again]) ??
         `the command you ran, with --cursor ${commandWord(next) ?? JSON.stringify(next)} in place of any it had, each word quoted for your shell. ${NO_LINE_TO_RUN}`,
+      // The skill's own folder, where it does not list every file of it, as the command that
+      // lists a folder of this pack (SkillCDN 0.6.3): the dot for the root, since the command
+      // without a folder is the listing.
+      browseFolder: (path) =>
+        commandLine(`${command}s`, [path.length === 0 ? "." : path, ...again]) ??
+        `${command}s with this skill's folder, quoted for your shell. ${NO_LINE_TO_RUN}`,
     },
   );
   say(jsonOfRead(session, pack, loaded), () => loaded.text);
