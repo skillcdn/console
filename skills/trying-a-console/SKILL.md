@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell that runs bash (on Windows, Git Bash), Docker with its compose plugin, running, git, Node.js 24 or newer with npm, network access to GitHub, its container registry and npm, a GitHub account, and a browser on this computer signed in to it.
 metadata:
   author: skillcdn
-  version: "1.0"
+  version: "1.1"
 skillcdn:
   translations:
     ko:
@@ -14,14 +14,14 @@ skillcdn:
 ---
 # Trying the console on one computer
 
-One sentence goes in; a console on this computer comes out, at `http://127.0.0.1:11199`, with its person signed in as the first administrator, this agent connected as theirs, a first project, and one task worked to its end on the board. Nothing leaves the machine but what GitHub is asked to sign people in, and everything is taken down again with three commands.
+One sentence goes in; a console on this computer comes out, at `http://127.0.0.1:11199`, with its person signed in as the first administrator, this agent connected as theirs, a first project, and one task worked to its end on the board. Nothing leaves the machine but what GitHub is asked to sign people in, and everything is taken down again at the end.
 
 It is the smallest install of [the deploy guide](/deploy/README.md#the-smallest-install-and-a-closed-network): the console's image next to PostgreSQL, made by `deploy/install.sh`, which also registers signing in at GitHub ([ADR-0171](/docs/adr/0171-the-smallest-install-registers-its-github-app-from-a-manifest-with-one-press.md)).
 
 ## How the person is involved
 
-- **Before anything runs,** one message: what will be on this computer (two containers, a folder, a GitHub App under their account), what they do themselves, and one question, which folder to use, `skillcdn-console` in their home directory unless they name another. Go on when they say so.
-- **What only they do, four times:** press **Create GitHub App** once at GitHub; sign in to the console; approve this agent's code on the console's page; answer one decision on the board. Each is said in a message of its own, with the address, before the command that waits for it.
+- **Before anything runs,** one message: what will be on this computer (two containers, a folder, the `console` command installed for the machine or brought to the release's version where it is there already, a GitHub App under their account), everything they do themselves, below, and one question, which folder to use, `skillcdn-console` in their home directory unless they name another. Go on when they say so.
+- **What only they do:** press **Create GitHub App** once at GitHub; sign in to the console; approve this agent's code on the console's page; say what the first task is, or take the one proposed; answer one decision on the board; say whether the finished task is good; and, when it is taken down, delete the GitHub App. Each is said in a message of its own, with the address, before the command that waits for it. Say too that the press was not yet seen against GitHub itself: where GitHub refuses it, they register the app by a short form instead.
 - **Secrets:** none is asked for, typed or shown. The script writes what GitHub hands back into `deploy/.env`, which is never read or printed.
 - **Taking it down** deletes the board: it is done on their word, step by step.
 - **Language:** what is said to the person, and what is written on the board, is in their language.
@@ -33,10 +33,11 @@ Check each, and say everything that is missing at once, with what installs it.
 | What | Check |
 |---|---|
 | Docker, running, with compose | `docker info` and `docker compose version` |
-| git, Node.js 24 or newer, npm | `git --version`, `node --version`, `npm --version` |
-| bash | On Windows the script runs in Git Bash (`C:\Program Files\Git\bin\bash.exe`), not in the `bash` PowerShell finds, which is another system's |
-| Ports 11199 and 11196 of this computer free | Nothing listens there; another console port is said with `--port` |
+| git, Node.js, npm | `git --version`, `node --version`, `npm --version`. The package states Node.js 24; 22 runs the command today, so go on with it and say so; anything older is updated first |
+| bash | On Windows the script runs in Git Bash. From PowerShell it is started as `& "C:\Program Files\Git\bin\bash.exe" <script>`: a bare `bash` there may be another system's |
+| Ports 11199 and 11196 of this computer free | `netstat -an` shows nothing listening on either; another console port is said with `--port`, and is then the port of every address below |
 | A GitHub account | The person's own; the browser on this computer is signed in to it |
+| The command, where it is there already | `console --version` and `console logins`: step 5 brings it to the release's version, and the consoles it is signed in to stay as they are, the default among them. Say both in the first message |
 
 ## Workflow
 
@@ -44,9 +45,10 @@ Each step ends with a line to the person. Where a step fails, [when-it-does-not-
 
 ### 1. The release
 
-In the folder the person chose, fetch the release the command is published at, so that the console and the command are one version. The first line prints it; it is `<version>` from here on:
+Make the folder the person chose, and work in it from here on: the clone and the trial's own folder both stand in it. Fetch the release the command is published at, so that the console and the command are one version. The second line prints it; it is `<version>` from here on:
 
 ```sh
+mkdir -p ~/skillcdn-console && cd ~/skillcdn-console
 npm view @skillcdn/console version
 git clone --depth 1 --branch "@skillcdn/console@<version>" https://github.com/skillcdn/console.git console
 ```
@@ -63,7 +65,7 @@ It pulls the image, which takes a minute or two the first time, writes `console/
 
 Tell the person first, in a message of its own, since the next command waits for them and a host shows a command's words when it ends:
 
-> Open `http://127.0.0.1:11196/` in the browser where you are signed in to GitHub. GitHub shows an app named "SkillCDN Console" with a few letters after it: press **Create GitHub App**, once. It signs you in to the console on this computer and reads nothing of your repositories. If GitHub asks you to sign in on the way, sign in and open the address again.
+> Open `http://127.0.0.1:11196/` in the browser where you are signed in to GitHub. GitHub shows an app named "SkillCDN Console" with a few letters after it: press **Create GitHub App**, once. It signs you in to the console on this computer and reads nothing of your repositories. If the page does not open yet, load it again in a moment; if GitHub asks you to sign in on the way, sign in and open the address again.
 
 Then run it so that it may wait ten minutes: in the background where the host cuts a command short, reading its output when it ends.
 
@@ -75,29 +77,32 @@ The page answers once the command has started. After the press it writes the app
 
 ### 4. The first administrator
 
-Tell the person: "Open `http://127.0.0.1:11199/` and sign in with GitHub." By that address and not `localhost`: signing in is bound to the origin it was registered with. They are the administrator of an empty console.
+Tell the person: "Open `http://127.0.0.1:11199/` and sign in with GitHub; GitHub asks once whether the app may know who you are. Tell me when you are in." By that address and not `localhost`: signing in is bound to the origin it was registered with. Wait for their word. They are the administrator of an empty console.
 
 ### 5. This agent, connected
 
 ```sh
 npm install -g @skillcdn/console@<version>
 console login --url http://127.0.0.1:11199
+console whoami --url http://127.0.0.1:11199
 ```
 
-Under an agent's host the first call prints an address and a code and ends: tell the person both, in a message of its own, to approve on the console's page; then run the same command again, which waits for the approval. `console whoami` then names them, as an administrator. The token is the command's own to keep: never look for it.
+Under an agent's host the first call of `login` prints an address and a code and ends: tell the person both, in a message of its own, to approve on the console's page; then run the same command again, which waits for the approval. `whoami` then names them, as an administrator. The token is the command's own to keep: never look for it.
+
+**Name this console on every command until a folder is bound to it.** A machine that is signed in to another console already keeps that one as its default, and a command without `--url` goes there: `console project new` would make the trial's project on a board that is in use. From `console use` on, the folder names the console.
 
 ### 6. A first project
 
 ```sh
-console project new trial "Trial"
-mkdir first-project && cd first-project && console use trial
+console project new trial "Trial" --url http://127.0.0.1:11199
+mkdir first-project && cd first-project && console use trial --url http://127.0.0.1:11199
 ```
 
-`console use` binds that folder to the project: every later command runs there, and the task's files are made there. Another key or name, where the person says one.
+`console use` binds that folder, beside the clone, to the project and to this console, as a checkout of the project's repository would be bound: every later command runs there, and the task's files are made there. `console whoami` there names the project and `http://127.0.0.1:11199`; where it names another console, stop. Another key or name, where the person says one.
 
 ### 7. One task, to its end
 
-Ask once what the first task should be: something small of their own, or the default, a one-page introduction of this console for a teammate. Then load the skill working-the-board, whose file `console whoami` names, and work the task by it, from writing it on the board (`console task new ... --take`) to `console finish`. For a trial the run shows each thing a board is for, so see that it holds:
+Ask once what the first task should be: something small of their own, or the default, a one-page introduction of this console for a teammate. Then load the skill working-the-board, whose file `console whoami` names (`skills/working-the-board/SKILL.md` of the package), and work the task by it, from writing it on the board (`console task new ... --take`) to `console finish`. For a trial the run shows each thing a board is for, so see that it holds:
 
 - a report at a milestone (`console report`);
 - one decision the person answers on the board and the run waits for (`console ask` with two options): for the default task, whether the page is written for developers or for everyone;
@@ -119,9 +124,9 @@ On the person's word, each step said before it is done:
 
 1. `(cd console/deploy && docker compose down -v)`: the containers and the database's volume. Everything on the board is gone with it.
 2. The GitHub App, which only they delete: at the app's page the script printed, or GitHub's Settings, Developer settings, GitHub Apps, the app, Advanced, **Delete GitHub App**.
-3. `console logout --url http://127.0.0.1:11199`, and the folder, which holds `console/deploy/.env`.
+3. `console logout --url http://127.0.0.1:11199`, and the folder they chose, with the clone, its `console/deploy/.env` and `first-project` in it.
 
-`npm uninstall -g @skillcdn/console` and `docker image rm` of the two images are theirs to choose.
+What else is theirs to choose: `npm uninstall -g @skillcdn/console`, only where the command was not on the machine before; and the images, `docker image rm ghcr.io/skillcdn/console:<version>`, and `postgres:18` only where nothing else on the machine runs from it (`docker ps --filter ancestor=postgres:18`).
 
 ## Hard rules
 
