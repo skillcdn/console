@@ -245,7 +245,7 @@ describe("the briefings of an agent account (ADR-0085)", () => {
       {
         source: "console",
         key: "secret:git.token",
-        text: "Your secret git.token ends on 2026-12-10. Renew what it holds where it was made, and set it again with its new day: console secret git.token --set --expires <day>",
+        text: "Your secret git.token ends on 2026-12-10. Renew what it holds where it was made, without an end where the service lets you choose, and set it again: console secret git.token --set --expires <its new day, or none>",
       },
     ]);
     expect(JSON.stringify(told)).not.toContain("not-a-real-token");

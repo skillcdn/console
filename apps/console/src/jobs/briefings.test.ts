@@ -192,7 +192,7 @@ describe("the words of a briefing", () => {
   it("says the day's end, and a secret's day that is near", () => {
     expect(WRAP_BRIEFING).toContain("commit and push your desk");
     expect(secretWake("git.token", "2026-12-01")).toBe(
-      "Your secret git.token ends on 2026-12-01. Renew what it holds where it was made, and set it again with its new day: console secret git.token --set --expires <day>",
+      "Your secret git.token ends on 2026-12-01. Renew what it holds where it was made, without an end where the service lets you choose, and set it again: console secret git.token --set --expires <its new day, or none>",
     );
   });
 });
