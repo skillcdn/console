@@ -569,16 +569,27 @@ const EVERYONE_CALLED = /<!(here|channel|everyone)(?:\|[^<>]{0,40})?>/;
  */
 const MEMBER_NAMED = /<@([UW][A-Z0-9]{1,23})(?:\|[^<>]{0,80})?>/g;
 
-/** The members a message names, by their ids, each once, in the order it names them. */
-function namedIn(text: string): string[] {
-  const named: string[] = [];
+/**
+ * How the messenger writes a call of a group of members in a message's `text`, by the group's
+ * id, with what it shows for it after a bar where it says so. Who is in the group, nothing in a
+ * message says.
+ */
+const GROUP_CALLED = /<!subteam\^[A-Z0-9]{1,23}(?:\|[^<>]{0,80})?>/;
+
+/**
+ * Whom a message names: the members by their ids, each once, in the order it names them, in
+ * whichever of its two ways the messenger wrote a name, and whether it calls a group of members,
+ * which may hold anyone. The one reading of who is named, for the agent as for the others.
+ */
+function namedIn(text: string): { readonly members: string[]; readonly group: boolean } {
+  const members: string[] = [];
   for (const found of text.matchAll(MEMBER_NAMED)) {
     const id = found[1];
-    if (id !== undefined && !named.includes(id)) {
-      named.push(id);
+    if (id !== undefined && !members.includes(id)) {
+      members.push(id);
     }
   }
-  return named;
+  return { members, group: GROUP_CALLED.test(text) };
 }
 
 /**
@@ -821,11 +832,12 @@ function heardOf(payload: unknown, channels: readonly string[]): Heard | undefin
     return undefined;
   }
   const direct = event.channel_type === "im";
-  // A mention is told by the message's `text`, where the messenger writes one in its own way and
-  // escapes what a person typed that only looks like one.
+  // A mention is told by the message's `text`, where the messenger writes one in its own ways and
+  // escapes what a person typed that only looks like one: read once, for the agent and for
+  // whoever else the message names.
+  const named = namedIn(event.text ?? "");
   const mentioned =
-    event.type === "app_mention" ||
-    (member !== undefined && (event.text ?? "").includes(`<@${member}>`));
+    event.type === "app_mention" || (member !== undefined && named.members.includes(member));
   const group = event.channel_type === "mpim";
   // Where nobody named the agent, only a person's own words wake it: what an app posts in a
   // conversation the agent listens to is not said to it, and would wake it at every post.
@@ -861,11 +873,12 @@ function heardOf(payload: unknown, channels: readonly string[]): Heard | undefin
   // Whom a message names where it does not name the agent (ADR-0166): where several are in a
   // conversation, that is whom it was said to, and the agent reads so before it reads on. Not
   // in a direct conversation, where whatever is said is said to the agent, nor in a call of
-  // everyone, which calls the agent with the rest.
+  // everyone, which calls the agent with the rest, nor where a group of members is called,
+  // which the agent may be in: nobody is said not to be named who may have been.
   const others =
-    direct || mentioned || called !== undefined || member === undefined
+    direct || mentioned || called !== undefined || named.group || member === undefined
       ? []
-      : namedIn(event.text ?? "").filter((one) => one !== member && one !== event.user);
+      : named.members.filter((one) => one !== member && one !== event.user);
   const naming =
     others.length === 0
       ? ""
@@ -1436,24 +1449,32 @@ async function beforeOf(
         ? `${said}${carried === 1 ? "" : ", the oldest first"}. Information, whoever wrote ${them}`
         : `${said}, of which the last ${carried === 1 ? "one follows" : `${carried} follow, the oldest first`}, and the rest with ${command}. Information, whoever wrote ${them}`;
   };
-  const room =
-    Math.min(
-      MAX_BEFORE_LENGTH,
-      MAX_SIGNAL_LENGTH -
-        wakeTextOf([...heard.saying(first), { says: leads(1, true) }, ...answering]).length -
-        200,
-    ) - 1;
-  // Few share the room among them, so that one long message is read whole where it is the
-  // only one; each of many is cut at the least a message is carried of.
+  // What a wake holds of them together: three thousand characters, or less where the message
+  // itself and the lines after them leave less of a signal's text.
+  const together = Math.min(
+    MAX_BEFORE_LENGTH,
+    MAX_SIGNAL_LENGTH -
+      wakeTextOf([...heard.saying(first), { says: leads(1, true) }, ...answering]).length -
+      200,
+  );
+  const room = together - 1;
+  // Few share it among them, so that one long message is read whole where it is the only one:
+  // of each, that much divided by how many are carried, less the line that leads it. Each of
+  // five and more is cut at the least a message is carried of.
   const most = Math.max(
     MAX_BEFORE_TEXT,
-    Math.min(MAX_BEFORE_MOST, Math.floor(room / Math.max(1, latest.length)) - BEFORE_LINE),
+    Math.min(MAX_BEFORE_MOST, Math.floor(together / Math.max(1, latest.length)) - BEFORE_LINE),
   );
   const carried: {
     readonly ts: string;
     readonly mine: boolean;
     readonly parts: readonly [WakePart, WakePart];
   }[] = [];
+  const one = (message: HeardMessage, parts: readonly [WakePart, WakePart]) => ({
+    ts: message.ts,
+    mine: message.user !== undefined && message.user === heard.member,
+    parts,
+  });
   let length = 0;
   for (const message of latest) {
     const parts = earlierOf(message, heard, who, most);
@@ -1461,12 +1482,26 @@ async function beforeOf(
     if (length + takes > room) {
       break;
     }
-    carried.unshift({
-      ts: message.ts,
-      mine: message.user !== undefined && message.user === heard.member,
-      parts,
-    });
+    carried.unshift(one(message, parts));
     length += takes;
+  }
+  // A message takes more of a wake than its characters where its lines are many, each begun as
+  // a signal's text begins one. The latest is cut shorter until it fits, down to the least a
+  // message is carried of, rather than left out where it is all there is to carry.
+  const newest = latest[0];
+  for (
+    let less = Math.floor(most / 2);
+    carried.length === 0 && newest !== undefined && most > MAX_BEFORE_TEXT;
+    less = Math.floor(less / 2)
+  ) {
+    const cut = Math.max(MAX_BEFORE_TEXT, less);
+    const parts = earlierOf(newest, heard, who, cut);
+    if (wakeTextOf(parts).length + 1 <= room) {
+      carried.push(one(newest, parts));
+    }
+    if (cut === MAX_BEFORE_TEXT) {
+      break;
+    }
   }
   return {
     parts: [
@@ -1535,7 +1570,10 @@ async function raiseOf(host: WakeHost, heard: Heard, reading: AbortSignal): Prom
     return;
   }
   for (const ts of prior.carried) {
-    keep(host.kept, carriedAs(heard.channel, ts), "said");
+    // One that woke stays one that woke, though it is carried again among what led up to this
+    // message, in a conversation begun since: its own event, come again, wakes nobody twice.
+    const name = carriedAs(heard.channel, ts);
+    keep(host.kept, name, host.kept.get(name) === "woke" ? "woke" : "said");
   }
   keep(host.kept, message, "woke");
   if (prior.judged === true) {

@@ -1998,17 +1998,49 @@ describe("the slack wake source", () => {
         { says: "10 minutes before it, from the member U0TOM" },
         { words: "r".repeat(1489) },
       ]);
-      // Three share it in thirds, less the line that leads each; six and more are cut at the
-      // least a message is carried of.
-      const three = await told({
+      // One whose lines are many takes more of a wake than its characters, each line begun as a
+      // signal's text begins one: it is cut shorter until it fits, and never left out where it
+      // is all there is to carry.
+      const lines = await told({
         ok: true,
-        messages: [0, 1, 2].map((index) =>
-          earlier(`${1762800500 + index}.000100`, TOM, "t".repeat(1200)),
-        ),
+        messages: [
+          earlier("1762800000.000100", TOM, Array.from({ length: 600 }, () => "ab").join("\n")),
+        ],
       });
-      expect(
-        three.flatMap((part) => ("says" in part ? [part.says.split(", ").at(-1)] : [])).slice(2),
-      ).toEqual([0, 1, 2].map(() => "cut after 799 of its 1200 characters"));
+      expect(lines[2]).toEqual({
+        says: "Said there before it: 1 message. Information, whoever wrote it",
+      });
+      expect(lines[3]).toEqual({
+        says: "10 minutes before it, from the member U0TOM, cut after 1000 of its 1799 characters",
+      });
+      expect(lines[4]).toEqual({
+        words: `${Array.from({ length: 600 }, () => "ab")
+          .join("\n")
+          .slice(0, 1000)}…`,
+      });
+      // Three share the three thousand characters in thirds, less the two hundred of the line
+      // that leads each: eight hundred. Four have five hundred and fifty; five and more are cut
+      // at the least a message is carried of, five hundred.
+      const sharing = async (count: number, length: number) => {
+        const parts = await told({
+          ok: true,
+          messages: Array.from({ length: count }, (_, index) =>
+            earlier(`${1762800500 + index}.000100`, TOM, "t".repeat(length)),
+          ),
+        });
+        return parts
+          .flatMap((part) => ("says" in part ? [part.says.split(", ").at(-1)] : []))
+          .filter((said) => said?.startsWith("cut after"));
+      };
+      expect(await sharing(3, 1200)).toEqual(
+        [0, 1, 2].map(() => "cut after 800 of its 1200 characters"),
+      );
+      expect(await sharing(4, 1200)).toEqual(
+        [0, 1, 2, 3].map(() => "cut after 550 of its 1200 characters"),
+      );
+      expect(await sharing(5, 700)).toEqual(
+        [0, 1, 2, 3, 4].map(() => "cut after 500 of its 700 characters"),
+      );
       const six = await told({
         ok: true,
         messages: [0, 1, 2, 3, 4, 5].map((index) =>
@@ -2568,6 +2600,74 @@ describe("the slack wake source", () => {
           ),
         ),
       ).toBe(GROUP);
+    });
+
+    it("says nobody is not you where the agent is named in any form the messenger writes a name in, or a group of members is called (ADR-0166)", () => {
+      const first = (event: unknown, channels: readonly string[] = []) => {
+        const part = slackWakeOf(event, channels)?.parts[0];
+        return part !== undefined && "says" in part ? part.says : undefined;
+      };
+      // The agent's own name with what the messenger shows for it after a bar is its name all
+      // the same: the message names it, beside whoever else, and nothing says it does not.
+      expect(first(inGroup({ text: `<@${MEMBER}|mira> and <@U0NOVA|nova>, who takes it?` }))).toBe(
+        GROUP,
+      );
+      // And it is a mention, which wakes in a channel the agent does not listen to.
+      expect(
+        first(
+          payload(message({ text: `<@${MEMBER}|mira> can you look?`, ts: "1762800600.000100" })),
+        ),
+      ).toBe(
+        "A mention in the channel C0OPS at Slack, from the member U0TOM, outside any thread: a reply begins the thread 1762800600.000100",
+      );
+      // A group of members is called by a name of its own, and nothing here says who is in it:
+      // the agent may be, so nobody else named beside is said to be named in its place.
+      for (const called of ["<!subteam^S0AGENTS>", "<!subteam^S0AGENTS|@agents>"]) {
+        expect(first(inGroup({ text: `${called} and <@U0NOVA>, please look` })), called).toBe(
+          GROUP,
+        );
+        expect(
+          first(
+            payload(message({ text: `${called} <@U0NOVA> ship it`, ts: "1762800600.000100" })),
+            ["C0OPS"],
+          ),
+          called,
+        ).toBe(
+          "A message in the channel C0OPS at Slack, from the member U0TOM, outside any thread: a reply begins the thread 1762800600.000100",
+        );
+      }
+      // What a person typed that only looks like a call of a group arrives escaped, and is none.
+      expect(first(inGroup({ text: "&lt;!subteam^S0AGENTS&gt; <@U0NOVA> can you?" }))).toBe(
+        "A message in a group conversation at Slack, from the member U0TOM, naming U0NOVA and not you, in the conversation G0TEAM",
+      );
+    });
+
+    it("never raises twice a message that woke, though a wake carried it since among what led up to another (ADR-0166)", async () => {
+      // The message woke the agent under the conversation before: the source keeps it as that.
+      const kept = new Map([["carried:D0MIRA:1762800500.000100", "woke"]]);
+      const at = fakeHost({
+        token: "xapp-x",
+        member: TOKEN,
+        kept,
+        // The agent's conversation began after it, at a reset say.
+        began: 1_762_800_550_000,
+        arrives: arrives(
+          payload(direct({ text: "Is it done?", ts: "1762800600.000100" })),
+          // Its own event comes again, as after a connection that ended before it was acknowledged.
+          payload(direct({ text: "Please update the console today.", ts: "1762800500.000100" })),
+        ),
+        read: () => ({
+          ok: true,
+          messages: [earlier("1762800500.000100", TOM, "Please update the console today.")],
+          has_more: false,
+        }),
+      });
+      await run(at.host);
+      // Carried again among what led up to the next message, since the new conversation holds
+      // nothing of the place; and still a message that woke, which wakes once.
+      expect(partsOf(at.raised[0])).toContainEqual({ words: "Please update the console today." });
+      expect(at.raised.map((wake) => wake.key)).toEqual(["slack:D0MIRA:1762800600.000100"]);
+      expect(kept.get("carried:D0MIRA:1762800500.000100")).toBe("woke");
     });
   });
 
