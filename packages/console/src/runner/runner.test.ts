@@ -4261,3 +4261,117 @@ describe("the runner, of what its agent's conversation holds (ADR-0166)", () => 
     expect(saved.at(-1)?.began).toBeGreaterThanOrEqual(before);
   });
 });
+
+describe("the runner, of what it keeps on the machine (ADR-0166)", () => {
+  it("takes a conversation said to have begun after now to have begun now, and keeps it so", async () => {
+    let began: (() => number) | undefined;
+    const source: WakeSource = {
+      name: "chat",
+      async run(host, signal) {
+        began = () => host.began?.() ?? -1;
+        await host.wait(60_000, signal);
+      },
+    };
+    // The machine's clock ran ahead when the conversation began, or the file says a moment
+    // nobody has seen yet: counted from, every wake would carry what the last one carried.
+    const ahead = Date.now() + 3_600_000;
+    const { saved } = setup({
+      sources: [source],
+      state: { delivered: 0, conversation: "c-0", driver: "claude", began: ahead },
+    });
+    await until("the source to listen", () => began !== undefined);
+    const before = Date.now();
+    const said = began?.() ?? 0;
+    expect(said).toBeLessThanOrEqual(Date.now());
+    expect(said).toBeGreaterThanOrEqual(before - 5000);
+    // Kept as that: the next runner reads a moment that is past.
+    await until("the state", () => saved.some((state) => state.began === said));
+    expect(saved.every((state) => (state.began ?? 0) <= Date.now())).toBe(true);
+    // And it stays where it was put: asked again, it is the same moment.
+    await sleep(20);
+    expect(began?.()).toBe(said);
+  });
+
+  it("holds the same for a clock that is set back while the runner runs", async () => {
+    let began: (() => number) | undefined;
+    const source: WakeSource = {
+      name: "chat",
+      async run(host, signal) {
+        began = () => host.began?.() ?? -1;
+        await host.wait(60_000, signal);
+      },
+    };
+    let offset = 3_600_000;
+    const { console, product, saved } = setup({
+      sources: [source],
+      now: () => Date.now() + offset,
+    });
+    await until("the source to listen", () => began !== undefined);
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    // Begun by a clock an hour ahead.
+    expect(began?.()).toBeGreaterThan(Date.now() + 3_000_000);
+    // The clock is put right.
+    offset = 0;
+    const said = began?.() ?? 0;
+    expect(said).toBeLessThanOrEqual(Date.now());
+    await until("the state", () => saved.at(-1)?.began === said);
+  });
+
+  it("writes what a wake source keeps as the runner ends, and says once where it cannot be written", async () => {
+    // What the source of the runner that listens keeps under: the one started last.
+    const listening: { keep?: ((name: string, value: string) => void) | undefined } = {};
+    const source: WakeSource = {
+      name: "chat",
+      async run(host, signal) {
+        listening.keep = (name, value) => {
+          host.kept.set(name, value);
+        };
+        await host.wait(60_000, signal);
+      },
+    };
+    // Asked each time, since it is another once the next runner's source listens.
+    const keeping = () => listening.keep;
+    // Changed a moment before the runner is stopped: written on the way out.
+    const written: [string, KeptBySource][] = [];
+    const first = setup({
+      sources: [source],
+      heartbeatMs: 60_000,
+      kept: {
+        load: async () => undefined,
+        save: async (name, now) => {
+          written.push([name, now]);
+        },
+      },
+    });
+    await until("the source to listen", () => keeping() !== undefined);
+    keeping()?.("brought:ops:", "1762800600.000100");
+    first.runner.stop();
+    await first.done;
+    expect(written.at(-1)).toEqual(["chat", [["brought:ops:", "1762800600.000100"]]]);
+    // A machine that does not take the file: said once, in the runner's own line and never in
+    // words of what is kept, and the source goes on with what it holds.
+    listening.keep = undefined;
+    let tries = 0;
+    const second = setup({
+      sources: [source],
+      kept: {
+        load: async () => undefined,
+        save: async () => {
+          tries += 1;
+          throw new Error("EACCES");
+        },
+      },
+    });
+    await until("the source to listen again", () => keeping() !== undefined);
+    keeping()?.("brought:ops:", "1762800600.000100");
+    await until("the first try", () => tries === 1);
+    keeping()?.("brought:ops:", "1762800700.000100");
+    await until("the second try", () => tries === 2);
+    const line =
+      "what the wake source chat keeps could not be written; it is kept while the runner runs";
+    expect(second.log.filter((one) => one === line)).toHaveLength(1);
+    expect(JSON.stringify(second.log)).not.toContain("1762800600");
+  });
+});

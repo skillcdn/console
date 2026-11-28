@@ -816,6 +816,22 @@ export function createRunner(options: RunnerOptions): Runner {
   };
 
   /**
+   * When the agent's conversation began, as a wake source is told it (ADR-0166): never after
+   * now. A moment ahead of the clock, kept by a runner whose machine's clock ran ahead or set
+   * back since, is none a message was written before: counted from, every wake of a place
+   * would carry again what the last one carried, for as long as the clock is behind it. It is
+   * taken as now, and kept so.
+   */
+  const beganBy = (): number => {
+    const now = options.now();
+    if (began > now) {
+      began = now;
+      void persist();
+    }
+    return began;
+  };
+
+  /**
    * Lets go of the conversation kept: the next session begins a new one, which holds nothing
    * the agent was handed before this moment (ADR-0166), but for what waits to be handed over.
    */
@@ -2756,7 +2772,7 @@ export function createRunner(options: RunnerOptions): Runner {
         return true;
       },
       kept,
-      began: () => began,
+      began: beganBy,
       log,
       stands: (state, why) => sourceStands(source.name, state, why),
       fetch: wakes.fetch,
@@ -2839,7 +2855,9 @@ export function createRunner(options: RunnerOptions): Runner {
       const kept = await options.state.load().catch(() => undefined);
       delivered = kept?.delivered ?? 0;
       conversation = kept?.conversation;
-      began = kept?.began ?? 0;
+      // A moment after now is none the conversation began at: held to the clock here, and
+      // wherever a wake source asks.
+      began = Math.min(kept?.began ?? 0, options.now());
       if (conversation !== undefined && kept?.driver !== undefined && kept.driver !== driver.name) {
         // Another product's conversation is nothing this one can go on with: asked to, it fails
         // at every turn until a supervisor resets it.
@@ -2872,6 +2890,10 @@ export function createRunner(options: RunnerOptions): Runner {
         log(
           `the product's usage limit stopped the agent before this runner started: tried again at ${new Date(waits.until).toISOString()}`,
         );
+      }
+      if ((kept?.began ?? 0) > began) {
+        // Kept as it is taken, once everything else the file said is in place again.
+        await persist();
       }
       probe = await driver.probe();
       const left =

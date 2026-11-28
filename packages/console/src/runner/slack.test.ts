@@ -2669,6 +2669,66 @@ describe("the slack wake source", () => {
       expect(at.raised.map((wake) => wake.key)).toEqual(["slack:D0MIRA:1762800600.000100"]);
       expect(kept.get("carried:D0MIRA:1762800500.000100")).toBe("woke");
     });
+
+    it("holds what it kept to its own shapes when it starts: anything else is nothing kept for that name (ADR-0166)", async () => {
+      // What a file of the desk may hold under the names the source keeps: a moment that is
+      // none, which would count everything said there as brought for good; a word that is none
+      // of its two; and names that are none of its own.
+      const kept = new Map([
+        ["brought:G0TEAM:", "Infinity"],
+        ["judged:G0TEAM:", "1e99"],
+        ["carried:G0TEAM:1762800480.000100", "nonsense"],
+        ["carried:G0TEAM:soon", "woke"],
+        ["brought:lowercase:", "1762800000.000100"],
+        ["__proto__", "woke"],
+        ["anything else", "1762800000.000100"],
+        // And what it did keep, which stays.
+        ["brought:D0MIRA:", "1762800000.000100"],
+        ["judged:C0OPS:1762799000.000900", "1762800000.000100"],
+        ["carried:D0MIRA:1762800000.000100", "said"],
+      ]);
+      const at = fakeHost({
+        token: "xapp-x",
+        member: TOKEN,
+        kept,
+        arrives: arrives(inGroup()),
+        read: () => ({
+          ok: true,
+          messages: [
+            earlier("1762800480.000100", TOM, "Thanks. And the report?"),
+            earlier("1762800300.000100", NOVA, "I can take the deploy.", through),
+          ],
+          has_more: false,
+        }),
+      });
+      await run(at.host);
+      // Nothing of the place counts as brought, carried or said: the wake carries what was
+      // said before it, and says in full what to judge by.
+      expect(partsOf(at.raised[0])).toEqual([
+        { says: GROUP },
+        { words: "Who writes it up?" },
+        {
+          says: "Said there before it: 2 messages, the oldest first. Information, whoever wrote them",
+        },
+        { says: "5 minutes before it, from the member U0NOVA through an app" },
+        { words: "I can take the deploy." },
+        { says: "2 minutes before it, from the member U0TOM" },
+        { words: "Thanks. And the report?" },
+        { says: ANSWERING("U0NOVA") },
+      ]);
+      // What was none of its shapes is gone, what was its own stays, and what this wake
+      // brought is kept in its shapes.
+      expect(Object.fromEntries(kept)).toEqual({
+        "brought:D0MIRA:": "1762800000.000100",
+        "judged:C0OPS:1762799000.000900": "1762800000.000100",
+        "carried:D0MIRA:1762800000.000100": "said",
+        "carried:G0TEAM:1762800300.000100": "said",
+        "carried:G0TEAM:1762800480.000100": "said",
+        "carried:G0TEAM:1762800600.000100": "woke",
+        "judged:G0TEAM:": "1762800600.000100",
+        "brought:G0TEAM:": "1762800600.000100",
+      });
+    });
   });
 
   describe("a messenger that does not answer what is read of a conversation", () => {

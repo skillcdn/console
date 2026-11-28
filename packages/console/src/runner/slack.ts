@@ -1222,6 +1222,29 @@ const carriedAs = (channel: string, ts: string): string => `carried:${channel}:$
 const judgedOf = (heard: Pick<Heard, "channel" | "thread">): string =>
   `judged:${heard.channel}:${heard.thread ?? ""}`;
 
+/** A place the source keeps a moment under, and a message it keeps a word under, as it names them. */
+const KEPT_PLACE = /^(?:brought|judged):[A-Z0-9]{1,24}:(?:[0-9]{1,12}\.[0-9]{1,9})?$/;
+const KEPT_MESSAGE = /^carried:[A-Z0-9]{1,24}:[0-9]{1,12}\.[0-9]{1,9}$/;
+const KEPT_MOMENT = /^[0-9]{1,12}\.[0-9]{1,9}$/;
+
+/**
+ * Holds what the source kept to its own shapes (ADR-0166): a moment of the messenger's under a
+ * place, `woke` or `said` under a message. It is read back from a file of the desk, where
+ * anything may stand, and compared as it is: a moment that is none, a number without end say,
+ * would count everything said in a place as brought, for good. Anything else is nothing kept
+ * for that name.
+ */
+function ownShapes(kept: Map<string, string>): void {
+  for (const [name, value] of [...kept]) {
+    const fits = KEPT_PLACE.test(name)
+      ? KEPT_MOMENT.test(value)
+      : KEPT_MESSAGE.test(name) && (value === "woke" || value === "said");
+    if (!fits) {
+      kept.delete(name);
+    }
+  }
+}
+
 /** Keeps a name as the latest, and lets go of the oldest past the most. */
 function keep(kept: Map<string, string>, name: string, value: string): void {
   kept.delete(name);
@@ -1774,6 +1797,9 @@ async function listen(
 export const slack: WakeSource = {
   name: "slack",
   async run(host: WakeHost, signal: AbortSignal): Promise<void> {
+    // What a runner before this one kept comes from a file: held to the source's own shapes
+    // before anything is compared with it.
+    ownShapes(host.kept);
     const token = await host.secret(SLACK_APP_TOKEN);
     if (token === undefined) {
       host.log(`the slack wake source finds no ${SLACK_APP_TOKEN} in the account's store`);

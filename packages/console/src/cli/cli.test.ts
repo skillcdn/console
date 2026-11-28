@@ -5780,6 +5780,7 @@ describe("the runner on the command line (ADR-0085)", () => {
     user: "mira",
     readText: async () => undefined,
     writePrivate: async () => undefined,
+    replacePrivate: async () => undefined,
     remove: async () => undefined,
     socket: () => {
       throw new Error("no socket is opened here");

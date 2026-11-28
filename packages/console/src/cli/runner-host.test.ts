@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import process from "node:process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRunnerHost } from "./runner-host.js";
@@ -69,5 +71,46 @@ describe("the runner's host", () => {
       { keeperPauseMs: 5 },
     );
     expect(await within(left.untilStopped(), 2000)).toBeUndefined();
+  });
+
+  it("puts a file in place of the one there whole or not at all: written beside it first, and nothing of that left behind", async () => {
+    const desk = await mkdtemp(join(tmpdir(), "console-runner-host-"));
+    try {
+      const host = createRunnerHost(desk, {});
+      // The first, its folder made on the way, and the next in its place.
+      await host.replacePrivate("work/runner-state.json", '{"delivered":1}\n');
+      expect(await readFile(join(desk, "work/runner-state.json"), "utf8")).toBe(
+        '{"delivered":1}\n',
+      );
+      await host.replacePrivate("work/runner-state.json", '{"delivered":2}\n');
+      expect(await readFile(join(desk, "work/runner-state.json"), "utf8")).toBe(
+        '{"delivered":2}\n',
+      );
+      // Nothing beside it is left: what was written first was put in its place.
+      expect(await readdir(join(desk, "work"))).toEqual(["runner-state.json"]);
+      // Its owner's alone to read, where the system says so of a file.
+      if (process.platform !== "win32") {
+        expect((await stat(join(desk, "work/runner-state.json"))).mode & 0o777).toBe(0o600);
+      }
+      // Many at once leave one of them whole, and never a mix of two.
+      const texts = Array.from({ length: 12 }, (_, index) => `${String(index).repeat(20_000)}\n`);
+      await Promise.all(texts.map((text) => host.replacePrivate("work/runner-state.json", text)));
+      expect(texts).toContain(await readFile(join(desk, "work/runner-state.json"), "utf8"));
+      expect(await readdir(join(desk, "work"))).toEqual(["runner-state.json"]);
+      // Where it cannot be put in place, a folder standing there say, the write fails, what
+      // stood there stands, and nothing written beside it is left.
+      await mkdir(join(desk, "work/runner-kept-slack.json"));
+      await writeFile(join(desk, "work/runner-kept-slack.json/inside"), "kept");
+      await expect(host.replacePrivate("work/runner-kept-slack.json", "[]\n")).rejects.toThrow();
+      expect(await readFile(join(desk, "work/runner-kept-slack.json/inside"), "utf8")).toBe("kept");
+      expect((await readdir(join(desk, "work"))).sort()).toEqual([
+        "runner-kept-slack.json",
+        "runner-state.json",
+      ]);
+      // Nothing outside the desk, as with every file of the runner's.
+      await expect(host.replacePrivate("../outside.json", "{}")).rejects.toThrow("under its desk");
+    } finally {
+      await rm(desk, { recursive: true, force: true });
+    }
   });
 });
