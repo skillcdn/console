@@ -196,7 +196,7 @@ const TASK_NOTIFICATIONS: PageHelp = {
 
 const AGENT_SIGNALS: PageHelp = {
   usage:
-    'agent tell <handle> "<words>" [--file <path>]  |  agent interrupt|stop|restart <handle> ["<words>"]  |  agent set <handle> [--model <name|none>] [--effort <level|none>]',
+    'agent tell <handle> "<words>"|--file <path>  |  agent interrupt|stop|restart <handle> ["<words>"|--file <path>]  |  agent set <handle> [--model <name|none>] [--effort <level|none>]',
   synopsis: "A supervisor's signals to the account's runner.",
   about: [
     "A supervisor's signals to the account's runner (ADR-0085), sent in the supervisor's own name and kept on the account's record. The words are an argument, --file, or - on standard input.",
@@ -580,7 +580,8 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       restart: AGENT_SIGNALS,
       set: AGENT_SIGNALS,
       reset: {
-        usage: 'agent reset <handle> ["<words>"]  |  agent reset me "<why>" [--file <path>]',
+        usage:
+          'agent reset <handle> ["<words>"|--file <path>]  |  agent reset me "<why>"|--file <path>',
         synopsis: "A new conversation: a supervisor's for an agent, or the account's own.",
         about: [
           "reset <handle>: a supervisor starts the agent with a new conversation, at once, for one that cannot go on. Nothing begins one by itself.",
@@ -595,7 +596,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
       },
       wake: {
         usage:
-          'agent wake <handle> ["<words>"]  |  agent wake me ["<words>"] [--in <minutes> | --at <HH:MM>] [--key <name>]  |  agent wake me --cancel [--key <name>]',
+          'agent wake <handle> ["<words>"|--file <path>]  |  agent wake me ["<words>"|--file <path>] [--in <minutes> | --at <HH:MM>] [--key <name>]  |  agent wake me --cancel [--key <name>]',
         synopsis:
           "Says there is something to do: a supervisor's wake, or the account's own, now or later.",
         about: [
@@ -1100,7 +1101,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     refusals: RUN_REFUSALS,
   },
   abandon: {
-    usage: 'abandon [<run id>] [--summary "<markdown>"]',
+    usage: 'abandon [<run id>|--run <id>] [--summary "<markdown>"|--file <path>]',
     synopsis: "Leaves a run and gives its task back.",
     about:
       "Leaves a run, one taken by mistake or one that will not come back: the task goes back to the state the take found it in (ADR-0114), unless a person moved it meanwhile. The command then reads the task and says the state it is in. A person gives up this way on a run of theirs, and an owner of the project on anyone's.",
@@ -1158,7 +1159,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     synopsis:
       "One page in full, or one of its versions; or a page written, given a file, put away or brought back.",
     about:
-      "One page in full: its title, its body in Markdown, what it links to, what refers to it (pages, tasks, decisions), and its files. --versions lists its versions, who wrote each and when; --version <n> prints one as it was. A word that names a form below is read as that form when a path follows it, and as a page's path alone.",
+      "One page in full: its title, its body in Markdown, what it links to, what refers to it (pages, tasks, decisions), and its files. --versions lists its versions, who wrote each and when; --version <n> prints one as it was. A word that names a form below is that form where a path, or a flag of the form, follows it, and alone a page's path.",
     refusals: [...DOCUMENT_REFUSALS, "document.version_not_found: the page has no such version"],
     forms: {
       write: {
@@ -1285,8 +1286,8 @@ export const COMMAND_ALIASES: Readonly<Record<string, readonly [string, string]>
 /**
  * The commands in one table (ADR-0167): a group is who runs its commands, and a row is one line
  * of the overview, the commands it stands for and a few words on them. A command is added as a
- * row here, its page above and its case of the dispatch, and `help.test.ts` holds the three to
- * one another.
+ * row here, its page above and its case of the dispatch: `help.test.ts` holds the table to the
+ * pages, and `cli.test.ts` the dispatch to them.
  */
 export const COMMAND_GROUPS: readonly {
   readonly title: string;
@@ -1438,7 +1439,12 @@ no request. console --version says which version of the command this is.
 `;
 
 /** The words `console help` takes in place of a command's name, each a page of its own. */
-const TOPICS: Readonly<Record<string, string>> = { everywhere: EVERYWHERE };
+const TOPICS: Readonly<Record<string, string>> = {
+  everywhere: EVERYWHERE,
+  // A word that runs and is no row of the table has its line here, so that asking of it is answered.
+  version:
+    "console version\nWhich version of the command this is and how it was installed; console --version and -v say the same. It asks the console nothing.\n",
+};
 
 /** One page as it is printed: its forms a line each, what to know, its limits and its refusals. */
 function renderPage(
@@ -1489,13 +1495,13 @@ export type HelpAnswer =
  */
 export function helpFor(words: readonly string[], skillsDir?: string): HelpAnswer {
   const [first = "", ...rest] = words;
-  const topic = TOPICS[first];
+  const topic = held(TOPICS, first);
   if (topic !== undefined) {
     return { page: topic };
   }
-  const alias = COMMAND_ALIASES[first];
+  const alias = held(COMMAND_ALIASES, first);
   const [name, form] = alias === undefined ? [first, rest[0]] : alias;
-  const help = COMMAND_HELP[name];
+  const help = held(COMMAND_HELP, name);
   if (help === undefined) {
     return { notCommand: first, near: nearestCommands(first) };
   }
@@ -1508,7 +1514,7 @@ export function helpFor(words: readonly string[], skillsDir?: string): HelpAnswe
       ),
     };
   }
-  const page = help.forms[form];
+  const page = held(help.forms, form);
   if (page === undefined) {
     return { notForm: form, command: name, forms: Object.keys(help.forms) };
   }
@@ -1517,9 +1523,38 @@ export function helpFor(words: readonly string[], skillsDir?: string): HelpAnswe
   };
 }
 
-/** Whether a word after a command's name opens a page of its own: what `--help` after it then prints. */
-export function isFormOf(name: string, word: string | undefined): boolean {
-  return word !== undefined && COMMAND_HELP[name]?.forms?.[word] !== undefined;
+/**
+ * What a table holds under a word someone typed, and nothing an object answers to by itself:
+ * `constructor` is no command, and `toString` no form of one.
+ */
+export function held<T>(
+  table: Readonly<Record<string, T>>,
+  word: string | undefined,
+): T | undefined {
+  return word !== undefined && Object.hasOwn(table, word) ? table[word] : undefined;
+}
+
+/**
+ * The form of a command that the words after its name were typing, where it has a page of its
+ * own: what `--help` among them prints, and what the line after a mistake in them names. A
+ * form's word is read where a form stands, first, or after the key for a plugin; a form that is
+ * typed as a flag (`skills --search`, `secret --accept`), which its usage says, is read
+ * wherever the flag stands, and never from a word, which is then a folder or a name.
+ */
+export function formTyped(name: string, rest: readonly string[]): string | undefined {
+  const forms = held(COMMAND_HELP, name)?.forms;
+  if (forms === undefined) {
+    return undefined;
+  }
+  const flagged = (word: string): boolean =>
+    new RegExp(`(?:^|[^a-z-])${name} --${word}(?![a-z-])`).test(held(forms, word)?.usage ?? "");
+  const word = rest[name === "plugin" ? 1 : 0];
+  if (held(forms, word) !== undefined && word !== undefined && !flagged(word)) {
+    return word;
+  }
+  return rest
+    .map((given) => /^--([a-z][a-z-]*)(?:=|$)/.exec(given)?.[1])
+    .find((given): given is string => given !== undefined && flagged(given));
 }
 
 /** How many single-letter edits turn one word into another, up to `most`; more is `most + 1`. */

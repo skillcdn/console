@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MAX_SUMMARY_LENGTH } from "../limits.js";
-import { type CliIo, EXIT, keepRunning, ownWakeMoment, runCli } from "./cli.js";
+import { type CliIo, COMMAND_WORDS, EXIT, keepRunning, ownWakeMoment, runCli } from "./cli.js";
 import { NO_LINE_TO_RUN } from "./command-words.js";
 import { type CredentialStore, type Credentials, CredentialsError } from "./credentials.js";
 import type { DirectorySettings, DirectoryStore } from "./directory.js";
-import { HELP_BOUNDS } from "./help.js";
+import { COMMAND_ALIASES, COMMAND_HELP, HELP_BOUNDS } from "./help.js";
 import type { Install } from "./install.js";
 import type { NoticeStore, VersionNotice } from "./notices.js";
 import type { RunnerHost } from "./runner-host.js";
@@ -548,6 +548,94 @@ describe("the console command", () => {
     });
     expect(await runCli(["task", "99"], refused.io)).toBe(EXIT.failed);
     expect(refused.err()).toBe("task.not_found: The task was not found.\n");
+  });
+
+  it("runs every command that has a page and every word of before, and no other word (ADR-0167)", () => {
+    expect([...COMMAND_WORDS].sort()).toEqual(
+      [...Object.keys(COMMAND_HELP), ...Object.keys(COMMAND_ALIASES)].sort(),
+    );
+  });
+
+  it("answers by the form that was typed, wherever its word or its flag stands (ADR-0167)", async () => {
+    const { fetch, calls } = fakeConsole({});
+    const said = async (...args: string[]): Promise<string> => {
+      const ran = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, ran.io), args.join(" ")).toBe(EXIT.usage);
+      expect(ran.out()).toBe("");
+      return ran.err();
+    };
+    const page = async (...args: string[]): Promise<string> => {
+      const ran = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, ran.io), args.join(" ")).toBe(EXIT.ok);
+      return ran.out();
+    };
+    // An account's own wake that was mistyped is answered with the options of its own form,
+    // wherever `me` stands among them, and never with a supervisor's.
+    const ownWake =
+      "Its own are --file, --in, --at, --key, --cancel; --json, --project, --url and --account go with every command.\nIts forms and flags: console help agent wake\n";
+    expect(await said("agent", "wake", "me", "--bogus")).toBe(
+      `Not an option of this command: --bogus. ${ownWake}`,
+    );
+    expect(await said("agent", "wake", "--at", "09:00", "me", "--bogus")).toBe(
+      `Not an option of this command: --bogus. ${ownWake}`,
+    );
+    expect(await said("agent", "wake", "me", "--cancel", "--key")).toBe(
+      "Option '--key <value>' argument missing\nIts forms and flags: console help agent wake\n",
+    );
+    // A supervisor's is answered with its own.
+    expect(await said("agent", "wake", "mira", "--in", "5")).toBe(
+      "Not an option of this command: --in. Its own are --file; --json, --project, --url and --account go with every command.\nIts forms and flags: console help agent wake\n",
+    );
+    // A form that is typed as a flag has its page from --help and from the line after a
+    // mistake, and a folder or a name that reads as its word does not.
+    expect(await page("skills", "--search", "deploy", "--help")).toBe(
+      await page("help", "skills", "search"),
+    );
+    expect(await page("skills", "guides", "--rows", "--help")).toBe(
+      await page("help", "skills", "rows"),
+    );
+    expect(await page("secret", "--accept", "--help")).toBe(await page("help", "secret", "accept"));
+    expect(await said("skills", "--search")).toBe(
+      "Option '--search <value>' argument missing\nIts forms and flags: console help skills search\n",
+    );
+    expect(await said("skills", "rows", "--bogus")).toContain(
+      "\nIts forms and flags: console help skills\n",
+    );
+    expect(await page("skills", "rows", "--help")).toBe(await page("help", "skills"));
+    // The word of a form is read where a form stands: first, or after a plugin's key.
+    expect(await said("agent", "mira", "wake", "--bogus")).toContain(
+      "\nIts forms and flags: console help agent\n",
+    );
+    expect(await page("agent", "mira", "wake", "--help")).toBe(await page("help", "agent"));
+    expect(await page("plugin", "hello", "records", "--help")).toBe(
+      await page("help", "plugin", "records"),
+    );
+    // What an object answers to by itself is no command, no form and no page.
+    for (const word of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      expect(await said(word)).toBe(`Not a command: ${word}. console help lists the commands.\n`);
+      expect(await said("help", word)).toBe(
+        `Not a command: ${word}. console help lists the commands.\n`,
+      );
+      expect(await said(word, "--help")).toBe(
+        `Not a command: ${word}. console help lists the commands.\n`,
+      );
+      expect(await said("help", "task", word)).toContain(`Not a form of console task: ${word}.`);
+      expect(await page("task", word, "--help")).toBe(await page("help", "task"));
+      expect(await said("doc", word, "extra")).toBe(
+        "Say which page: console doc <path> [--version <n>|--versions]\nIts forms and flags: console help doc\n",
+      );
+    }
+    // A word with an apostrophe is said whole.
+    expect(await said("categories", "it's")).toBe(
+      "This command takes no word beside its options: it's.\nIts forms and flags: console help categories\n",
+    );
+    expect(await said("categories", "--don't do that")).toBe(
+      "Not an option of this command: --don't do that. It takes none of its own; --json, --project, --url and --account go with every command.\nIts forms and flags: console help categories\n",
+    );
+    const dashed = await said("report", "--don't do that");
+    expect(dashed).toContain("Not an option of this command: --don't do that. Its own are ");
+    expect(dashed).toContain(" A word that begins with - and is no option goes after --.\n");
+    expect(calls).toEqual([]);
   });
 
   it("needs a console and a token, and says how to sign in without them", async () => {
@@ -3340,6 +3428,26 @@ describe("the console command", () => {
       `GET ${IN}/docs/write`,
       `POST ${IN}/docs/write/archive`,
     ]);
+    // A form's flags stand before its path as well as after it, as they do with the word of
+    // before: the word is the form wherever more follows it than a read of one page takes.
+    const before = calls.length;
+    expect(
+      await ran("doc", "write", "--title", "How we write", "write", "--body", "Plainly."),
+    ).toContain("Wrote write (How we write), version 1");
+    expect(await ran("doc", "archive", "--project", "web", "write")).toContain(
+      "Archived write (How we write)",
+    );
+    expect(calls.slice(before).map((call) => call.key)).toEqual([
+      `PUT ${IN}/docs/write`,
+      `POST ${IN}/docs/write/archive`,
+    ]);
+    // A form whose path was forgotten says so in its own words, and asks the console nothing.
+    const forgotten = harness({ fetch, env: SIGNED_IN });
+    expect(await runCli(["doc", "write", "--body", "Plainly."], forgotten.io)).toBe(EXIT.usage);
+    expect(forgotten.err()).toBe(
+      'Say which page: console doc write <path> --title "<title>" --body <markdown>|--file <path>\nIts forms and flags: console help doc write\n',
+    );
+    expect(calls).toHaveLength(before + 2);
   });
 
   it("writes what followed a decision, and reads the record", async () => {

@@ -211,8 +211,9 @@ import {
 } from "./format.js";
 import {
   COMMAND_ALIASES,
+  formTyped,
+  held,
   helpFor,
-  isFormOf,
   nearestCommands,
   ownSkillPath,
   usage,
@@ -434,14 +435,25 @@ function refusedByParser(error: unknown, options: OptionSpec): string {
     return "The arguments were not understood.";
   }
   const code = "code" in error ? String(error.code) : "";
-  const named = /'([^']*)'/.exec(error.message)?.[1] ?? "";
+  // What was typed is between the parser's first quote and the one its sentence goes on
+  // after: a word may hold a quote of its own (`it's`), and is said whole.
+  const ADVICE = ". To specify a positional argument ";
+  const named =
+    (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION"
+      ? /^Unknown option '(.*?)'(?:\. To specify a positional argument .*)?$/s
+      : /^Unexpected argument '(.*)'\. This command does not take positional arguments$/s
+    ).exec(error.message)?.[1] ??
+    /'([^']*)'/.exec(error.message)?.[1] ??
+    "";
   if (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
     const own = Object.keys(options).map((name) => `--${name}`);
     const takes = own.length === 0 ? "It takes none of its own" : `Its own are ${own.join(", ")}`;
-    // A word of a report or a title may begin with a dash, and is then no option at all.
-    const dashed = /^--[a-z][a-z0-9-]*$/.test(named)
-      ? ""
-      : " A word that begins with - and is no option goes after --.";
+    // A word of a report or a title may begin with a dash, and is then no option at all:
+    // said where the command takes a word, and what was typed does not read as an option.
+    const dashed =
+      !error.message.includes(ADVICE) || /^--[a-z][a-z0-9-]*$/.test(named)
+        ? ""
+        : " A word that begins with - and is no option goes after --.";
     return `Not an option of this command: ${named}. ${takes}; --json, --project, --url and --account go with every command.${dashed}`;
   }
   if (code === "ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL") {
@@ -4351,18 +4363,30 @@ const docs: Command = async (args, io) => {
   return EXIT.ok;
 };
 
+/** What a read of one page takes beside its path. */
+const DOC_READ_FLAGS: OptionSpec = {
+  version: { type: "string" },
+  versions: { type: "boolean" },
+};
+
+/** Whether the words are a read of one page: one path, and no flag but a read's own. */
+function readsOnePage(args: readonly string[]): boolean {
+  try {
+    return parse(args, DOC_READ_FLAGS).positionals.length === 1;
+  } catch {
+    return false;
+  }
+}
+
 const doc: Command = async (args, io) => {
-  // A word that names a form is one where a path follows it, and a page's path alone
-  // (ADR-0167): a page may be called `write`, and is read as any page is.
-  const [first, second] = args;
-  const form = first === undefined ? undefined : DOC_FORMS[first];
-  if (form !== undefined && second !== undefined && !second.startsWith("-")) {
+  // A page may be called by a form's word, `write`, and is read as any page is (ADR-0167):
+  // the word is the form wherever more follows it than a read of one page takes, a path or a
+  // flag of the form's own, before the path as after it.
+  const form = held(DOC_FORMS, args[0]);
+  if (form !== undefined && !readsOnePage(args)) {
     return form(args.slice(1), io);
   }
-  const { values, positionals } = parse(args, {
-    version: { type: "string" },
-    versions: { type: "boolean" },
-  });
+  const { values, positionals } = parse(args, DOC_READ_FLAGS);
   const path = theOne(positionals, "Say which page: console doc <path> [--version <n>|--versions]");
   const session = await open(io, values);
   const project = await session.project();
@@ -5764,6 +5788,21 @@ const WORDED_SIGNALS: Readonly<Record<string, { readonly needs: boolean }>> = {
   wake: { needs: false },
 };
 
+/**
+ * Whether the words after `agent wake` or `agent reset` are the account's own form: `me` where
+ * the handle stands, wherever that is among the form's flags. Read without refusing a word, so
+ * that a mistake among them is answered by the form that was typed, and not by the other's.
+ */
+function isOwnForm(args: readonly string[], flags: OptionSpec): boolean {
+  const { positionals } = parseArgs({
+    args: [...args],
+    options: { ...GLOBAL_OPTIONS, ...flags },
+    allowPositionals: true,
+    strict: false,
+  });
+  return positionals[0] === "me";
+}
+
 // A supervisor's signal to an agent account (ADR-0085): a tell, an interruption, a stop, a start
 // with the same conversation or with a new one, a wake; in their own name, on the account's
 // record. What it says is given as words, or with --file, or on standard input as `-`.
@@ -5774,28 +5813,12 @@ const agentSignal = async (
 ): Promise<number> => {
   // An account's own wake is another command under the same word: console agent wake me,
   // wherever `me` stands among its flags.
-  if (kind === "wake") {
-    let whom: string | undefined;
-    try {
-      whom = parse(args, OWN_WAKE_FLAGS).positionals[0];
-    } catch {
-      whom = undefined;
-    }
-    if (whom === "me") {
-      return ownWake(args, io);
-    }
+  if (kind === "wake" && isOwnForm(args, OWN_WAKE_FLAGS)) {
+    return ownWake(args, io);
   }
   // And so is its own reset: console agent reset me.
-  if (kind === "reset") {
-    let whom: string | undefined;
-    try {
-      whom = parse(args, { file: { type: "string" } }).positionals[0];
-    } catch {
-      whom = undefined;
-    }
-    if (whom === "me") {
-      return ownReset(args, io);
-    }
+  if (kind === "reset" && isOwnForm(args, { file: { type: "string" } })) {
+    return ownReset(args, io);
   }
   const { values, positionals } = parse(args, { file: { type: "string" } });
   const [given, words, ...rest] = positionals;
@@ -7829,6 +7852,9 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   restore,
 };
 
+/** The words the dispatch takes: what a test holds to the pages of help and to the words of before. */
+export const COMMAND_WORDS: readonly string[] = Object.keys(COMMANDS);
+
 /** What a word that is no command is answered with: the nearest there are, and where all are listed. */
 function notCommand(word: string, near: readonly string[] = nearestCommands(word)): CliExit {
   return misuse(
@@ -7842,7 +7868,8 @@ function notCommand(word: string, near: readonly string[] = nearestCommands(word
  */
 function help(io: CliIo, words: readonly string[]): number {
   const named = words.filter((word) => !word.startsWith("-"));
-  if (named.length === 0) {
+  // Help asked of help is the table too.
+  if (named.length === 0 || (named.length === 1 && named[0] === "help")) {
     io.stdout(usage(io.version, io.skillsDir));
     return EXIT.ok;
   }
@@ -7867,8 +7894,8 @@ function helpPointer(name: string, rest: readonly string[], said: string): strin
   if (said.includes("console help")) {
     return "";
   }
-  const [command, aliased] = COMMAND_ALIASES[name] ?? [name, undefined];
-  const form = aliased ?? rest.slice(0, 2).find((word) => isFormOf(command, word));
+  const [command, aliased] = held(COMMAND_ALIASES, name) ?? [name, undefined];
+  const form = aliased ?? formTyped(command, rest);
   return `Its forms and flags: console help ${command}${form === undefined ? "" : ` ${form}`}\n`;
 }
 
@@ -8094,14 +8121,17 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       return help(io, rest);
     }
     if (rest.includes("--help") || rest.includes("-h")) {
-      // The page of the form that was being typed, where it has one: the word after the
-      // command's name, or after a plugin's key.
-      const form = rest
-        .slice(0, 2)
-        .find((word) => isFormOf(COMMAND_ALIASES[name]?.[0] ?? name, word));
-      return help(io, form === undefined ? [name] : [name, form]);
+      // The page of the form that was being typed, where it has one.
+      const [command, aliased] = held(COMMAND_ALIASES, name) ?? [name, undefined];
+      const form =
+        aliased ??
+        formTyped(
+          command,
+          rest.filter((word) => word !== "--help" && word !== "-h"),
+        );
+      return help(io, form === undefined ? [command] : [command, form]);
     }
-    const command = COMMANDS[name];
+    const command = held(COMMANDS, name);
     if (command === undefined) {
       throw notCommand(name);
     }
@@ -8114,7 +8144,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     if (error instanceof CliExit) {
       // A command that was not understood says where its forms and flags are, in a line.
       const pointer =
-        error.exit === EXIT.usage && name !== undefined && COMMANDS[name] !== undefined
+        error.exit === EXIT.usage && name !== undefined && held(COMMANDS, name) !== undefined
           ? helpPointer(name, rest, error.message)
           : "";
       io.stderr(`${error.message}\n${pointer}`);
