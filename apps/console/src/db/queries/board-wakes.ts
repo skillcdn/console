@@ -1,11 +1,14 @@
 import {
+  BOARD_PARTS_FROM,
+  compareVersions,
   type NotificationKind,
   notificationKindFor,
   notificationSettingsOf,
+  parseVersion,
   type TaskFollowState,
   wakeTextOf,
 } from "@skillcdn/console/api";
-import { and, desc, eq, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import { decisionReachableBy } from "../../auth/policy.js";
 import { type Database, drizzleOf, type Transaction } from "../client.js";
 import {
@@ -128,6 +131,46 @@ function commentWake(named: string, read: string, body: string): string {
   ]);
 }
 
+/**
+ * Those of some members whose runner reads a wake of the board's in parts (ADR-0166): the
+ * agent accounts whose runner last said a version from the one that does on. A runner of
+ * before prints a wake's whole text under its header, which carries its session's mark, as the
+ * console's own words, so what a member wrote is never sent it so: nor an account no runner was
+ * heard from, nor one whose runner said what reads as no version.
+ */
+async function readingInParts(
+  database: Database,
+  members: readonly MemberToTell[],
+): Promise<ReadonlySet<string>> {
+  const accounts = members
+    .filter((member) => member.person.kind === "agent")
+    .map((member) => member.person.id);
+  const from = parseVersion(BOARD_PARTS_FROM);
+  if (accounts.length === 0 || from === undefined) {
+    return new Set();
+  }
+  const runners = await drizzleOf(database)
+    .select({ personId: agentRunners.personId, runner: agentRunners.runner })
+    .from(agentRunners)
+    .where(inArray(agentRunners.personId, accounts));
+  return new Set(
+    runners
+      .filter((row) => {
+        const version = parseVersion(row.runner);
+        return version !== undefined && compareVersions(version, from) >= 0;
+      })
+      .map((row) => row.personId),
+  );
+}
+
+/**
+ * A title of the board inside a sentence of the console's own, between the quotes it stands in:
+ * on one line, bounded, and with nothing in it that ends the quote or a header's bracket, so
+ * that what follows it in the sentence is never the title's to say.
+ */
+const titled = (title: string): string =>
+  said(title).replaceAll('"', "'").replaceAll("[", "(").replaceAll("]", ")");
+
 /** The fields of a task whose change its people are told of: what it says and when it is planned. */
 const TOLD_OF_FIELDS: readonly string[] = ["title", "body", "startsOn", "dueOn"];
 
@@ -179,7 +222,8 @@ function tellingsOf(
   follows: ReadonlyMap<string, TaskFollowState>,
   thing: {
     readonly key: string;
-    readonly words: (kind: NotificationKind) => string;
+    /** What they are told, by why and by who is told: an account's runner may read less than another's. */
+    readonly words: (kind: NotificationKind, member: MemberToTell) => string;
     readonly projectId?: string | undefined;
     readonly taskId?: string | undefined;
     readonly decisionId?: string | undefined;
@@ -213,7 +257,7 @@ function tellingsOf(
           projectId: thing.projectId,
         }) === undefined,
       key: thing.key,
-      text: thing.words(kind),
+      text: thing.words(kind, member),
       projectId: thing.projectId,
       taskId: thing.taskId,
       decisionId: thing.decisionId,
@@ -327,22 +371,26 @@ async function taskTellings(
     );
   }
   const read = `console task ${task.number} --project ${task.project}`;
-  const named = `#${task.number} "${said(task.title)}" in ${task.project}`;
+  const named = `#${task.number} "${titled(task.title)}" in ${task.project}`;
   const changed = fields.length === 0 ? "" : ` (${said(fields.join(", "), 80)})`;
   // What a comment says goes with the wake for it (ADR-0166): read where the agent is woken,
   // it costs no reading of the task whole to learn what was said.
   const comment =
     event.kind === "task.commented" ? await commentOf(database, event, task.id) : undefined;
-  const words = (kind: NotificationKind): string => {
+  const members = await membersToTell(database, event.workspaceId, concerned.ids(), task.projectId);
+  // The comment itself goes only to an account whose runner reads it apart from the console's
+  // own lines; any other is told that there is one, as before.
+  const inParts = comment === undefined ? undefined : await readingInParts(database, members);
+  const words = (kind: NotificationKind, member: MemberToTell): string => {
     switch (kind) {
       case "ready":
         return `${named} is ready, and you are at work on it. Read it: ${read}`;
       case "assigned":
         return `${named} was given to you. Read it: ${read}`;
       case "commented":
-        return comment === undefined
-          ? `A comment on ${named}. Read it: ${read}`
-          : commentWake(named, read, comment);
+        return comment !== undefined && inParts?.has(member.person.id) === true
+          ? commentWake(named, read, comment)
+          : `A comment on ${named}. Read it: ${read}`;
       case "moved":
         return `${named} went from ${event.data.from ?? "one state"} to ${event.data.to ?? "another"}. Read it: ${read}`;
       case "archived":
@@ -351,13 +399,12 @@ async function taskTellings(
         return `${named} changed${changed}. Read it: ${read}`;
     }
   };
-  return tellingsOf(
-    event,
-    await membersToTell(database, event.workspaceId, concerned.ids(), task.projectId),
-    concerned,
-    follows,
-    { key: `${task.project}#${task.number}`, words, projectId: task.projectId, taskId: task.id },
-  );
+  return tellingsOf(event, members, concerned, follows, {
+    key: `${task.project}#${task.number}`,
+    words,
+    projectId: task.projectId,
+    taskId: task.id,
+  });
 }
 
 /** Those of some members a decision still reaches (ADR-0068, ADR-0077): a telling says its question, and its answer. */

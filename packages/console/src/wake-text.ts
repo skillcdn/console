@@ -14,6 +14,15 @@ import { MAX_SIGNAL_LENGTH } from "./limits.js";
  */
 export type WakePart = { readonly says: string } | { readonly words: string };
 
+/**
+ * The first version whose runner reads a wake of the board's in parts (ADR-0166): the console's
+ * lines under the session's mark, and what a member wrote, a comment say, in a block. A runner
+ * of before prints such a text whole under its header, as the console's own words, so the
+ * console writes one in parts only for an account whose runner last said this version or a
+ * later one.
+ */
+export const BOARD_PARTS_FROM = "0.6.3";
+
 /** A word of a header on one line, with nothing in it that ends the header early. */
 export const inHeader = (text: string): string => text.replaceAll(/[[\]\r\n]+/g, " ").trim();
 
