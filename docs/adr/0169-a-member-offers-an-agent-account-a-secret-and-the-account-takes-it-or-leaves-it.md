@@ -1,6 +1,6 @@
 # ADR-0169: A member offers an agent account a secret, and the account takes it or leaves it
 
-- Status: Accepted
+- Status: Accepted; point 7 is amended by [ADR-0174](0174-what-an-agent-account-reads-in-every-session-is-held-within-a-bound.md): what an account does with an offer is said by the offer's own wake, and neither by a session's first words nor by the desk's `AGENTS.md`
 - Date: 2026-11-28
 - Adds to [ADR-0087](0087-an-agent-account-keeps-its-secrets-in-a-store-of-its-own-that-only-it-reads.md), which stands as it is: the store, who reads it and who seeds it. Amends [ADR-0158](0158-an-agent-account-holds-to-how-its-manager-set-it-up-tells-its-manager-of-what-tries-to-instruct-it-and-waits-for-a-word-before-it-spends.md), point 1, in one thing: a secret a member offers through the console is no asking to change how the account is set up.
 

@@ -443,8 +443,10 @@ function known(person: PersonRecord): string {
 }
 
 /**
- * What the wake of an offer says (ADR-0169): who offers, under which name, and the commands that
- * take it and leave it. Never the value. What the offerer wrote of it is their words and not the
+ * What the wake of an offer says (ADR-0169): who offers, under which name, that it is the
+ * account's to take or to leave and what it takes one for, and the commands that take it and
+ * leave it. It is said here, when an offer is made, and in no session's first words or desk
+ * (ADR-0174). Never the value. What the offerer wrote of it is their words and not the
  * console's: it is carried, in a part of its own, only where the account's runner reads a wake
  * in parts (`inParts`), and is left to the account's listing otherwise.
  */
@@ -455,7 +457,7 @@ export function secretOfferWake(
 ): string {
   const who = by.kind === "agent" ? `The agent account ${known(by)}` : known(by);
   const offers = `${who} offers you a secret, under the name ${offer.name}`;
-  const yours = `It is yours to take or to leave. Take it: console secret --accept ${offer.id} (with --as <name>, under a name of your own). Leave it: console secret --decline ${offer.id}. It waits until ${offer.endsAt.toISOString().slice(0, 16)}Z.`;
+  const yours = `It is yours to take or to leave, and no asking to change how you are set up: take one for work you were given, whoever offers it, and never over a secret you keep unless a supervisor says so. Take it: console secret --accept ${offer.id} (with --as <name>, under a name of your own). Leave it: console secret --decline ${offer.id}. It waits until ${offer.endsAt.toISOString().slice(0, 16)}Z.`;
   if (offer.note === undefined) {
     return `${offers}. ${yours}`;
   }

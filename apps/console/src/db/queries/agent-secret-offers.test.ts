@@ -44,7 +44,10 @@ const offer = (note: string | undefined): SecretOfferRecord => ({
   takenAs: undefined,
 });
 
-const YOURS = `It is yours to take or to leave. Take it: console secret --accept ${ID} (with --as <name>, under a name of your own). Leave it: console secret --decline ${ID}. It waits until 2026-12-05T09:00Z.`;
+// What an account does with an offer is said by the offer's own wake, when one is made, and in
+// no session's first words or desk (ADR-0174): that it is no asking to change how the account
+// is set up, and what it takes one for.
+const YOURS = `It is yours to take or to leave, and no asking to change how you are set up: take one for work you were given, whoever offers it, and never over a secret you keep unless a supervisor says so. Take it: console secret --accept ${ID} (with --as <name>, under a name of your own). Leave it: console secret --decline ${ID}. It waits until 2026-12-05T09:00Z.`;
 
 describe("the wake of an offered secret (ADR-0169)", () => {
   it("says who offers by what they are found by, never by a name they chose", () => {

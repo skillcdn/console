@@ -721,8 +721,8 @@ function standsOf(member: NonNullable<WakeWriter["member"]>): string {
  *   the agent in its line that they report to it, themselves or through others (`standsOf`);
  * - that it is no member the console knows, where the console is told the accounts of that
  *   workspace and not this one: what it is told may be short of one, so a supervisor's own word
- *   that names the account, a tell or a message in an account known to be theirs (ADR-0172),
- *   still tells whose it is;
+ *   that names the account, a tell or a message in an account known to be a supervisor's
+ *   (ADR-0173), still tells whose it is;
  * - nothing, where the console is told no account of that workspace, where it does not answer
  *   before the signal ends, or where it is older than the question: the line is then as the
  *   messenger alone has it. Where the signal has ended already, the console is not asked.

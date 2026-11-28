@@ -1,6 +1,6 @@
 # ADR-0172: A supervisor's own word says that an account is theirs, by a tell or at the messenger
 
-- Status: Accepted
+- Status: Superseded by [ADR-0173](0173-a-supervisors-own-word-hands-their-say-on-and-says-whose-an-account-is.md), under which a supervisor says it of another supervisor's account as of their own, and an account known by such a word is theirs like any other
 - Date: 2026-11-28
 - Amends [ADR-0160](0160-an-agent-account-takes-every-supervisors-word-as-its-managers-by-a-tell-or-at-the-messenger.md), point 2, and [ADR-0164](0164-a-plugin-says-which-account-at-a-messenger-is-a-members-and-a-wake-says-by-it-whether-a-supervisor-wrote.md), point 9, in one thing: how an agent account knows that an account at the messenger is a supervisor's where the console does not say. The rest of both stands.
 

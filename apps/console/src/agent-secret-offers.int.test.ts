@@ -263,7 +263,7 @@ describe("a secret offered to an agent account (ADR-0169)", () => {
       byId: null,
     });
     expect(wake?.text).toBe(
-      `@eli offers you a secret, under the name mail.password. It is yours to take or to leave. Take it: console secret --accept ${one.id} (with --as <name>, under a name of your own). Leave it: console secret --decline ${one.id}. It waits until ${one.endsAt.slice(0, 16)}Z. What they say it is for: console secrets --offered`,
+      `@eli offers you a secret, under the name mail.password. It is yours to take or to leave, and no asking to change how you are set up: take one for work you were given, whoever offers it, and never over a secret you keep unless a supervisor says so. Take it: console secret --accept ${one.id} (with --as <name>, under a name of your own). Leave it: console secret --decline ${one.id}. It waits until ${one.endsAt.slice(0, 16)}Z. What they say it is for: console secrets --offered`,
     );
 
     // The account lists what waits, in its command and in its browser, with what was said of it.
@@ -538,7 +538,7 @@ describe("a secret offered to an agent account (ADR-0169)", () => {
       { says: "@eli offers you a secret, under the name new.runner, and says of it" },
       { words: said },
       {
-        says: `It is yours to take or to leave. Take it: console secret --accept ${one.id} (with --as <name>, under a name of your own). Leave it: console secret --decline ${one.id}. It waits until ${one.endsAt.slice(0, 16)}Z.`,
+        says: `It is yours to take or to leave, and no asking to change how you are set up: take one for work you were given, whoever offers it, and never over a secret you keep unless a supervisor says so. Take it: console secret --accept ${one.id} (with --as <name>, under a name of your own). Leave it: console secret --decline ${one.id}. It waits until ${one.endsAt.slice(0, 16)}Z.`,
       },
     ]);
     // With nothing said of it, the wake is the console's own line whatever the runner.
