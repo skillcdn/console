@@ -1,0 +1,4 @@
+# A script a shell runs is checked out with line feeds on every system: a clone made where git
+# turns line ends into CRLF, the default of Git for Windows, would hand bash a script that it
+# cannot run (deploy/install.sh, which the skill trying-a-console runs on such a machine).
+*.sh text eol=lf

@@ -5409,7 +5409,19 @@ describe("configuring, as the person", () => {
       peopleVisibility: "shared_projects",
     });
     expect(changed.out()).toContain("people visibility: shared_projects");
-    expect(changed.out()).toContain("week begins on: auto");
+    // What auto means is said where the week is left to it, and not beside a day that was
+    // chosen: "monday (auto: ...)" read as two answers.
+    expect(changed.out()).toContain(
+      "week begins on: auto  (the system default, as each device has it)\n",
+    );
+    const onMonday = harness({
+      fetch: fakeConsole({
+        "GET /api/v1/me": { body: { ...ME, workspace: { ...ME.workspace, weekStart: "monday" } } },
+      }).fetch,
+      env: SIGNED_IN,
+    });
+    expect(await runCli(["workspace"], onMonday.io)).toBe(EXIT.ok);
+    expect(onMonday.out()).toContain("week begins on: monday\n");
     expect(changed.out()).toContain("time zone: none");
     // The week and the time zone go the same way; none takes the zone away.
     const planned = harness({ fetch, env: SIGNED_IN });
