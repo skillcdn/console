@@ -4258,7 +4258,7 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     for (const state of ["대기 중", "받음", "기한 지남", "받지 않음"]) {
       expect(korean).toContain(`>${state}</span>`);
     }
-    expect(korean).toContain("git.spare(으)로");
+    expect(korean).toContain("받은 이름: git.spare");
   });
 
   it("offers an account a secret from a form whose value is typed unseen (ADR-0169)", () => {

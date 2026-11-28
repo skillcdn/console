@@ -1984,7 +1984,7 @@ export const ko: Messages = {
         note: "용도",
         offer: "제안",
         someone: "지금은 없는 사람",
-        takenAs: (name: string) => `${name}(으)로`,
+        takenAs: (name: string) => `받은 이름: ${name}`,
         state: { waiting: "대기 중", taken: "받음", left: "받지 않음", lapsed: "기한 지남" },
       },
       notSupervised: {
