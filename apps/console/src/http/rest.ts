@@ -663,7 +663,16 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
       return false;
     }
     try {
-      return new URL(address).origin === new URL(dependencies.origin).origin;
+      const url = new URL(address);
+      // Its own to every reader alike: a name before an @ reads as the host to a person, and
+      // a backslash ends the host for a browser where another client reads on to the @ after
+      // it and asks another machine.
+      return (
+        url.origin === new URL(dependencies.origin).origin &&
+        url.username === "" &&
+        url.password === "" &&
+        !address.includes("\\")
+      );
     } catch {
       return false;
     }

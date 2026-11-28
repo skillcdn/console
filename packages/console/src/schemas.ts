@@ -140,8 +140,22 @@ const paragraphs = (maxLength: number) =>
 /** A body in Markdown. */
 const body = paragraphs(MAX_BODY_LENGTH);
 
+/**
+ * An address of the web someone sent, of the schemes named: trimmed, bounded, and with nothing
+ * in it that hides. A control character is run by the terminal a link is printed in, and an
+ * invisible one makes an address read as another, so neither is taken, a tab and a line break
+ * among them, which an address has no use for.
+ */
+const link = (protocol: RegExp) =>
+  z.string().check(
+    z.trim(),
+    z.maxLength(MAX_URL_LENGTH),
+    z.refine((value) => !hasForbiddenCodePoint(value), "must not contain control characters"),
+    z.url({ protocol }),
+  );
+
 /** A link a person adds to a task: the web, over https, and nothing that runs. */
-const url = z.string().check(z.trim(), z.maxLength(MAX_URL_LENGTH), z.url({ protocol: /^https$/ }));
+const url = link(/^https$/);
 
 const uuid = z.uuid();
 /** An ISO 8601 instant, as the server writes it. */
@@ -3248,7 +3262,7 @@ export type RestCommentInput = z.infer<typeof restCommentInputSchema>;
  * and the console says which.
  */
 export const restArtifactInputSchema = z.object({
-  url: z.string().check(z.trim(), z.maxLength(MAX_URL_LENGTH), z.url({ protocol: /^https?$/ })),
+  url: link(/^https?$/),
   label: z.optional(line(MAX_LINK_LABEL_LENGTH)),
 });
 export type RestArtifactInput = z.infer<typeof restArtifactInputSchema>;

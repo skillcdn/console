@@ -19,6 +19,7 @@ import {
   restAnswerInputSchema,
   restArchivedTasksSchema,
   restArchiveTasksInputSchema,
+  restArtifactInputSchema,
   restCategoryInputSchema,
   restDecisionInputSchema,
   restDecisionPatchSchema,
@@ -97,6 +98,21 @@ describe("task input", () => {
     ["too many workers", { title: "t", workerIds: Array(MAX_WORKERS + 1).fill(PERSON.id) }],
     ["a link that is not https", { title: "t", links: [{ url: "http://example.com/" }] }],
     ["a link that runs", { title: "t", links: [{ url: "javascript:alert(1)" }] }],
+    [
+      "a link with an escape for a terminal",
+      { title: "t", links: [{ url: `https://example.com/${String.fromCodePoint(0x1b)}[2J` }] },
+    ],
+    [
+      "a link with a direction override",
+      {
+        title: "t",
+        links: [{ url: `https://example.com/${String.fromCodePoint(0x202e)}fdp.exe` }],
+      },
+    ],
+    [
+      "a link with a hidden character in its host",
+      { title: "t", links: [{ url: `https://exam${String.fromCodePoint(0x200b)}ple.com/` }] },
+    ],
     ["too many links", { title: "t", links: Array(MAX_LINKS + 1).fill({ url: "https://a.b/" }) }],
     ["a number for a title", { title: 42 }],
     ["an array for a body", { title: "t", body: ["x"] }],
@@ -130,6 +146,21 @@ describe("task input", () => {
       category: null,
       goalId: null,
     });
+  });
+
+  it("takes a link handed in over https or http, trimmed, and none with what hides in it", () => {
+    expect(
+      restArtifactInputSchema.parse({ url: "  https://example.com/docs/guide?x=1#part\n" }),
+    ).toEqual({ url: "https://example.com/docs/guide?x=1#part" });
+    expect(restArtifactInputSchema.parse({ url: "http://127.0.0.1:11199/projects/web" })).toEqual({
+      url: "http://127.0.0.1:11199/projects/web",
+    });
+    // What a terminal would run, what a reader does not see, and what a parser drops unsaid.
+    for (const hidden of [0x00, 0x07, 0x09, 0x0a, 0x0d, 0x1b, 0x7f, 0x9b, 0x200b, 0x202e, 0xfeff]) {
+      const url = `https://example.com/a${String.fromCodePoint(hidden)}b`;
+      expect(restArtifactInputSchema.safeParse({ url }).success, hidden.toString(16)).toBe(false);
+    }
+    expect(restArtifactInputSchema.safeParse({ url: "ftp://example.com/x" }).success).toBe(false);
   });
 
   it("keeps a body's line breaks and tabs", () => {

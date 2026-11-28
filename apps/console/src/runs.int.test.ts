@@ -765,23 +765,31 @@ describe("the workers of a task taken (ADR-0037)", () => {
         url: "http://127.0.0.1:11199/projects/web/docs/notes/page",
       });
       // Another port, another name for the machine and a host that only begins the same are
-      // not this console; nor is anything else over http.
+      // not this console; nor is anything else over http. Nor is an address that is the
+      // console's to a browser and another machine's to another reader: a backslash where the
+      // host ends, or a name before an @.
       for (const other of [
         "http://127.0.0.1:8080/x",
         "http://localhost:11199/x",
         "http://127.0.0.1:11199@elsewhere.test/x",
         "http://insecure.test/x",
+        `http://127.0.0.1:11199${String.fromCodePoint(0x5c)}@elsewhere.test/x`,
+        `http://127.0.0.1:11199/a${String.fromCodePoint(0x5c)}b`,
+        "http://elsewhere.test@127.0.0.1:11199/x",
+        "http://elsewhere.test:secret@127.0.0.1:11199/x",
       ]) {
         const refused = await handIn(local, other);
         expect(refused.status, other).toBe(400);
         expect(restErrorSchema.parse(await refused.json()).error, other).toEqual(REFUSED);
       }
-      // What is no address of the web is refused as before, by the schema.
+      // What is no address of the web is refused as before, and so is one with a character
+      // in it that a terminal would run.
       for (const none of [
         "javascript:alert(1)",
         "ftp://127.0.0.1:11199/x",
         "//127.0.0.1:11199/x",
         "http://127.0.0.1:11199.elsewhere.test/x",
+        `http://127.0.0.1:11199/x${String.fromCodePoint(0x1b)}[2J`,
       ]) {
         const refused = await handIn(local, none);
         expect(refused.status, none).toBe(400);
