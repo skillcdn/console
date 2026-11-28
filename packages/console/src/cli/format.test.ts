@@ -9,6 +9,7 @@ import {
 } from "../schemas.js";
 import {
   calledOf,
+  formatAgentState,
   formatDecision,
   formatDecisionLine,
   formatGoal,
@@ -311,7 +312,7 @@ describe("the rules as they are printed (ADR-0119, ADR-0120)", () => {
     roles: ["member"],
   });
   const laterTake = (mark: string) =>
-    ` A later take in this session leaves them out: console take <number> --rules ${mark}`;
+    ` Now that they are read, a take in this session leaves them out: console take <number> --rules ${mark}`;
 
   it("begins with a line that says which parts follow and how long each is: what differs first, what always holds last", () => {
     const rules = { workspace: adding(), project: own, plugins: [plugin] };
@@ -363,7 +364,7 @@ describe("the rules as they are printed (ADR-0119, ADR-0120)", () => {
     expect(text).not.toContain("What this organization adds");
     const withPlugins = formatRules({ workspace: alone, project: none, plugins: [plugin] }, "en");
     expect(withPlugins.split("\n")[0]).toContain(
-      `: this project and the organization add nothing; its 1 plugin first, then the console's (${CONSOLE.length} characters). A later take`,
+      `: this project and the organization add nothing; its 1 plugin first, then the console's (${CONSOLE.length} characters). Now that they are read, a take`,
     );
     expect(withPlugins.indexOf("## Plugins")).toBeLessThan(withPlugins.indexOf("Read these."));
     // No project named: the organization's additions and the console's; the same mark as a
@@ -479,5 +480,79 @@ describe("a member's line", () => {
       "#7  ready  normal  Fix the parser  (owner @mira; workers alice, @mira)",
     );
     expect(formatTask(shared)).toContain("owner: @mira  workers: alice, @mira");
+  });
+});
+
+describe("how an agent account stands, in a line", () => {
+  const mira = {
+    person: {
+      id: "0199c4d8-0000-7000-8000-000000000009",
+      login: "acme-mira",
+      name: "Mira",
+      avatar: null,
+      role: "member",
+      status: "active",
+      source: "listed",
+      deactivatedAt: null,
+      kind: "agent",
+      handle: "mira",
+    },
+    manager: null,
+    supervised: true,
+  } as const;
+  const SINCE = "2026-11-23T08:41:00.000Z";
+  const HEARD = "2026-11-25T14:20:00.000Z";
+
+  it("says since when the state stands, and the reason apart from it with its own moment", () => {
+    // A reason said later, under a state that stayed: its moment is its own, and the moment
+    // after `since` stays the state's.
+    expect(
+      formatAgentState({
+        ...mira,
+        state: {
+          state: "running",
+          reason: "reset",
+          since: SINCE,
+          reasonAt: "2026-11-25T14:12:00.000Z",
+          heardAt: HEARD,
+        },
+      }),
+    ).toBe(
+      `running since ${SINCE}; why: reset, said 2026-11-25T14:12:00.000Z; its runner was last heard from ${HEARD}`,
+    );
+  });
+
+  it("says a reason that came with its state, or that the console keeps no moment for, with none", () => {
+    // With the state, a few seconds apart by two machines' clocks: one moment, the state's.
+    expect(
+      formatAgentState({
+        ...mira,
+        state: {
+          state: "failed",
+          reason: "usage_limit",
+          since: SINCE,
+          reasonAt: "2026-11-23T08:41:03.000Z",
+          heardAt: null,
+          until: "2026-11-23T13:00:00.000Z",
+        },
+      }),
+    ).toBe(`failed since ${SINCE}, until 2026-11-23T13:00:00.000Z; why: usage limit`);
+    // A row of before, and an answer of a console of before: never the state's moment as the
+    // reason's.
+    for (const reasonAt of [null, undefined]) {
+      expect(
+        formatAgentState({
+          ...mira,
+          state: { state: "running", reason: "reset", since: SINCE, reasonAt, heardAt: HEARD },
+        }),
+      ).toBe(`running since ${SINCE}; why: reset; its runner was last heard from ${HEARD}`);
+    }
+    expect(
+      formatAgentState({
+        ...mira,
+        state: { state: "running", reason: null, since: SINCE, heardAt: null },
+      }),
+    ).toBe(`running since ${SINCE}`);
+    expect(formatAgentState(mira)).toBe("no runner has been heard from yet");
   });
 });

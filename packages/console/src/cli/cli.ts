@@ -1636,7 +1636,7 @@ const whoami: Command = async (args, io) => {
         // agent here for where the skill is, and the workspace has rules whatever the project.
         // The skill's path stands last, with nothing after it, to be copied as it is.
         io.skillsDir === undefined
-          ? "Before the first task, read console rules and the skill working-the-board (console skills says where it is); for one command's flags, console help <command>."
+          ? "Before the first task, read console rules and the skill working-the-board (in the skills folder of the package @skillcdn/console, which this build has none of beside it); for one command's flags, console help <command>."
           : `Before the first task, read console rules and the skill working-the-board; for one command's flags, console help <command>. The skill: ${ownSkillPath(io.skillsDir)}`,
         `This command is ${io.version ?? "of a version it does not know"}${io.install === undefined ? "" : `, ${describeInstall(io.install)}`}; ${consoleWords}.`,
         ...(verdict === "behind"
@@ -6614,7 +6614,7 @@ const DESK_USAGE = "Say at most one directory: console desk [<directory>] [--web
 function deskNext(web: boolean, skillsDir: string | undefined): [string, string] {
   return [
     `Set this desk up as a repository of mine${web ? " and bring its pages up" : ""}, with the skill for it in the organization's pack where it has one: console skills --search "desk setup" --limit 5`,
-    `Ask me what I want to keep and to see here, and shape the desk to it, as the skill keeping-a-desk says, shipped with the console command${skillsDir === undefined ? " (console skills says where it is)" : `: ${ownSkillPath(skillsDir, "keeping-a-desk")}`}`,
+    `Ask me what I want to keep and to see here, and shape the desk to it, as the skill keeping-a-desk says, shipped with the console command${skillsDir === undefined ? " (in the skills folder of the package @skillcdn/console, which this build has none of beside it)" : `: ${ownSkillPath(skillsDir, "keeping-a-desk")}`}`,
   ];
 }
 

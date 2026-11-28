@@ -889,6 +889,13 @@ export const restRunnerHeartbeatInputSchema = z.object({
    * out by a runner of before, and empty where the product has said nothing.
    */
   usage: z.optional(z.array(runnerUsageWindow).check(z.maxLength(MAX_RUNNER_USAGE_WINDOWS))),
+  /**
+   * When the runner said the reason, by its machine's clock: a reason changes under a state
+   * that stays, a turn completes or a new conversation begins while the agent runs on, and is
+   * said again the same, so the console cannot tell a turn that just completed from one that
+   * did an hour ago. Left out by a runner of before.
+   */
+  reasonAt: z.optional(instant),
 });
 export type RestRunnerHeartbeatInput = z.infer<typeof restRunnerHeartbeatInputSchema>;
 
@@ -1004,7 +1011,14 @@ export type RestRunnerHeartbeat = z.infer<typeof restRunnerHeartbeatSchema>;
 export const restAgentStateSchema = z.object({
   state: z.enum(AGENT_STATES),
   reason: z.nullable(z.string()),
+  /** Since when the state stands: not when the reason was said, which changes under a state that stays. */
   since: instant,
+  /**
+   * When the reason was said: the same moment as `since` where the two came together, a later
+   * one where the reason changed under the state. Left out by a console of before, and `null`
+   * where the console keeps no moment for it: the reason is then shown with none.
+   */
+  reasonAt: z.optional(z.nullable(instant)),
   heardAt: z.nullable(instant),
   /**
    * Until when it stands so, where its runner said (ADR-0150): when a usage limit resets.
@@ -3166,9 +3180,14 @@ export const restCommentInputSchema = z.object({
 });
 export type RestCommentInput = z.infer<typeof restCommentInputSchema>;
 
-/** What `POST .../runs/<id>/artifacts` is sent: a link to what was made. */
+/**
+ * What `POST .../runs/<id>/artifacts` is sent: a link to what was made. Over https; over plain
+ * http the console takes an address of its own alone, which a console on one machine is served
+ * at (`http://127.0.0.1:11199`), and refuses any other, so the schema lets both schemes through
+ * and the console says which.
+ */
 export const restArtifactInputSchema = z.object({
-  url,
+  url: z.string().check(z.trim(), z.maxLength(MAX_URL_LENGTH), z.url({ protocol: /^https?$/ })),
   label: z.optional(line(MAX_LINK_LABEL_LENGTH)),
 });
 export type RestArtifactInput = z.infer<typeof restArtifactInputSchema>;

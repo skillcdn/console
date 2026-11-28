@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { reasonMoment } from "../agent-state.js";
 import {
   type AgentState,
   type FileUpload,
@@ -123,10 +124,14 @@ export function AgentUsage(props: {
   );
 }
 
-/** The state of an agent account as a badge: the word, and why and since when where there is room. */
+/**
+ * The state of an agent account as a badge: the word, and where there is room since when it
+ * stands so, right after the word it is the moment of, then why, with when that was said where
+ * it is another moment than the state's.
+ */
 export function AgentStateBadge(props: {
   readonly state: RestAgent["state"];
-  /** With why it stands so, since when, and when its runner was last heard from. */
+  /** With since when it stands so, why, and when its runner was last heard from. */
   readonly full?: boolean | undefined;
 }) {
   const words = useWords().agents.page.state;
@@ -145,6 +150,7 @@ export function AgentStateBadge(props: {
   }
   const reasons: Readonly<Record<string, string>> = words.reasons;
   const reason = state.reason === null ? undefined : (reasons[state.reason] ?? state.reason);
+  const said = reasonMoment(state);
   const badge = (
     <Badge
       tone={STATE_TONES[state.state]}
@@ -162,7 +168,6 @@ export function AgentStateBadge(props: {
     <span className="sc-agent-state">
       {badge}
       <span className="sc-note">
-        {reason !== undefined && `${reason} · `}
         {words.since.before}
         <Time iso={state.since} precision="clock" />
         {words.since.after}
@@ -172,6 +177,19 @@ export function AgentStateBadge(props: {
             {words.until.before}
             <Time iso={state.until} precision="clock" />
             {words.until.after}
+          </>
+        )}
+        {reason !== undefined && (
+          <>
+            {" · "}
+            {reason}
+            {said !== undefined && (
+              <>
+                {words.reasonAt.before}
+                <Time iso={said} precision="clock" />
+                {words.reasonAt.after}
+              </>
+            )}
           </>
         )}
         {state.heardAt !== null && (

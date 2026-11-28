@@ -73,10 +73,17 @@ Put together: an organization keeps its skills in git, SkillCDN hands them to ev
 
 **Set one up for your organization.** The line above: an agent connected to this repository's pack deploys the console with the skill [`deploying-a-console`](skills/deploying-a-console/SKILL.md), on AWS behind Cloudflare, with a private repository of yours that redeploys on every push ([ADR-0017](docs/adr/0017-the-reference-deployment-is-the-image-on-aws-behind-cloudflare-written-as-a-skill.md)). Any other platform runs the same image from [deploy/README.md](deploy/README.md).
 
+**Try it on your own computer.** Connect your coding agent to this repository's pack and say:
+
+> Let me try the SkillCDN Console on this computer. Start it with Docker and take me through signing in.
+
+The skill [`trying-a-console`](skills/trying-a-console/SKILL.md) brings it up with Docker, registers signing in at GitHub with one press of yours, connects the agent and works a first task on the board ([ADR-0171](docs/adr/0171-the-smallest-install-registers-its-github-app-from-a-manifest-with-one-press.md)).
+
 **Run it on one machine, or in a closed network.** On a host with Docker, from `deploy/` of a checkout at a release:
 
 ```sh
-./install.sh --url https://console.example.com
+./install.sh                 # the console, at http://127.0.0.1:11199
+./install.sh --github-app    # signing in, with one press at GitHub; or register a provider yourself and say --url
 ```
 
 The published image beside PostgreSQL, the worker inside it, the files in the database and the packs in a directory, so that nothing of it needs the internet. [`deploy/bundle.sh`](deploy/bundle.sh) makes the one directory a closed network carries in, from which the same script installs with nothing fetched ([deploy/README.md](deploy/README.md#the-smallest-install-and-a-closed-network)).
@@ -146,9 +153,10 @@ The console teaches an agent itself. This repository is a pack in the SkillCDN F
 | [keeping-a-desk](skills/keeping-a-desk/SKILL.md) | Shapes a member's desk, their own repository, to what they ask to keep there and to see: what is kept goes under records/ in a shape chosen for it, what is shown is a page of their own under web/, bu… |
 | [planning-the-board](skills/planning-the-board/SKILL.md) | Puts work on the board of a SkillCDN Console and sets the board up, as a person asks, with the console command: tasks written from what they say or plan, each with its days, category, goal, parent an… |
 | [running-an-agent](skills/running-an-agent/SKILL.md) | Sets an agent account of a SkillCDN Console up on a machine of its own and keeps it running: the account and its invitation, the machine given its least from one line, the agent's own first task, and… |
+| [trying-a-console](skills/trying-a-console/SKILL.md) | Brings a SkillCDN Console up on one computer with Docker and takes its person from nothing to a first task worked on the board: the release fetched, the console started, signing in registered at GitH… |
 | [working-the-board](skills/working-the-board/SKILL.md) | Works a task of a SkillCDN Console to its end with the console command, as the person who signed it in: a run on the board, with its reports at the milestones, the choices a person had to make asked… |
 
-7 skills.
+8 skills.
 <!-- /skillcdn:catalog -->
 
 ## A private pack

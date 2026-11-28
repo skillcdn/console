@@ -57,6 +57,8 @@ export interface RunnerRecord {
   readonly state: AgentState | undefined;
   readonly reason: string | undefined;
   readonly stateAt: Date | undefined;
+  /** When the reason was said, where it is known: with the state, or later under a state that stayed. */
+  readonly reasonAt: Date | undefined;
   /** Until when it stands so, where its runner said: when a usage limit resets (ADR-0150). */
   readonly stateUntil: Date | undefined;
   readonly heardAt: Date | undefined;
@@ -140,6 +142,7 @@ const toRunner = (row: RunnerRow): RunnerRecord => ({
   state: row.state ?? undefined,
   reason: row.reason ?? undefined,
   stateAt: row.stateAt ?? undefined,
+  reasonAt: row.reasonAt ?? undefined,
   stateUntil: row.stateUntil ?? undefined,
   heardAt: row.heardAt ?? undefined,
   delivered: row.delivered,
@@ -336,6 +339,12 @@ async function toldOf(
  * where `changesPerHour` says how many: a change beyond that is kept with the account, which
  * its page reads, and told by a later heartbeat once the hour has room, as how the account
  * stands then, so that the feed's last word of an account is how it stands.
+ *
+ * When the reason was said is kept apart from when the state began, since a reason changes
+ * under a state that stays: a turn completes, a new conversation begins, and the agent runs on.
+ * With a change of state it is that moment. Under a state that stays it is what the runner says
+ * (`reasonAt`), never before the state began nor after now; a runner of before says none, and
+ * its reason is dated when it is first another than the one kept.
  */
 export async function recordHeartbeat(
   database: Database,
@@ -371,6 +380,21 @@ export async function recordHeartbeat(
       (before.reason !== "usage_limit" ||
         (until?.getTime() ?? null) !== (before.stateUntil?.getTime() ?? null));
     const tell = changed || limitMoved;
+    // When the reason was said, under a state that stays: the runner's own word for it, held
+    // between the moment the state began and now, since its clock is another machine's; none
+    // while a supervisor's stop stands, whose reason is the console's. Where the runner says
+    // none, a reason that is another than the one kept is dated now, and one that is the same
+    // keeps its moment.
+    const saidAt =
+      stopped || heartbeat.reasonAt === undefined
+        ? undefined
+        : new Date(
+            Math.min(
+              now.getTime(),
+              Math.max(before.stateAt?.getTime() ?? 0, Date.parse(heartbeat.reasonAt)),
+            ),
+          );
+    const reasonAt = saidAt ?? (before.reason === reason ? undefined : now);
     // What was chosen is kept among what the product offers, as a `set` holds it: a runner that
     // says another product since, a desk whose driver changed, offers other models, and a model
     // it does not offer would be refused at every turn. Such a choice is the product's own again;
@@ -406,7 +430,9 @@ export async function recordHeartbeat(
         ),
         ...(gone(before.model, heartbeat.offers.models) ? { model: null } : {}),
         ...(gone(before.effort, heartbeat.offers.efforts) ? { effort: null } : {}),
-        ...(changed ? { state, reason, stateAt: now } : { reason }),
+        ...(changed
+          ? { state, reason, stateAt: now, reasonAt: now }
+          : { reason, ...(reasonAt === undefined ? {} : { reasonAt }) }),
         stateUntil: until ?? null,
         updatedAt: now,
       })
@@ -624,7 +650,7 @@ export async function sendSignal(
         ...(stops ? { stopSignal: next } : {}),
         ...(starts ? { stopSignal: null } : {}),
         ...(becomesStopped
-          ? { state: "stopped", reason: "stop", stateAt: now, stateUntil: null }
+          ? { state: "stopped", reason: "stop", stateAt: now, reasonAt: now, stateUntil: null }
           : {}),
         ...(chosen === undefined ? {} : { model: chosen.model, effort: chosen.effort }),
         updatedAt: now,
@@ -789,6 +815,7 @@ export async function noteUnheardRunners(
           state: "unheard",
           reason: "no_heartbeat",
           stateAt: now,
+          reasonAt: now,
           // What a runner said of a moment to come is no longer known to hold.
           stateUntil: null,
           updatedAt: now,

@@ -1,4 +1,5 @@
 import { type FormEvent, useContext, useEffect, useState } from "react";
+import { reasonMoment } from "../agent-state.js";
 import {
   hostOfLogin,
   isHandle,
@@ -122,8 +123,9 @@ export interface AgentAccountListProps {
 
 /**
  * Agent accounts, a card each, for whoever looks after several: the picture, the name with the
- * handle and what it does, and across from them how it stands; then what it is doing now and
- * since when, what it runs, and whom it reports to where that is someone else. Rows of one
+ * handle and what it does, and across from them how it stands; then why it stands so, with
+ * when that was said where it is another moment than the state's, and under it the state with
+ * since when it stands; what it runs, and whom it reports to where that is someone else. Rows of one
  * shape, so that the cards read alike down a column. The whole card leads to the account's
  * page; what is kept of the account, the login it signs in with among it, is said there.
  */
@@ -144,6 +146,10 @@ export function AgentAccountList(props: AgentAccountListProps) {
         const invited = person.invited === true;
         const title = person.title ?? "";
         const state = agent.state ?? null;
+        // The reason has a moment of its own where it was said under a state that stayed; the
+        // state's moment is said with the state's word, so that neither reads as the other's.
+        const said = state === null ? undefined : reasonMoment(state);
+        const stood = state === null ? undefined : states.sinceAs(states[state.state]);
         const product = agent.runner?.product ?? null;
         const usage = usageStanding(agent.usage, props.now ?? Date.now());
         const model = agent.runner?.running?.model ?? agent.runner?.settings.model ?? null;
@@ -192,12 +198,21 @@ export function AgentAccountList(props: AgentAccountListProps) {
                   ) : (
                     <span className="sc-agent-card-now">
                       {state.reason !== null && (
-                        <span>{reasons[state.reason] ?? state.reason}</span>
+                        <span>
+                          {reasons[state.reason] ?? state.reason}
+                          {said !== undefined && (
+                            <span className="sc-muted">
+                              {states.reasonAt.before}
+                              <Time iso={said} precision="clock" />
+                              {states.reasonAt.after}
+                            </span>
+                          )}
+                        </span>
                       )}
                       <span className="sc-muted">
-                        {states.since.before}
+                        {stood?.before}
                         <Time iso={state.since} precision="clock" />
-                        {states.since.after}
+                        {stood?.after}
                         {state.until !== undefined && state.until !== null && (
                           <>
                             {" · "}

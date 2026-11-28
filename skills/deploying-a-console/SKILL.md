@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell with Node.js 24 or newer, git, curl, jq and the AWS CLI v2, the gh command signed in or an empty repository the person made, network access to AWS, Cloudflare, GitHub and npm, an AWS account and a domain on Cloudflare the person can create a key and a token for, and a browser on any device for the few steps only a signed-in person can take. Works in any agent that can run a shell and write files; on Windows, in Git Bash with path conversion off.
 metadata:
   author: skillcdn
-  version: "1.8"
+  version: "1.9"
 skillcdn:
   translations:
     ko:
@@ -14,7 +14,7 @@ skillcdn:
 ---
 # Deploying a console for an organization
 
-What goes in: an AWS account, a domain on Cloudflare or one to buy, and the answers to a few plain questions. What comes out: the console at `https://<hostname>`, signed in by its first administrator, with a first project and an agent connected; running as containers on AWS next to a managed PostgreSQL and a bucket, reached only through Cloudflare, every secret in a parameter store; a private deployment repository whose every push rebuilds and redeploys; a budget alert; and a record, `DEPLOY.md`, of what exists and how it is run. The person never needs to know the cloud: every choice is derived from their answers, shown with its cost, and changed when they ask. The shape and why it was chosen are [ADR-0017](/docs/adr/0017-the-reference-deployment-is-the-image-on-aws-behind-cloudflare-written-as-a-skill.md); what the console asks of any platform is [deploy/README.md](/deploy/README.md). For one machine, a trial, or a closed network that reaches no cloud, the smallest install of [deploy/README.md](/deploy/README.md#the-smallest-install-and-a-closed-network) is the shape, not this skill: the image next to PostgreSQL with the packs in a directory, carried in where nothing is reachable.
+What goes in: an AWS account, a domain on Cloudflare or one to buy, and the answers to a few plain questions. What comes out: the console at `https://<hostname>`, signed in by its first administrator, with a first project and an agent connected; running as containers on AWS next to a managed PostgreSQL and a bucket, reached only through Cloudflare, every secret in a parameter store; a private deployment repository whose every push rebuilds and redeploys; a budget alert; and a record, `DEPLOY.md`, of what exists and how it is run. The person never needs to know the cloud: every choice is derived from their answers, shown with its cost, and changed when they ask. The shape and why it was chosen are [ADR-0017](/docs/adr/0017-the-reference-deployment-is-the-image-on-aws-behind-cloudflare-written-as-a-skill.md); what the console asks of any platform is [deploy/README.md](/deploy/README.md). For one machine, a trial, or a closed network that reaches no cloud, the smallest install of [deploy/README.md](/deploy/README.md#the-smallest-install-and-a-closed-network) is the shape, not this skill: the image next to PostgreSQL with the packs in a directory, carried in where nothing is reachable. A trial on one's own computer, from nothing to a first task worked on the board, is the skill [trying-a-console](/skills/trying-a-console/SKILL.md).
 
 ## How the person is involved
 
@@ -32,7 +32,7 @@ What goes in: an AWS account, a domain on Cloudflare or one to buy, and the answ
 | A shell with Node.js 24 or newer, git, curl, jq and the AWS CLI v2 (`aws --version`); on Windows, Git Bash with `export MSYS_NO_PATHCONV=1`, since Git Bash otherwise rewrites an argument that starts with `/` (a log group, a parameter) into a Windows path before a program sees it | Every command of the run; the deployment repository |
 | The deployer's access key and the Cloudflare token, as [access.md](references/access.md) says they are made and reach the agent | Everything on AWS and at Cloudflare |
 | The `gh` command signed in (`gh auth status`), or an empty private repository the person made | The deployment repository, its first push, watching its runs |
-| The `console` command, `npm install -g @skillcdn/console` in phase 1 | The proof at the end: an agent connected, a file handed in; and this skill's two scripts, which the package carries at `$(npm root -g)/@skillcdn/console/skills/deploying-a-console/scripts/`, copied into the run's `scratch/` folder, or read through the connection and written there; and the skill building-a-console, beside this one at `$(npm root -g)/@skillcdn/console/skills/building-a-console/SKILL.md` or through the connection, for the look and `console-ui/` |
+| The `console` command, `npm install -g @skillcdn/console` in phase 1 | The proof at the end: an agent connected, a file handed in; and this skill's scripts, which the package carries at `$(npm root -g)/@skillcdn/console/skills/deploying-a-console/scripts/`, copied into the run's `scratch/` folder, or read through the connection and written there; and the skill building-a-console, beside this one at `$(npm root -g)/@skillcdn/console/skills/building-a-console/SKILL.md` or through the connection, for the look and `console-ui/` |
 | The person, with a browser on any device | The GitHub App or the Google client, the first sign-in, approving the agent's code, a registrar's nameservers |
 | Network access to AWS, Cloudflare, GitHub and npm | |
 

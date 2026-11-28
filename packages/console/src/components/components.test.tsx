@@ -1749,7 +1749,62 @@ describe("the agent accounts (ADR-0084)", () => {
       />,
     );
     expect(running).toContain(">Stopped<");
-    expect(running).toContain('a supervisor stopped it</span><span class="sc-muted">since ');
+    // The moment under the reason is said with the state's word: it is since when the account
+    // stands so, and never reads as when the reason was said. An answer that names no moment
+    // for the reason, a console's of before, shows the reason with none.
+    expect(running).toContain(
+      '<span>a supervisor stopped it</span><span class="sc-muted">stopped since <time',
+    );
+    // A reason said later, under a state that stayed, has its own moment beside it; the state
+    // keeps its own under it. In Korean the state's word follows its moment.
+    const later = {
+      person: { ...mira, invited: undefined },
+      manager: alice,
+      supervised: true,
+      state: {
+        state: "running" as const,
+        reason: "reset",
+        since: "2026-11-08T08:41:00.000Z",
+        reasonAt: "2026-11-10T14:12:00.000Z",
+        heardAt: "2026-11-10T14:12:30.000Z",
+      },
+    };
+    const reset = renderToStaticMarkup(<AgentAccountList agents={[later]} />);
+    expect(reset).toMatch(
+      /<span>it began a new conversation<span class="sc-muted"> \(<time class="sc-time" dateTime="2026-11-10T14:12:00\.000Z"[^>]*>[^<]+<\/time>\)<\/span><\/span><span class="sc-muted">running since <time class="sc-time" dateTime="2026-11-08T08:41:00\.000Z"/,
+    );
+    expect(
+      renderToStaticMarkup(
+        <LanguageContext.Provider value={KOREAN}>
+          <AgentAccountList agents={[later]} />
+        </LanguageContext.Provider>,
+      ),
+    ).toMatch(
+      /새 대화를 시작했습니다<span class="sc-muted"> \(<time[^>]*dateTime="2026-11-10T14:12:00\.000Z"[^>]*>[^<]+<\/time>\)<\/span><\/span><span class="sc-muted"><time[^>]*dateTime="2026-11-08T08:41:00\.000Z"[^>]*>[^<]+<\/time>부터 실행 중/,
+    );
+    // A reason that came with its state, within the minute, is of the state's moment: one
+    // moment is shown, the state's.
+    const together = renderToStaticMarkup(
+      <AgentAccountList
+        agents={[
+          {
+            ...later,
+            state: {
+              state: "failed",
+              reason: "usage_limit",
+              since: "2026-11-10T14:12:00.000Z",
+              reasonAt: "2026-11-10T14:12:02.000Z",
+              heardAt: null,
+              until: "2026-11-10T19:00:00.000Z",
+            },
+          },
+        ]}
+      />,
+    );
+    expect(together).toContain(
+      '<span>its product&#x27;s usage limit is reached</span><span class="sc-muted">failed since <time',
+    );
+    expect(together.match(/<time /g)).toHaveLength(2);
     expect(running).toContain("<dt>Runs</dt><dd>Claude Code 2.1.321 · opus</dd>");
     expect(running).toContain('<a class="sc-agent-card-link" href="/agents/mira">Mira</a>');
     expect(seen).toContain(
@@ -2213,8 +2268,31 @@ describe("an agent account's page (ADR-0085, ADR-0086)", () => {
     );
     expect(full).toContain("sc-badge-warning");
     expect(full).toContain(">Refused<");
-    expect(full).toContain("the model refused · since");
-    expect(full).toContain("runner last heard from");
+    // Since when stands right after the badge, whose state it is the moment of; then why.
+    expect(full).toMatch(
+      />Refused<\/span><span class="sc-note">since <time[^>]*>[^<]+<\/time> · the model refused · runner last heard from/,
+    );
+    // A reason said later under the state that stayed carries its own moment, and the state
+    // keeps since when it stands: neither is shown as the other's.
+    const later = renderToStaticMarkup(
+      <AgentStateBadge
+        state={{
+          ...standing("running", "completed"),
+          since: "2026-11-08T08:41:00.000Z",
+          reasonAt: "2026-11-10T14:02:11.000Z",
+        }}
+        full
+      />,
+    );
+    expect(later).toMatch(
+      /since <time[^>]*dateTime="2026-11-08T08:41:00\.000Z"[^>]*>[^<]+<\/time> · a turn completed \(<time[^>]*dateTime="2026-11-10T14:02:11\.000Z"[^>]*>[^<]+<\/time>\) · runner last heard from/,
+    );
+    // One the console keeps no moment for, a row of before, is shown with none.
+    expect(
+      renderToStaticMarkup(
+        <AgentStateBadge state={{ ...standing("running", "reset"), reasonAt: null }} full />,
+      ),
+    ).toContain(" · it began a new conversation · runner last heard from");
     // A reason the page has no words for is said as it came, as text.
     expect(
       renderToStaticMarkup(<AgentStateBadge state={standing("failed", "<b>new</b>")} full />),

@@ -889,6 +889,39 @@ describe("a plugin on the board", () => {
     expect(data.endpoint).toBe("plugin.not_found");
   });
 
+  it("reads the people its caller may see through the host, in a person's call and through their agent's token (ADR-0168)", async () => {
+    // The option travels with the call from the plugin's code to the console and back: what
+    // the board decides for each kind of caller is held, case by case, by its own test
+    // (plugins/board-people.int.test.ts). Here the console shows everyone to everyone, so the
+    // people a caller may see are everyone, and the read answers as the console's page does.
+    const read = (answer: { data?: unknown }) =>
+      answer.data as { seen?: string[]; everyone?: string[]; keeps?: string; refused?: string };
+    const own = read(await invoked("leave", member, ["seen"]));
+    expect(own.refused).toBeUndefined();
+    expect(own.keeps).toBe("everyone");
+    expect(own.seen).toEqual(expect.arrayContaining([aliceLogin, "bob"]));
+    expect(own.seen?.toSorted()).toEqual(own.everyone?.toSorted());
+    const page = restPeopleSchema.parse(
+      await (await h.request(REST_ROUTES.people, { headers: { cookie: member } })).json(),
+    );
+    expect(own.seen?.toSorted()).toEqual(page.items.map((one) => one.login).toSorted());
+    // A person's agent, with a token of theirs, is that person.
+    const token = (
+      (await (
+        await h.request(REST_ROUTES.tokens, json({ name: "an agent of bob's" }, member))
+      ).json()) as { secret: string }
+    ).secret;
+    const through = await h.request(pluginPath("leave", "invoke"), {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ argv: ["seen"] }),
+    });
+    expect(through.status, await through.clone().text()).toBe(200);
+    expect(read(restPluginInvocationSchema.parse(await through.json())).seen?.toSorted()).toEqual(
+      own.seen?.toSorted(),
+    );
+  });
+
   it("reads a person's work email with people:read:email alone (ADR-0069)", async () => {
     const written = await h.request(
       `${REST_ROUTES.people}/${bobId}`,
@@ -1691,7 +1724,12 @@ describe("a plugin on the board", () => {
         await h.request(pluginPath("leave", "plugin-events"), { headers: { cookie: member } })
       ).json(),
     );
-    expect(emitted.items.find((event) => event.kind === "left")?.data).toEqual({ login: "carol" });
+    // The hook asked for the people its caller may see as well (ADR-0168): a hook has no caller,
+    // and is refused, where the directory it holds would otherwise have answered everyone.
+    expect(emitted.items.find((event) => event.kind === "left")?.data).toEqual({
+      login: "carol",
+      seen: "plugin.forbidden",
+    });
   });
 
   it("runs the jobs on their schedule, and tells a failure once an hour", async () => {
@@ -1705,6 +1743,8 @@ describe("a plugin on the board", () => {
     expect(accrual.status).toBe(200);
     const page = restDocumentSchema.parse(await accrual.json());
     expect(page.body).toContain("as console");
+    // A job has no caller whose view of the people it could read (ADR-0168).
+    expect(page.body).toContain("the people a caller may see: plugin.forbidden");
     expect(page.plugin).toBe("leave");
     expect(page.updatedBy.login).toBe(aliceLogin);
     const failed = () =>

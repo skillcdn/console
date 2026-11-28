@@ -15,6 +15,17 @@
 #                  the proxy in front is on another machine
 #   --packs DIR    the organization's packs: DIR/<name>, each a directory in the SkillCDN
 #                  Format, is served at /local/org/<name>
+#   --github-app   register the console at GitHub from here, where the settings name no identity
+#                  provider yet: a page on this host sends a browser to GitHub, a person presses
+#                  "Create GitHub App" there once, and what GitHub hands back is written into
+#                  the settings. The origin is --url, else http://127.0.0.1:<port>, a trial's
+#   --org LOGIN    with --github-app: register the app under this organization, whose members
+#                  are then let in once the app is installed on it from its page
+#   --admins LIST  the first administrators, by login, with commas between; with --github-app
+#                  and no organization it is whoever registered the app, unless said
+#   --github-url ORIGIN
+#                  with --github-app: a GitHub Enterprise Server of your own in place of
+#                  github.com, by its origin; its API is taken to be at ORIGIN/api/v3
 #   --offline      reach nothing outside this host: load the images kept beside this script,
 #                  check every file against the bundle's digests, and never pull
 #   --no-start     write the settings and stop
@@ -22,11 +33,16 @@
 # It reads no secret from its arguments and takes none. The database password is made here, and
 # so is the secret signing in is sealed with, once the settings name an identity provider: its
 # client id and secret are a person's to register and to write into .env beside this script,
-# which only its owner may read.
+# which only its owner may read, or GitHub's to hand this script with --github-app, which
+# writes them there and prints neither.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 registry_image=ghcr.io/skillcdn/console
+# Where the page that registers a GitHub App is served while it waits: beside the console's port.
+registrar_port=11196
+# The script that registers one, where the console's image carries its own skills.
+registrar=/app/packs/skillcdn/console/skills/deploying-a-console/scripts/github-app.mjs
 
 image=""
 build=false
@@ -34,6 +50,10 @@ url=""
 port=""
 bind=""
 packs=""
+github_app=false
+org=""
+admins=""
+github_url=""
 offline=false
 start=true
 
@@ -50,9 +70,13 @@ while [ $# -gt 0 ]; do
     --port) [ $# -ge 2 ] || fail "--port takes a port"; port=$2; shift 2 ;;
     --bind) [ $# -ge 2 ] || fail "--bind takes an address"; bind=$2; shift 2 ;;
     --packs) [ $# -ge 2 ] || fail "--packs takes a directory"; packs=$2; shift 2 ;;
+    --github-app) github_app=true; shift ;;
+    --org) [ $# -ge 2 ] || fail "--org takes an organization's login"; org=$2; shift 2 ;;
+    --admins) [ $# -ge 2 ] || fail "--admins takes logins, with commas between"; admins=$2; shift 2 ;;
+    --github-url) [ $# -ge 2 ] || fail "--github-url takes an origin"; github_url=$2; shift 2 ;;
     --offline) offline=true; shift ;;
     --no-start) start=false; shift ;;
-    -h | --help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) fail "unknown option: $1 (see --help)" ;;
   esac
 done
@@ -70,6 +94,27 @@ case "$bind" in
   "") ;;
   *[!0-9a-fA-F.:]*) fail "--bind is an address of this host, such as 127.0.0.1 or 0.0.0.0" ;;
 esac
+case "$org" in
+  "") ;;
+  -* | *[!0-9a-zA-Z-]*) fail "--org is the organization's login at GitHub, as it reads in its address" ;;
+esac
+case "$admins" in
+  "") ;;
+  *[!0-9a-zA-Z@._,-]*) fail "--admins is logins at the provider, or addresses, with commas between and no space" ;;
+esac
+github_url=${github_url%/}
+case "$github_url" in
+  "") ;;
+  http://*/* | https://*/* | *[!0-9a-zA-Z:/._-]*) fail "--github-url is your GitHub Enterprise Server's origin, such as https://github.example.com, without a path" ;;
+  http://* | https://*) ;;
+  *) fail "--github-url is your GitHub Enterprise Server's origin, such as https://github.example.com" ;;
+esac
+if [ -n "$org" ] && ! $github_app; then
+  fail "--org goes with --github-app: it names the organization the app is registered under"
+fi
+if [ -n "$github_url" ] && ! $github_app; then
+  fail "--github-url goes with --github-app: it names the GitHub the app is registered at"
+fi
 if $build && [ -n "$image" ]; then
   fail "--build and --image name two different images"
 fi
@@ -107,6 +152,12 @@ env_file=$here/.env
 setting() {
   [ -f "$env_file" ] || return 0
   sed -n "s/^$1=//p" "$env_file" | tail -n 1
+}
+
+# A value of what the registration of a GitHub App answered, by its name, or nothing.
+registered=""
+answered() {
+  printf '%s\n' "$registered" | sed -n "s/^$1=//p" | tail -n 1
 }
 
 # Writes a setting, in place of the line that set it before.
@@ -172,10 +223,11 @@ if [ ! -f "$env_file" ]; then
 # The settings of this installation (README.md, "Environment contract"). install.sh wrote it and
 # keeps what is here; .env.example lists every variable the console reads.
 #
-# Signing in (README.md, "Signing in"): register the console at the identity provider your
-# people use, take the mark off the front of one provider's two lines and of ADMINS, fill them
-# in, and run install.sh again with --url. A git host of your own is named by GITHUB_WEB_URL and
-# GITHUB_API_URL, as .env.example says.
+# Signing in (README.md, "Signing in"): install.sh --github-app registers the console at GitHub
+# with one press and writes the lines itself. Or register the console at the identity provider
+# your people use, take the mark off the front of one provider's two lines and of ADMINS, fill
+# them in, and run install.sh again with --url. A git host of your own is named by GITHUB_WEB_URL
+# and GITHUB_API_URL, as .env.example says, before either.
 # GITHUB_CLIENT_ID=
 # GITHUB_CLIENT_SECRET=
 # GOOGLE_CLIENT_ID=
@@ -196,8 +248,74 @@ if [ -n "$packs" ]; then
   set_setting PACKS_PATH "$(cd "$packs" && pwd)"
 fi
 
+# A GitHub App registered from here (--github-app, ADR-0171). The console's image carries the
+# script: it serves one page on this host, which sends a browser to GitHub, and waits for the
+# person's press there. What GitHub hands back is read from the script's standard output into
+# the settings, and is never an argument, a line printed or a file of its own. An installation
+# that names a provider keeps it.
+app_registered=false
+app_page=""
+if $github_app; then
+  if [ -n "$(setting GITHUB_CLIENT_ID)$(setting GOOGLE_CLIENT_ID)" ]; then
+    echo "$env_file names an identity provider already: it is kept, and no app is registered"
+  else
+    if [ -n "$org" ] && [ -z "$admins" ] && [ -z "$(setting ADMINS)" ]; then
+      fail "an app registered under an organization names no person: say who the first administrators are with --admins <login>"
+    fi
+    listening=$(setting CONSOLE_PORT)
+    origin=${url:-$(setting PUBLIC_URL)}
+    origin=${origin:-http://127.0.0.1:${listening:-11199}}
+    # MSYS, under which Git Bash runs on Windows, would rewrite the path in the container.
+    MSYS_NO_PATHCONV=1 docker run --rm --entrypoint node "$image" -e 'require("node:fs").accessSync(process.argv[1])' "$registrar" >/dev/null 2>&1 \
+      || fail "the image $image does not carry the script that registers a GitHub App; the image of the release these files are of does. Name it with --image, or register the app by hand (README.md, \"Signing in\")"
+    # A git host of the organization's own: named here, or in the settings already. The console
+    # signs people in at the same one, so what is named here is kept with the app.
+    host_web=${github_url:-$(setting GITHUB_WEB_URL)}
+    host_api=${github_url:+$github_url/api/v3}
+    host_api=${host_api:-$(setting GITHUB_API_URL)}
+    asked=(--url "$origin" --host 0.0.0.0 --port "$registrar_port")
+    [ -z "$org" ] || asked+=(--org "$org")
+    [ -z "$host_web" ] || asked+=(--web-url "$host_web")
+    [ -z "$host_api" ] || asked+=(--api-url "$host_api")
+    echo "registering the console at $origin as a GitHub App"
+    registered=$(MSYS_NO_PATHCONV=1 docker run --rm --init -p "127.0.0.1:$registrar_port:$registrar_port" --entrypoint node "$image" "$registrar" "${asked[@]}" | tr -d '\r') \
+      || fail "no GitHub App was registered, and the settings are as they were; the lines above say why (port $registrar_port of this host must be free)"
+    client_id=$(answered GITHUB_CLIENT_ID)
+    client_secret=$(answered GITHUB_CLIENT_SECRET)
+    app_id=$(answered GITHUB_APP_ID)
+    app_key=$(answered GITHUB_APP_PRIVATE_KEY)
+    if [ -z "$client_id" ] || [ -z "$client_secret" ]; then
+      fail "the registration answered no client id and secret; the settings are as they were"
+    fi
+    if [ -n "$org" ] && { [ -z "$app_id" ] || [ -z "$app_key" ]; }; then
+      fail "the registration answered no app id and key for the organization; the settings are as they were"
+    fi
+    if [ -n "$github_url" ]; then
+      set_setting GITHUB_WEB_URL "$host_web"
+      set_setting GITHUB_API_URL "$host_api"
+    fi
+    set_setting GITHUB_CLIENT_ID "$client_id"
+    set_setting GITHUB_CLIENT_SECRET "$client_secret"
+    if [ -n "$org" ]; then
+      set_setting GITHUB_APP_ID "$app_id"
+      set_setting GITHUB_APP_PRIVATE_KEY "$app_key"
+      set_setting GITHUB_ORG "$org"
+    fi
+    app_registered=true
+    app_page=$(answered GITHUB_APP_URL)
+    # Whoever registered an app of their own is the first administrator, unless one is named.
+    if [ -z "$admins" ] && [ -z "$(setting ADMINS)" ] && [ "$(answered GITHUB_APP_OWNER_TYPE)" = User ]; then
+      admins=$(answered GITHUB_APP_OWNER)
+    fi
+    [ -n "$url" ] || url=$origin
+    registered=""
+    client_secret=""
+    app_key=""
+  fi
+fi
+
 # Signing in is whole or not there: the console does not start on half of it. A provider is a
-# person's to register; the origin and the secret follow it here.
+# person's to register, or GitHub's to hand over above; the origin and the secret follow it here.
 provider=false
 if [ -n "$(setting GITHUB_CLIENT_ID)" ] && [ -n "$(setting GITHUB_CLIENT_SECRET)$(setting GITHUB_CLIENT_SECRET_FILE)" ]; then
   provider=true
@@ -209,6 +327,9 @@ if $provider; then
   [ -z "$url" ] || set_setting PUBLIC_URL "$url"
   [ -n "$(setting PUBLIC_URL)" ] || fail "$env_file names an identity provider, and signing in needs the origin people use: run this again with --url"
   [ -n "$(setting AUTH_SECRET)$(setting AUTH_SECRET_FILE)" ] || set_setting AUTH_SECRET "$(secret)"
+  [ -z "$admins" ] || set_setting ADMINS "$admins"
+elif [ -n "$admins" ]; then
+  fail "--admins names who is let in first, through an identity provider, and $env_file names none: say it with --github-app, or once a provider is there"
 elif [ -n "$(setting PUBLIC_URL)$(setting AUTH_SECRET)$(setting AUTH_SECRET_FILE)$(setting ADMINS)" ]; then
   fail "$env_file sets PUBLIC_URL, AUTH_SECRET or ADMINS and no identity provider, and the console does not start on half of signing in: set a provider's client id and secret there, or take those lines out"
 fi
@@ -243,12 +364,19 @@ echo
 echo "SkillCDN Console ${release:+$release }is running at http://127.0.0.1:$listening (image $image)."
 if $provider; then
   echo "People sign in at $(setting PUBLIC_URL). The first administrators are the logins ADMINS names in $env_file."
-  [ -n "$(setting ADMINS)" ] || echo "ADMINS names nobody there yet: nobody is let in until it does."
+  [ -n "$(setting ADMINS)" ] || echo "ADMINS names nobody there yet: nobody is let in until it does. Name them: $0 --admins <login>"
+  if $app_registered; then
+    echo "The GitHub App that signs them in is ${app_page:-among the GitHub Apps of whoever registered it (Settings, Developer settings)}: it is changed and deleted there."
+    [ -z "$org" ] || echo "Install it on $org, so that the console reads who is a member${app_page:+: $app_page/installations/new}."
+  fi
 else
   origin=${url:-https://console.example.com}
-  echo "Nobody can sign in yet. Register the console at the identity provider your people use, with"
-  echo "the callback $origin/auth/gh/callback at a git host or $origin/auth/google/callback at Google;"
-  echo "write its client id and secret, and ADMINS, into $env_file; then run:"
+  echo "Nobody can sign in yet. Have this script register the console at GitHub, with one press in a"
+  echo "browser signed in there:"
+  echo "  $0 --github-app"
+  echo "Or register it yourself at the identity provider your people use, with the callback"
+  echo "$origin/auth/gh/callback at a git host or $origin/auth/google/callback at Google; write its"
+  echo "client id and secret, and ADMINS, into $env_file; then run:"
   echo "  $0 --url $origin"
 fi
 packs_path=$(setting PACKS_PATH)

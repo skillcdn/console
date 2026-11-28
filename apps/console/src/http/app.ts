@@ -156,6 +156,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
       auth?.organization === undefined
         ? undefined
         : { host: auth.organization.host, name: auth.organization.name },
+    origin: auth?.origin,
   });
 
   registerAgentRunnerRest(app, {

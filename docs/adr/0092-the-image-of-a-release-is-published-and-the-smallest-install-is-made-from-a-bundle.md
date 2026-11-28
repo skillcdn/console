@@ -1,6 +1,6 @@
 # ADR-0092: The image of a release is published, and the smallest install is made from a bundle
 
-- Status: Accepted
+- Status: Accepted; that only a person registers signing in (point 4) is amended by [ADR-0171](0171-the-smallest-install-registers-its-github-app-from-a-manifest-with-one-press.md), under which the script registers a GitHub App with one press
 - Date: 2026-11-12
 - Amends [ADR-0002](0002-one-image-one-database-and-the-main-repositorys-toolchain.md) and [ADR-0007](0007-the-package-is-published-through-trusted-publishing-and-versioned-on-the-core-line.md), which left every image to whoever deploys the console: the repository stopped at an image that builds, and the image had no version. Builds on ADR-0007 (publishing with no stored secret), [ADR-0034](0034-the-package-is-versioned-on-skillcdns-line-one-line-at-a-time-with-a-patch-of-its-own.md) (the one version), [ADR-0031](0031-the-console-reads-a-pack-as-the-skillcdn-command-does-and-a-local-one-from-a-directory.md) (packs from a directory) and [ADR-0049](0049-a-plugin-is-an-npm-package-installed-into-the-image-and-enabled-by-an-administrator.md) (a plugin is built into the image). The contract is [deploy/README.md](../../deploy/README.md).
 

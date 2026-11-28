@@ -407,7 +407,7 @@ describe("the command line", () => {
     expect(unbound.out).toContain("; no project named here\n");
     const who = await console_(["whoami"]);
     expect(who.out).toBe(
-      `Alice (member) at Acme, ${SIGN_IN_URL}; project web (The web app), named by CONSOLE_PROJECT\nBefore the first task, read console rules and the skill working-the-board (console skills says where it is); for one command's flags, console help <command>.\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.0 <0.2.0; this command works with a console from 0.6.0 on.\n`,
+      `Alice (member) at Acme, ${SIGN_IN_URL}; project web (The web app), named by CONSOLE_PROJECT\nBefore the first task, read console rules and the skill working-the-board (in the skills folder of the package @skillcdn/console, which this build has none of beside it); for one command's flags, console help <command>.\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.0 <0.2.0; this command works with a console from 0.6.0 on.\n`,
     );
   });
 
@@ -489,7 +489,7 @@ describe("the command line", () => {
     // The first line says what follows, before any text (ADR-0119, ADR-0120): here, that the
     // project and the organization add nothing, with the mark of the rules as they stand.
     expect(start.out).toMatch(
-      /^Rules [0-9a-f]{8}: this project and the organization add nothing; the console's follow \(\d+ characters\)\. A later take in this session leaves them out: console take <number> --rules [0-9a-f]{8}\n/,
+      /^Rules [0-9a-f]{8}: this project and the organization add nothing; the console's follow \(\d+ characters\)\. Now that they are read, a take in this session leaves them out: console take <number> --rules [0-9a-f]{8}\n/,
     );
     const bare = /^Rules ([0-9a-f]{8}): /.exec(start.out)?.[1] ?? "";
     const written = await console_([
@@ -505,7 +505,7 @@ describe("the command line", () => {
     expect(taken.code, taken.err).toBe(EXIT.ok);
     // What the project adds stands first now, under a line that says so, then the console's.
     expect(taken.out).toMatch(
-      /\nRules [0-9a-f]{8}: this project's additions first \(\d+ characters\), then the console's \(\d+ characters\), the earlier holding where they differ; the organization adds nothing\. A later take in this session leaves them out: console take <number> --rules [0-9a-f]{8}\n/,
+      /\nRules [0-9a-f]{8}: this project's additions first \(\d+ characters\), then the console's \(\d+ characters\), the earlier holding where they differ; the organization adds nothing\. Now that they are read, a take in this session leaves them out: console take <number> --rules [0-9a-f]{8}\n/,
     );
     expect(taken.out).toMatch(
       /Ask before pushing\.[\s\S]*# Rules for agents on this board[\s\S]*Say how it goes/,
@@ -657,7 +657,7 @@ describe("the command line", () => {
     expect(found.out).toContain(`Reported on run ${runId}`);
     const whoami = await console_(["whoami"], bobToken);
     expect(whoami.out).toBe(
-      `bob (member) at Acme, ${SIGN_IN_URL}; project web (The web app), named by CONSOLE_PROJECT\nBefore the first task, read console rules and the skill working-the-board (console skills says where it is); for one command's flags, console help <command>.\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.0 <0.2.0; this command works with a console from 0.6.0 on.\n`,
+      `bob (member) at Acme, ${SIGN_IN_URL}; project web (The web app), named by CONSOLE_PROJECT\nBefore the first task, read console rules and the skill working-the-board (in the skills folder of the package @skillcdn/console, which this build has none of beside it); for one command's flags, console help <command>.\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.0 <0.2.0; this command works with a console from 0.6.0 on.\n`,
     );
   });
 
