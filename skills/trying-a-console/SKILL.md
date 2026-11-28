@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs a shell that runs bash (on Windows, Git Bash), Docker with its compose plugin, running, git, Node.js 24 or newer with npm, network access to GitHub, its container registry and npm, a GitHub account, and a browser on this computer signed in to it.
 metadata:
   author: skillcdn
-  version: "1.1"
+  version: "1.2"
 skillcdn:
   translations:
     ko:
@@ -21,7 +21,7 @@ It is the smallest install of [the deploy guide](/deploy/README.md#the-smallest-
 ## How the person is involved
 
 - **Before anything runs,** one message: what will be on this computer (two containers, a folder, the `console` command installed for the machine or brought to the release's version where it is there already, a GitHub App under their account), everything they do themselves, below, and one question, which folder to use, `skillcdn-console` in their home directory unless they name another. Go on when they say so.
-- **What only they do:** press **Create GitHub App** once at GitHub; sign in to the console; approve this agent's code on the console's page; say what the first task is, or take the one proposed; answer one decision on the board; say whether the finished task is good; and, when it is taken down, delete the GitHub App. Each is said in a message of its own, with the address, before the command that waits for it. Say too that the press was not yet seen against GitHub itself: where GitHub refuses it, they register the app by a short form instead.
+- **What only they do:** press **Create GitHub App** once at GitHub; sign in to the console; approve this agent's code on the console's page; say what the first task is, or take the one proposed; answer one decision on the board; say whether the finished task is good; and, when it is taken down, delete the GitHub App. Each is said in a message of its own, with the address, before the command that waits for it. Where GitHub refuses the press, they register the app by a short form instead.
 - **Secrets:** none is asked for, typed or shown. The script writes what GitHub hands back into `deploy/.env`, which is never read or printed.
 - **Taking it down** deletes the board: it is done on their word, step by step.
 - **Language:** what is said to the person, and what is written on the board, is in their language.

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "skillcdn-console": {
+      "type": "http",
+      "url": "https://skillcdn.ai/gh/skillcdn/console"
+    }
+  }
+}

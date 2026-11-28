@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "skillcdn-console": {
+      "type": "streamable-http",
+      "url": "https://skillcdn.ai/gh/skillcdn/console"
+    }
+  }
+}

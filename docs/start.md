@@ -10,21 +10,14 @@ SkillCDN Console is where a company's AI team works beside its people. A person 
 
 At the step they need, not at the first:
 
-1. **Try a skill**, in the AI app they use, with nothing to install. That is another pack, the SkillCDN Pack, connected as this one is: `https://skillcdn.ai/gh/skillcdn/skills`.
-2. **Work a board with their own AI**, on their computer: `skills/trying-a-console`. It takes a coding agent that runs commands (Claude Code, Codex), Docker, git and a GitHub account.
-3. **Hire a first AI employee**, on a computer that stays on: `skills/running-an-agent`. It takes the console of step 2 or 4, an account on that computer for the employee alone, an account for it to sign in with, and a subscription of its own to its AI product.
-4. **Grow into the team's console**, in the organization's cloud: `skills/deploying-a-console`. It takes an account with a cloud provider and a domain.
-
-**Where you run no commands on the person's computer,** in a chat app in a browser or on a phone, steps 2 to 4 are not yours to carry out, and nothing is said to be done that was not. Say what the console is, answer from these documents, name what the step takes, and give the person the line that connects this pack to a coding agent on their computer, where the same request is carried out:
-
-```sh
-claude mcp add --transport http skillcdn-console https://skillcdn.ai/gh/skillcdn/console
-codex mcp add skillcdn-console --url https://skillcdn.ai/gh/skillcdn/console
-```
+1. **Try a skill**, in the AI app they use, with nothing to install: a job handed over in one sentence, such as an ad, a deck or a web page. That is another pack, the SkillCDN Pack, at an address of its own, `https://skillcdn.ai/gh/skillcdn/skills`, whose page shows how each app connects it; this pack makes none of that.
+2. **Work a board with their own AI**, on their computer: `skills/trying-a-console`. It takes a coding agent that runs commands (Claude Code, Codex), Docker, git, Node.js and a GitHub account.
+3. **Hire a first AI employee**, on a computer that stays on: `skills/running-an-agent`. It takes the console of step 2 or 4, whose administrator adds the account, an account of that computer's operating system for the employee alone, a GitHub or Google Workspace account of its own to sign in to the console with, and a subscription of its own to its AI product.
+4. **Grow into the team's console**, in the organization's cloud: `skills/deploying-a-console`, on AWS behind Cloudflare. It takes an AWS account and a domain, and says the monthly cost before anything is made.
 
 ## Which skill
 
-Load the one the request names, and follow it to its end before acting on it. A skill's description says which neighbour does a job that looks alike.
+Load the one the request names, and read it to its end before acting on it. A skill's description says which neighbour does a job that looks alike.
 
 | The person says | Skill | What comes out |
 |---|---|---|
@@ -37,7 +30,16 @@ Load the one the request names, and follow it to its end before acting on it. A 
 | "Make me a console with a column for this", "re-skin the console in our brand" | `skills/building-a-console` | A console of a person's or an organization's own, built from the package, or a script against the API. |
 | "Write a plugin for leave", "the console should track our customers" | `skills/building-a-plugin` | A plugin: one npm package that adds a feature of the organization's work. |
 
-Work given in chat that belongs on a board is `working-the-board`, which writes the task before working it. A person who only asks what the console is gets the answer from the [README](../README.md), and no skill.
+Work given in chat by a person who has a board, and that belongs on it, is `working-the-board`, which writes the task before working it. A person who asks what the console is gets the answer from the two paragraphs at the top; what they do on its pages themselves, answering a decision, looking at what was handed in, watching a session, is said in short in the [README](../README.md) under "How it works" and found in full by a search of these documents. No skill for either.
+
+## Where you run no commands
+
+In a chat app in a browser or on a phone, with no shell on the person's computer, no skill of this pack is yours to carry out. Read the skill for what it takes and in what order, tell the person that, and say of nothing that it was done. A person who has the `console` command signed in is given the command the skill names, to type themselves. Anyone else is given the line that connects this pack to a coding agent on their computer, an AI product that runs commands there, to type in a terminal; the same request said to it is carried out:
+
+```sh
+claude mcp add --transport http skillcdn-console https://skillcdn.ai/gh/skillcdn/console   # Claude Code
+codex mcp add skillcdn-console --url https://skillcdn.ai/gh/skillcdn/console               # Codex
+```
 
 ## Two ways to read this pack
 

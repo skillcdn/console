@@ -14,6 +14,7 @@ exclude:
   - .claude
   - docs/adr/0000-template.md
   - examples
+  - listing
   - packages/console/template
   - apps/console/src/testing
 metadata:

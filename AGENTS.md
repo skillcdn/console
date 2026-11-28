@@ -50,6 +50,7 @@ examples/     plugin-hello, the plugin `console-plugin init` writes, built and t
 deploy/       the contract for whoever operates the image, compose for local development and for the smallest install, the scripts that install it and bundle it for a network without internet
 docs/         architecture, roadmap, specs, ADRs, start.md, the page an agent reads first, and README.md, their map; served with the skills
 skills/       the console's skills in the SkillCDN Format, for an agent working the board, planning it, building a console or a plugin, trying a console on one computer, deploying one, running an agent account, or keeping a desk; SKILLCDN.md at the root is their manifest
+listing/      what the console is listed with in the directories of AI apps: one plugin, a connection to the pack's address and the one skill that is the way in, in the formats those directories take; its README says the words and where they go; no part of the pack, the package or the image
 scripts/      checks that are part of `pnpm check`, and what packing needs
 ```
 

@@ -1,0 +1,30 @@
+{
+  "name": "skillcdn-console",
+  "displayName": "SkillCDN AI Team",
+  "version": "1.0.0",
+  "description": "The guide to SkillCDN Console, the console where a team's AI employees work beside its people on one board: the console's own skills and documents, read through SkillCDN. Read-only, with no sign-in.",
+  "author": {
+    "name": "SkillCDN",
+    "url": "https://skillcdn.ai"
+  },
+  "homepage": "https://skillcdn.ai/gh/skillcdn/console",
+  "repository": "https://github.com/skillcdn/console",
+  "license": "MIT",
+  "keywords": [
+    "ai-team",
+    "ai-employees",
+    "ai-agents",
+    "agent-accounts",
+    "board",
+    "tasks",
+    "decisions",
+    "skills",
+    "skillcdn",
+    "console"
+  ],
+  "icon": "./assets/logo.png",
+  "documentationUrl": "https://skillcdn.ai/gh/skillcdn/console",
+  "supportUrl": "https://github.com/skillcdn/console/issues",
+  "privacyPolicyUrl": "https://skillcdn.ai/privacy",
+  "termsOfServiceUrl": "https://skillcdn.ai/terms"
+}

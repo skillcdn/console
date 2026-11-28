@@ -25,7 +25,7 @@
     "dev:plugins": "turbo run build && pnpm --filter @skillcdn/console-app run dev:plugins",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "check": "biome ci . && node scripts/check-text-safety.mjs && node scripts/check-licenses.mjs && node scripts/check-version-line.mjs && skillcdn check && skillcdn catalog --check README.md && node scripts/check-skills.mjs && node scripts/check-styles.mjs && node --test scripts/icons.test.mjs && node scripts/icons.mjs --check && turbo run build typecheck test && node --test scripts/github-app.test.mjs && node --test scripts/check-rest-compat.test.mjs && node scripts/check-rest-compat.mjs",
+    "check": "biome ci . && node scripts/check-text-safety.mjs && node scripts/check-licenses.mjs && node scripts/check-version-line.mjs && skillcdn check && skillcdn catalog --check README.md && node scripts/check-skills.mjs && node scripts/check-styles.mjs && node --test scripts/icons.test.mjs && node scripts/icons.mjs --check && turbo run build typecheck test && node --test scripts/github-app.test.mjs && node --test scripts/listing.test.mjs && node --test scripts/check-rest-compat.test.mjs && node scripts/check-rest-compat.mjs",
     "dev": "turbo run build && pnpm --filter @skillcdn/console-app run dev:live",
     "clean": "turbo run clean",
     "check:text": "node scripts/check-text-safety.mjs",
