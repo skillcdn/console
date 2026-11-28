@@ -4102,6 +4102,38 @@ describe("the runner, of what its agent's conversation holds (ADR-0166)", () => 
     expect(anew).toContain("#1 · tell · Jane · 14:02]\nBegin.");
   });
 
+  it("names it while the turn that follows the limit is under way, and no more once a turn completed", async () => {
+    // Named where the agent answers a supervisor's word tried ahead of the reset: the session
+    // is the one whose product took the signal.
+    const answering = setup();
+    answering.console.signal({ text: "Begin." });
+    const first = await sessionOf(answering.product);
+    await until("the message", () => first.sent.length === 1);
+    first.emit(...STARTED, { type: "taken" }, limit(Date.now() + 60_000));
+    await until("the state", () => answering.console.beats.at(-1)?.reason === "usage_limit");
+    answering.console.signal({ text: "Are you there?" });
+    await until("the supervisor's word", () => first.sent.length === 2);
+    expect(first.sent[1]?.text).toContain("#2 · tell · Jane · 14:02]\nAre you there?");
+    first.emit({ type: "taken" }, { type: "event", kind: "assistant", text: "Yes." });
+    await until("what was kept", () => first.sent.length === 3);
+    expect(first.sent[2]?.text).toContain(`${NAMED}: #1 `);
+    expect(first.sent[2]?.text).not.toContain("Begin.");
+    // A turn that completed before it was handed over again: the agent was done with all it
+    // had, and what is handed over after is said whole, whatever the conversation holds.
+    const done = setup();
+    done.console.signal({ text: "Begin." });
+    const second = await sessionOf(done.product);
+    await until("the message", () => second.sent.length === 1);
+    second.emit(...STARTED, { type: "taken" }, limit(Date.now() + 60_000));
+    await until("the state", () => done.console.beats.at(-1)?.reason === "usage_limit");
+    done.console.signal({ text: "Are you there?" });
+    await until("the supervisor's word", () => second.sent.length === 2);
+    second.emit({ type: "taken" }, { type: "turn_completed" });
+    await until("what was kept", () => second.sent.length === 3);
+    expect(second.sent[2]?.text).not.toContain(NAMED);
+    expect(second.sent[2]?.text).toContain("#1 · tell · Jane · 14:02]\nBegin.");
+  });
+
   it("hands no picture again with a signal it only names", async () => {
     const PICTURE = {
       id: "0199c4d8-0000-7000-8000-0000000000a1",
