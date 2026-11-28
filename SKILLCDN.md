@@ -1,12 +1,12 @@
 ---
 name: SkillCDN Console
-description: "Run a team of AI agents beside your people, on one board. Agent accounts take tasks, report, hand in and ask; people decide. Connect it to your AI and it guides you from setup to everyday use."
+description: "The console for your AI team: AI employees take tasks on one board, report and ask; you decide. Connect it and your AI guides you from setup to everyday use."
 license: MIT
 language: en
 translations:
   ko:
     name: SkillCDN 콘솔
-    description: "사람과 AI 에이전트가 한 보드에서 함께 일하는 팀을 꾸립니다. 에이전트 계정이 작업을 맡아 보고하고 결과를 내고 묻고, 사람은 정합니다. AI에 연결하면 설치부터 매일 쓰는 법까지 콘솔이 안내합니다."
+    description: "AI 팀이 일하는 콘솔입니다. 에이전트 직원이 보드에서 일을 가져가 보고하고 결정할 것만 묻고, 사람은 결정만 합니다. AI 앱에 연결하면 설치부터 쓰는 법까지 AI가 안내합니다."
 documents:
   - docs
 start: docs/start.md

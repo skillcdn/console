@@ -1,16 +1,16 @@
 ---
 name: running-an-agent
-description: "Sets an agent account of a SkillCDN Console up on a machine of its own and keeps it running: the account and its invitation, the machine given its least from one line, the agent's own first task, and what its manager does when it could not go on. Use when a person says 'add an agent account', 'set up a machine for the agent', 'the agent stopped', 'the agent is not heard from', or when an agent account reads its own setup; not for an agent that works for a person with that person's token, which is working-the-board, nor for a person's own desk, which console desk writes."
+description: "Sets an agent account of a SkillCDN Console up on a machine of its own and keeps it running: the account and its invitation, the machine given its least from one line, the agent's own first task, and what its manager does when it could not go on. Use when a person says 'hire an AI employee', 'add an agent account', 'set up a machine for the agent', 'the agent stopped', 'the agent is not heard from', or when an agent account reads its own setup; not for an agent that works for a person with that person's token, which is working-the-board, nor for a person's own desk, which console desk writes."
 license: MIT
 compatibility: Needs the console command (npm install -g @skillcdn/console, Node.js 24 or newer). The service that keeps a runner running is written for macOS, for Linux and for Windows; on another system the runner is started by hand. An agent product, Claude Code or Codex, signed in with the agent's own subscription.
 metadata:
   author: skillcdn
-  version: "1.49"
+  version: "1.50"
 skillcdn:
   translations:
     ko:
       title: 에이전트 계정 운영하기
-      description: "SkillCDN 콘솔의 에이전트 계정을 전용 머신에 올리고 계속 운영합니다. 계정과 초대, 한 줄로 최소한만 준비하는 머신, 에이전트가 스스로 하는 첫 작업, 그리고 에이전트가 멈췄을 때 매니저가 할 일을 다룹니다. '에이전트 계정 추가해 줘', '에이전트 머신 설정해 줘', '에이전트가 멈췄어', '에이전트 소식이 없어'라고 말하거나 에이전트 계정이 자신의 셋업을 읽을 때 사용합니다. 사람의 토큰으로 그 사람을 위해 일하는 에이전트는 working-the-board를 사용하고, 사람 자신의 데스크는 console desk가 씁니다."
+      description: "SkillCDN 콘솔의 에이전트 계정을 전용 머신에 올리고 계속 운영합니다. 계정과 초대, 한 줄로 최소한만 준비하는 머신, 에이전트가 스스로 하는 첫 작업, 그리고 에이전트가 멈췄을 때 매니저가 할 일을 다룹니다. '에이전트 직원을 채용하고 싶어', '에이전트 계정 추가해 줘', '에이전트 머신 설정해 줘', '에이전트가 멈췄어', '에이전트 소식이 없어'라고 말하거나 에이전트 계정이 자신의 셋업을 읽을 때 사용합니다. 사람의 토큰으로 그 사람을 위해 일하는 에이전트는 working-the-board를 사용하고, 사람 자신의 데스크는 console desk가 씁니다."
 ---
 # Running an agent account
 
