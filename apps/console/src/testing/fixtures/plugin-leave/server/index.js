@@ -235,6 +235,26 @@ export default {
         }
       },
     ),
+    seen: command(
+      "Reads the people the caller may see, the whole directory held (ADR-0168); a refusal by its code.",
+      {},
+      async (ctx) => {
+        try {
+          const seen = await ctx.console.people.list({ seenByCaller: true });
+          const everyone = await ctx.console.people.list();
+          return {
+            text: String(seen.length),
+            data: {
+              seen: seen.map((p) => p.login),
+              everyone: everyone.map((p) => p.login),
+              keeps: (await ctx.console.workspace()).peopleVisibility,
+            },
+          };
+        } catch (error) {
+          return { text: "refused", data: { refused: error.code } };
+        }
+      },
+    ),
     notices: command(
       "Says what the caller chose to be told of (ADR-0165); a refusal by its code.",
       {},
@@ -438,9 +458,16 @@ export default {
         attempt: event.attempt,
       });
     },
-    // With people:read:all, the console says who left the workspace, as it happens.
+    // With people:read:all, the console says who left the workspace, as it happens. A hook has
+    // no caller whose view of the people it could read (ADR-0168): what it is answered is kept.
     "console:person.deactivated": async (ctx, event) => {
-      await ctx.events.emit("left", { login: event.data.login ?? null });
+      let seen;
+      try {
+        seen = (await ctx.console.people.list({ seenByCaller: true })).length;
+      } catch (error) {
+        seen = error.code;
+      }
+      await ctx.events.emit("left", { login: event.data.login ?? null, seen });
     },
   },
   jobs: {
@@ -448,9 +475,16 @@ export default {
       about: "Writes the accrual page.",
       every: "PT5M",
       async run(ctx) {
+        // A job has no caller either: the people a caller may see are refused it (ADR-0168).
+        let seen;
+        try {
+          seen = (await ctx.console.people.list({ seenByCaller: true })).length;
+        } catch (error) {
+          seen = error.code;
+        }
         await ctx.console.documents.write(ctx.plugin.board.key, "plugins/leave/accrual", {
           title: "Accrual",
-          body: `ran at ${ctx.now().toISOString()} as ${ctx.caller.kind}`,
+          body: `ran at ${ctx.now().toISOString()} as ${ctx.caller.kind}; the people a caller may see: ${seen}`,
         });
       },
     },

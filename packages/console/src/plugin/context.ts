@@ -18,7 +18,7 @@ import type {
   RestTaskPatch,
   RestTeam,
 } from "../schemas.js";
-import type { WeekStart } from "../vocabulary.js";
+import type { PeopleVisibility, WeekStart } from "../vocabulary.js";
 import type { PluginFileHandle } from "./args.js";
 
 /** A schema as the Standard Schema interface spells one: what every build of zod implements, so that a plugin's own copy validates its records. */
@@ -309,6 +309,15 @@ export interface PluginWorkspace {
   /** The day the week begins on (ADR-0035): `auto` leaves it to the language of whoever reads. */
   readonly weekStart: WeekStart;
   /**
+   * Whether the console shows every member to every member (ADR-0035): `everyone`, or
+   * `shared_projects`, where a member sees those they share a project with, themselves and the
+   * administrators. Where it is `shared_projects`, "everyone" is more than any one member sees:
+   * a plugin that holds the whole directory reads the people its caller may see with
+   * `seenByCaller` (ADR-0168), and says to an administrator whom a notice to everyone reaches.
+   * Left out by a console older than 0.6.3.
+   */
+  readonly peopleVisibility?: PeopleVisibility;
+  /**
    * The console's public origin (`PUBLIC_URL`), for a link to the console in what a plugin
    * writes elsewhere; `null` where the deployment names none.
    */
@@ -358,19 +367,39 @@ export interface PluginMessengerAccount {
   readonly since: string;
 }
 
+/**
+ * What a read of people, or of the teams' members, takes beside what it names (ADR-0168).
+ *
+ * `seenByCaller: true` answers among the people the caller may see, as the console's own
+ * listing of people shows that member (ADR-0035), whatever the plugin holds. A plugin with
+ * `people:read` alone reads so already; one with `people:read:all`, which opens the whole
+ * directory to its hooks and jobs, reads everyone in a person's call too unless it asks for
+ * this, and so shows a member people the console keeps from them where its people are kept
+ * apart (`peopleVisibility` of the workspace). The view is a person's: the caller's own, their
+ * agent's, an agent account's, or that of the person a plugin acts for, as a member. A hook, a
+ * job and a plugin calling as itself have no caller, and the read is refused
+ * (`plugin.forbidden`), never answered with everyone. Refused as `plugin.invalid_args` where it
+ * is neither `true` nor `false`; a console older than 0.6.3 reads past it and answers everyone
+ * with `people:read:all`, so a plugin that relies on it names 0.6.3 as the oldest console it
+ * runs on.
+ */
+export interface PeopleReadOptions {
+  readonly seenByCaller?: boolean;
+}
+
 /** The console's board, as a plugin reaches it with the `board:*` capabilities, each read the caller's own. */
 export interface PluginConsole {
   workspace(): Promise<PluginWorkspace>;
   people: {
-    list(options?: { readonly q?: string }): Promise<readonly RestPerson[]>;
-    get(id: string): Promise<RestPerson | null>;
+    list(options?: { readonly q?: string } & PeopleReadOptions): Promise<readonly RestPerson[]>;
+    get(id: string, options?: PeopleReadOptions): Promise<RestPerson | null>;
     /**
      * The active people a role of the plugin was granted to, by name, through a project or with
      * everyone, and everyone for `defaultRole` (ADR-0063); for a role that follows the reporting
      * line, whoever manages someone besides (ADR-0068). An administrator holds every role, and is
      * listed only where they were granted it or manage someone.
      */
-    granted(role: string): Promise<readonly RestPerson[]>;
+    granted(role: string, options?: PeopleReadOptions): Promise<readonly RestPerson[]>;
   };
   /**
    * Which account at a messenger is a member's (ADR-0164), with `people:accounts`: said by a
@@ -422,11 +451,15 @@ export interface PluginConsole {
   notifications: {
     settings(): Promise<RestNotificationSettings>;
   };
-  /** The teams of the workspace (ADR-0073): a name and its members, among the people the caller may see. */
+  /**
+   * The teams of the workspace (ADR-0073): a name and its members, among the people the caller
+   * may see; among everyone with `people:read:all`, unless `seenByCaller` asks for the caller's
+   * own view (ADR-0168).
+   */
   teams: {
-    list(): Promise<readonly RestTeam[]>;
+    list(options?: PeopleReadOptions): Promise<readonly RestTeam[]>;
     /** One team by its key (ADR-0074), what a grant and a person's `teams` name it by. */
-    get(key: string): Promise<RestTeam | null>;
+    get(key: string, options?: PeopleReadOptions): Promise<RestTeam | null>;
   };
   projects: {
     list(): Promise<readonly RestProject[]>;

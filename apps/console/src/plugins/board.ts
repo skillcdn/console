@@ -29,7 +29,7 @@ import {
   type PluginManifest,
   PluginRefusal,
 } from "@skillcdn/console/plugin";
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import * as z from "zod";
 import { asActedFor, personVisibleTo } from "../auth/policy.js";
 import { type Database, drizzleOf } from "../db/client.js";
@@ -216,6 +216,26 @@ const accountInput = z.strictObject({
   limit: z.number().int().min(1).max(READ_LIMIT).optional(),
 });
 
+/**
+ * Whether a read of people asks for the people its caller may see (ADR-0168): `seenByCaller`
+ * among its options, `true` or `false` and nothing else. What is neither is the plugin's
+ * invalid argument, so that a value meant to narrow the read never leaves it whole. A read
+ * that names no options, or the option not at all, is as it was.
+ */
+function seenByCaller(options: unknown): boolean {
+  if (typeof options !== "object" || options === null) {
+    return false;
+  }
+  const said = (options as { readonly seenByCaller?: unknown }).seenByCaller;
+  if (said === undefined) {
+    return false;
+  }
+  if (typeof said !== "boolean") {
+    throw invalid("seenByCaller is true or false");
+  }
+  return said;
+}
+
 /** Whether a caller acts as a person: a person themselves, or a plugin for one (ADR-0072); the console and a plugin as itself do not. */
 function actsAsPerson(caller: PluginCaller): boolean {
   return caller.kind === "person" || actsFor(caller);
@@ -300,6 +320,10 @@ export class PluginBoard {
           timeZone: settings.timeZone ?? "UTC",
           timeZoneSet: settings.timeZone !== null,
           weekStart: settings.weekStart,
+          // Whether the console shows every member to every member (ADR-0035), which every
+          // member reads of the workspace: a plugin says by it, to an administrator, whom
+          // "everyone" reaches where the people are kept apart (ADR-0168).
+          peopleVisibility: settings.peopleVisibility,
           url: this.options.publicUrl ?? null,
           categories: categories.map(restCategory).map((category) => ({
             key: category.key,
@@ -310,11 +334,12 @@ export class PluginBoard {
       }
       case "console.people": {
         needs(actsAsPerson(context.caller) ? "people:read" : "people:read:all");
-        const viewer = await this.actingPerson(context, workspace);
-        const settings = await readWorkspaceSettings(this.options.database, workspace.id);
-        const visible = context.consent.includes("people:read:all")
-          ? sql`true`
-          : personVisibleTo(viewer, settings);
+        // The options stand first for `list`, and after what `get` and `granted` name.
+        const visible = await this.peopleSeen(
+          context,
+          workspace,
+          seenByCaller(method === "list" ? args[0] : args[1]),
+        );
         const people = await listPeople(this.options.database, workspace.id, { visible });
         // The work email with `people:read:email` alone, to match a person to an account elsewhere;
         // the teams each is in (ADR-0073), by their keys (ADR-0074), with every reading.
@@ -494,14 +519,14 @@ export class PluginBoard {
       case "console.teams": {
         // The teams (ADR-0073), with the members among the people the caller may see.
         needs(actsAsPerson(context.caller) ? "people:read" : "people:read:all");
-        const viewer = await this.actingPerson(context, workspace);
-        const settings = await readWorkspaceSettings(this.options.database, workspace.id);
         const visible = new Set(
           (
             await listPeople(this.options.database, workspace.id, {
-              visible: context.consent.includes("people:read:all")
-                ? sql`true`
-                : personVisibleTo(viewer, settings),
+              visible: await this.peopleSeen(
+                context,
+                workspace,
+                seenByCaller(method === "list" ? args[0] : args[1]),
+              ),
             })
           ).map((person) => person.id),
         );
@@ -991,6 +1016,33 @@ export class PluginBoard {
 
   private scopeOf(workspace: WorkspaceRecord, project: Reached): Scope {
     return { workspaceId: workspace.id, projectId: project.id };
+  }
+
+  /**
+   * Whom a read of people answers among, as a condition of the listing: the people the acting
+   * person may see, by the policy that decides it for the console's own listing (ADR-0035); or
+   * everyone, with `people:read:all`. A plugin that holds the whole directory, for its hooks and
+   * jobs, reads the caller's own view where it asks for it (`narrowed`, ADR-0168), so that what
+   * it shows a member is whom the console shows them. That view is a person's: a hook, a job and
+   * a plugin as itself act as nobody whose view it could be, and are refused, never answered
+   * everyone in its place.
+   */
+  private async peopleSeen(
+    context: BoardContext,
+    workspace: WorkspaceRecord,
+    narrowed: boolean,
+  ): Promise<SQL> {
+    if (narrowed && !actsAsPerson(context.caller)) {
+      throw forbidden(
+        "the people a caller may see are read in a call made as a person: a hook, a job and a plugin as itself have no caller whose view it is",
+      );
+    }
+    const viewer = await this.actingPerson(context, workspace);
+    if (context.consent.includes("people:read:all") && !narrowed) {
+      return sql`true`;
+    }
+    const settings = await readWorkspaceSettings(this.options.database, workspace.id);
+    return personVisibleTo(viewer, settings);
   }
 
   /** Whether the plugin reaches a project (ADR-0080): its board project, or one it is placed on; a call takes it nowhere else. */
