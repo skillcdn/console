@@ -1481,7 +1481,7 @@ describe("the console command", () => {
     expect(words.out()).toBe("#7  ready  high  Fix the parser  (owner alice)\n");
   });
 
-  it("lists the pack as a client is told of it on connect, every skill and document, and where the console's own skills are", async () => {
+  it("lists the pack as a client is told of it on connect, every skill with the documents counted, and where the console's own skills are", async () => {
     const { fetch } = fakeConsole({ [`GET ${IN}/skills`]: { body: LISTING } });
     const h = harness({
       fetch,
@@ -1502,9 +1502,17 @@ describe("the console command", () => {
       "console skill --file reads optional references, or one section by its offset and limit.",
     );
     expect(out).toContain("skill://gh/acme/skills/");
-    // Every skill and document, as a search without words lists them.
+    // Every skill; the documents outside them are counted, with the commands that read them,
+    // and not listed (SkillCDN 0.6.3): a pack of documents holds hundreds.
+    expect(out).toContain("1 skill and 1 document in acme/skills (commit 0123456):");
     expect(out).toContain("1. skill: review (review/SKILL.md)\n   Reviews a change.");
-    expect(out).toContain("2. document: docs/guide.md - Guide");
+    expect(out).not.toContain("document: docs/guide.md");
+    expect(out).toContain(
+      "The 1 document outside the skills is not listed here: console skills <folder> lists a folder with what it holds, and console skills --search finds them by what they say.",
+    );
+    // A reader of a command is told of parts and of the command that prints the next, no cursor.
+    expect(out).toContain("a long skill comes in parts, each ending with the command that prints");
+    expect(out).not.toContain("nextCursor");
     // Where a person connects an agent of its own, and where the console's own skills are.
     expect(out).toContain("a person makes at https://skillcdn.test/gh/acme/skills");
     expect(out).toContain(
@@ -8650,13 +8658,15 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     expect(folder).toContain("- skill: docs/review/SKILL.md (review)");
     expect(folder).toContain("- file: docs/architecture.md (Architecture)");
     // One page, as the skillcdn command browses (ADR-0118): a page that ends before the folder
-    // does names the cursor that continues it, and --cursor reads the next.
+    // does ends with the command that reads the next, a line to run, and names no cursor
+    // (SkillCDN 0.6.3).
     expect(folder).not.toContain("docs/roadmap.md");
-    expect(folder).toContain('nextCursor: "two"');
+    expect(folder.endsWith("\n\nNext page: console skills docs --cursor two\n")).toBe(true);
+    expect(folder).not.toContain("nextCursor");
     const next = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skills", "docs", "--cursor", "two"], next.io)).toBe(EXIT.ok);
     expect(next.out()).toContain("- file: docs/roadmap.md (Roadmap)");
-    expect(next.out()).not.toContain("nextCursor");
+    expect(next.out()).not.toContain("Next page");
     expect(calls.map((call) => call.key).filter((key) => key.includes("browse"))).toEqual([
       `GET ${IN}/skills/browse?path=docs`,
       `GET ${IN}/skills/browse?path=docs&cursor=two`,
@@ -8677,7 +8687,16 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
       "   Matching files:\n   - docs/review/guide.md - Guide\n   - ... (2 more)",
     );
     expect(results).toContain("2. document: docs/handbook.md - Handbook\n   Welcome.");
-    expect(results).toContain('nextCursor: "more"');
+    // A page that ends before what was found does ends with the command that reads the next,
+    // asked as this one was: the words, the folder and the length. How a skill is loaded
+    // stands above the results then, so that the line to run is the last one read.
+    expect(
+      results.endsWith(
+        "\n\nNext page: console skills --search review docs --limit 5 --cursor more\n",
+      ),
+    ).toBe(true);
+    expect(results.startsWith("A skill is loaded, its rules first")).toBe(true);
+    expect(results).not.toContain("nextCursor");
     // The folder a search keeps to is said after the words, or with --path, as the skillcdn
     // command's find takes it; said twice, it is not understood.
     const within = harness({ fetch, env: SIGNED_IN });
@@ -8685,6 +8704,28 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
       await runCli(["skills", "--search", "review", "--path", "docs", "--limit", "5"], within.io),
     ).toBe(EXIT.ok);
     expect(within.out()).toContain('2 results for "review" in acme/skills (commit 0123456):');
+    expect(
+      within
+        .out()
+        .endsWith(
+          "\nNext page: console skills --search review --path docs --limit 5 --cursor more\n",
+        ),
+    ).toBe(true);
+    // Where the pack is read is said again in the line, as it was said for this page.
+    const elsewhere = harness({ fetch, env: SIGNED_IN });
+    expect(
+      await runCli(
+        ["skills", "--search", "review", "docs", "--limit", "5", "--project", "web"],
+        elsewhere.io,
+      ),
+    ).toBe(EXIT.ok);
+    expect(
+      elsewhere
+        .out()
+        .endsWith(
+          "\nNext page: console skills --search review docs --limit 5 --cursor more --project web\n",
+        ),
+    ).toBe(true);
     expect(calls.at(-1)?.key).toBe(`GET ${IN}/skills/find?query=review&path=docs&limit=5`);
     const twice = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skills", "docs", "--search", "review", "--path", "docs"], twice.io)).toBe(
@@ -8745,7 +8786,8 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
       },
     });
     // A page of the outline, with the read that takes a section named as the command; a page
-    // that ends before the outline does names the cursor that continues it, as a folder's does.
+    // that ends before the outline does ends with the command that reads the next, as a
+    // folder's does.
     const outlined = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skills", "docs/guide.md"], outlined.io)).toBe(EXIT.ok);
     const printed = outlined.out();
@@ -8753,11 +8795,14 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     expect(printed).toContain(
       "Outline; a section is read with console skill --file: the path, its offset and its limit.\n- # Guide (offset 0, limit 120)\n",
     );
-    expect(printed).toContain('nextCursor: "two"');
+    expect(printed.endsWith("\n\nNext page: console skills docs/guide.md --cursor two\n")).toBe(
+      true,
+    );
+    expect(printed).not.toContain("nextCursor");
     const further = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skills", "docs/guide.md", "--cursor", "two"], further.io)).toBe(EXIT.ok);
     expect(further.out()).toContain("## Setup (offset 120, limit 270)");
-    expect(further.out()).not.toContain("nextCursor");
+    expect(further.out()).not.toContain("Next page");
     expect(calls.map((call) => call.key).filter((key) => key.includes("browse"))).toEqual([
       `GET ${IN}/skills/browse?path=docs%2Fguide.md`,
       `GET ${IN}/skills/browse?path=docs%2Fguide.md&cursor=two`,
@@ -8916,19 +8961,37 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
   });
 
   it("prints a listing longer than one read in pages, each ending with the command that lists the rest (SkillCDN 0.6.2)", async () => {
-    // Four hundred documents in Hangul, three bytes a character: some sixty thousand bytes,
-    // more than twice what a host shows of one command.
-    const documents = Array.from({ length: 400 }, (_, at) => ({
+    // Four hundred skills described in Hangul, three bytes a character: some sixty thousand
+    // bytes, more than twice what a host shows of one command. The documents outside them are
+    // counted and not listed (SkillCDN 0.6.3), however many there are.
+    const skills = Array.from({ length: 400 }, (_, at) => {
+      const directory = `skills/skill-${String(at).padStart(3, "0")}`;
+      return {
+        path: `${directory}/SKILL.md`,
+        name: `skill-${at}`,
+        directory,
+        description: "가".repeat(40),
+        warnings: [],
+        translations: {},
+      };
+    });
+    const documents = Array.from({ length: 300 }, (_, at) => ({
       path: `docs/page-${String(at).padStart(3, "0")}.md`,
       title: `Page ${at}`,
       summary: "가".repeat(40),
     }));
     const long = {
       ...LISTING,
-      counts: { skills: 1, documents: documents.length },
+      counts: { skills: skills.length, documents: documents.length },
       mount: {
         ...MOUNT,
-        index: { ...MOUNT.index, documentCount: documents.length, documents },
+        index: {
+          ...MOUNT.index,
+          skillCount: skills.length,
+          documentCount: documents.length,
+          skills,
+          documents,
+        },
       },
     };
     const { fetch, calls } = fakeConsole({ [`GET ${IN}/skills`]: { body: long } });
@@ -8945,12 +9008,15 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     expect(
       first.startsWith("skills at /gh/acme/skills, served by https://skillcdn.test: ready\n"),
     ).toBe(true);
-    expect(first.indexOf("A skill is loaded, its rules first")).toBeLessThan(
-      first.indexOf("docs/page-000.md"),
-    );
-    expect(first.indexOf("The plugins of this console have skills")).toBeLessThan(
-      first.indexOf("docs/page-000.md"),
-    );
+    const numbered = first.indexOf("1. skill: skill-0 (skills/skill-000/SKILL.md)");
+    expect(numbered).toBeGreaterThan(0);
+    expect(first.indexOf("A skill is loaded, its rules first")).toBeLessThan(numbered);
+    expect(first.indexOf("The plugins of this console have skills")).toBeLessThan(numbered);
+    // The first page counts what the pack holds, says how many skills are left to the command
+    // below it, and leaves the documents to the commands that read them.
+    expect(first).toContain("400 skills and 300 documents in acme/skills (commit 0123456):");
+    expect(first).toMatch(/\n\d+ skills are outside this page; the command below continues\.\n/);
+    expect(first).toContain("The 300 documents outside the skills are not listed here: ");
     const next = /\n\nThe listing goes on: (console skills --cursor (\S+))\n$/.exec(first);
     expect(next, first.slice(-200)).not.toBeNull();
     // Every page from a cursor is the pack's own words alone, within the bound, and the last
@@ -8968,9 +9034,12 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     }
     expect(seen.length).toBeGreaterThan(2);
     expect(seen.at(-1)?.endsWith("The listing is complete: this was its last page.\n")).toBe(true);
-    // Nothing is listed twice and nothing is left out.
-    const listed = seen.join("\n").match(/docs\/page-\d{3}\.md/g) ?? [];
-    expect(listed).toEqual(documents.map((document) => document.path));
+    // No skill is listed twice and none is left out, and no document is listed on any page.
+    const listed = seen.join("\n").match(/\d+\. skill: \S+ \((skills\/skill-\d{3}\/SKILL\.md)\)/g);
+    expect(listed?.map((line) => line.replace(/^.*\(|\)$/g, ""))).toEqual(
+      skills.map((skill) => skill.path),
+    );
+    expect(seen.join("\n")).not.toContain("docs/page-");
     // One answer of the console for each command: the pages are cut from it here.
     expect(calls.every((call) => call.key === `GET ${IN}/skills`)).toBe(true);
     // The next page is asked as this one was.
@@ -8989,7 +9058,7 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     // --json is the console's answer, whole, as before.
     const json = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skills", "--json"], json.io)).toBe(EXIT.ok);
-    expect((JSON.parse(json.out()) as typeof long).mount.index.documents).toHaveLength(400);
+    expect((JSON.parse(json.out()) as typeof long).mount.index.documents).toHaveLength(300);
     // A length is still a folder's or a search's to take.
     const limited = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["skills", "--limit", "5"], limited.io)).toBe(EXIT.usage);
@@ -9574,6 +9643,66 @@ describe("the pack of the project, through the console (ADR-0028)", () => {
     expect(await runCli(["plugin", "hello", "skill", "nothing"], missing.io)).toBe(EXIT.failed);
     expect(missing.err()).toBe(
       'skill.not_found: No skill at "nothing/SKILL.md". Use console plugin hello skills <folder> or console plugin hello skills --search for its exact SKILL.md path. Available: review/SKILL.md.\n',
+    );
+  });
+
+  it("names a skill's own folder by the command that lists it, where the skill does not list every file (SkillCDN 0.6.3)", async () => {
+    // A skill whose files are more than it lists: the line that says where the rest are is one
+    // a shell runs, in the commands of the pack that was read, asked as the skill was.
+    const cut = (directory: string) => ({
+      ...AT,
+      read: {
+        status: "ready",
+        commit: COMMIT,
+        skill: {
+          ...SKILL,
+          path: directory === "" ? "SKILL.md" : `${directory}/SKILL.md`,
+          directory,
+          ruleChain: [],
+          references: [],
+          body: "Read the diff.",
+          files: [`${directory === "" ? "" : `${directory}/`}guide.md`],
+          filesTruncated: true,
+          complete: true,
+          nextCursor: null,
+        },
+      },
+    });
+    const one = (path: string) => `/skills/one?${new URLSearchParams({ path })}`;
+    const PLUGIN = "/api/v1/plugins/hello";
+    const { fetch } = fakeConsole({
+      [`GET ${IN}/skills`]: { body: LISTING },
+      [`GET ${IN}${one("review/SKILL.md")}`]: { body: cut("review") },
+      [`GET ${IN}${one("SKILL.md")}`]: { body: cut("") },
+      [`GET ${IN}${one("it's here/SKILL.md")}`]: { body: cut("it's here") },
+      [`GET ${IN}${one("it's $here/SKILL.md")}`]: { body: cut("it's $here") },
+      [`GET ${PLUGIN}/skills`]: { body: LISTING },
+      [`GET ${PLUGIN}${one("review/SKILL.md")}`]: { body: cut("review") },
+    });
+    const folderLine = async (...args: string[]): Promise<string> => {
+      const ran = harness({ fetch, env: SIGNED_IN });
+      expect(await runCli(args, ran.io), args.join(" ")).toBe(EXIT.ok);
+      const line = /\n- \.\.\. \((.*) for all supporting files\)\n/.exec(ran.out());
+      expect(line, ran.out()).not.toBeNull();
+      // Never the call of a tool, which a reader of a command cannot run.
+      expect(ran.out()).not.toContain('{"path"');
+      expect(ran.out()).not.toContain("<folder>");
+      return line?.[1] ?? "";
+    };
+    expect(await folderLine("skill", "review")).toBe("console skills review");
+    // The root is the dot: the command without a folder is the listing.
+    expect(await folderLine("skill", "SKILL.md")).toBe("console skills .");
+    // Where the pack is read is said again, and a plugin's pack is listed by the plugin's command.
+    expect(await folderLine("skill", "review", "--project", "web")).toBe(
+      "console skills review --project web",
+    );
+    expect(await folderLine("plugin", "hello", "skill", "review")).toBe(
+      "console plugin hello skills review",
+    );
+    // A folder spelled for both shells, and words in place of a line where no spelling serves both.
+    expect(await folderLine("skill", "it's here")).toBe('console skills "it\'s here"');
+    expect(await folderLine("skill", "it's $here")).toBe(
+      `console skills with this skill's folder, quoted for your shell. ${NO_LINE_TO_RUN}`,
     );
   });
 

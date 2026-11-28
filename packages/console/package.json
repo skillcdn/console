@@ -106,8 +106,8 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@skillcdn/cli": "^0.6.2",
-    "@skillcdn/core": "^0.6.2",
+    "@skillcdn/cli": "^0.6.3",
+    "@skillcdn/core": "^0.6.3",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "zod": "catalog:"
