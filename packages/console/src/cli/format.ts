@@ -1358,8 +1358,8 @@ export function formatTaskFollow(
 ): string {
   const named = `Notifications of #${task.number} ${task.title} are ${follow.on ? "on" : "off"}`;
   const other = follow.on
-    ? `Turn them off: console mute ${task.number}`
-    : `Turn them on: console follow ${task.number}`;
+    ? `Turn them off: console task mute ${task.number}`
+    : `Turn them on: console task follow ${task.number}`;
   if (follow.on ? !follow.all : !follow.usual) {
     return `${named}, as your settings have it${follow.on ? ": you are told of it by the kinds you have on (console notify)" : ""}. ${other}`;
   }

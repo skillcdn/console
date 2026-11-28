@@ -413,6 +413,7 @@ describe("the command line", () => {
 
   it("writes, reads, attaches to, archives and restores the project's pages as its person", async () => {
     const written = await console_([
+      "doc",
       "write",
       "guides/onboarding",
       "--title",
@@ -424,7 +425,7 @@ describe("the command line", () => {
     expect(written.out).toBe(
       "Wrote guides/onboarding (Onboarding), version 1; refers to plan\npage: https://console.test/projects/web/docs/guides/onboarding\n",
     );
-    const again = await console_(["write", "guides/onboarding", "--body", "# Welcome back"]);
+    const again = await console_(["doc", "write", "guides/onboarding", "--body", "# Welcome back"]);
     expect(again.code, again.err).toBe(EXIT.ok);
     expect(again.out).toBe(
       "Wrote guides/onboarding (Onboarding), version 2\npage: https://console.test/projects/web/docs/guides/onboarding\n",
@@ -449,6 +450,7 @@ describe("the command line", () => {
     const versions = await console_(["doc", "guides/onboarding", "--versions"]);
     expect(versions.out).toMatch(/^v2 {2}Onboarding .*\nv1 {2}Onboarding /);
     const attached = await console_([
+      "doc",
       "attach",
       "guides/onboarding",
       "report.md",
@@ -460,20 +462,20 @@ describe("the command line", () => {
     const withFile = await console_(["doc", "guides/onboarding"]);
     expect(withFile.out).toContain("files:\n  the report: report.md (");
     expect(withFile.out).toContain(`read at ${SIGN_IN_URL}${IN}/docs/guides%2Fonboarding/files/`);
-    expect((await console_(["archive", "guides/onboarding"])).out).toContain(
+    expect((await console_(["doc", "archive", "guides/onboarding"])).out).toContain(
       "Archived guides/onboarding",
     );
     expect((await console_(["docs", "guides"])).out).toBe("No pages here.\n");
     const archived = await console_(["write", "guides/onboarding", "--body", "while archived"]);
     expect(archived.code).toBe(EXIT.failed);
-    expect(archived.err).toContain("console restore");
+    expect(archived.err).toContain("console doc restore");
     expect((await console_(["restore", "guides/onboarding"])).out).toBe(
       "Restored guides/onboarding (Onboarding).\n",
     );
     const missing = await console_(["doc", "nowhere"]);
     expect(missing.code).toBe(EXIT.failed);
     expect(missing.err).toContain("document.not_found");
-    expect(missing.err).toContain("console write");
+    expect(missing.err).toContain("console doc write");
     const untitled = await console_(["write", "nowhere", "--body", "x"]);
     expect(untitled.code).toBe(EXIT.usage);
     expect(untitled.err).toContain("Say its title");

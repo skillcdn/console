@@ -214,7 +214,14 @@ import {
   rulesMark,
   setMomentZone,
 } from "./format.js";
-import { COMMAND_HELP, helpFor, ownSkillPath, usage } from "./help.js";
+import {
+  COMMAND_ALIASES,
+  helpFor,
+  isFormOf,
+  nearestCommands,
+  ownSkillPath,
+  usage,
+} from "./help.js";
 import { describeInstall, type Install, updateCommandFor } from "./install.js";
 import {
   awakeWords,
@@ -417,8 +424,34 @@ function parse(args: readonly string[], options: OptionSpec, allowPositionals = 
       strict: true,
     });
   } catch (error) {
-    throw misuse(error instanceof Error ? error.message : "The arguments were not understood.");
+    throw misuse(refusedByParser(error, options));
   }
+}
+
+/**
+ * What the parser refused, in the command's own words (ADR-0167): an option that is none of
+ * the command's is answered with those it takes, so that the next try needs no page of help;
+ * what the parser says of a value is said as it says it, without its advice on other things.
+ */
+function refusedByParser(error: unknown, options: OptionSpec): string {
+  if (!(error instanceof Error)) {
+    return "The arguments were not understood.";
+  }
+  const code = "code" in error ? String(error.code) : "";
+  const named = /'([^']*)'/.exec(error.message)?.[1] ?? "";
+  if (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
+    const own = Object.keys(options).map((name) => `--${name}`);
+    const takes = own.length === 0 ? "It takes none of its own" : `Its own are ${own.join(", ")}`;
+    // A word of a report or a title may begin with a dash, and is then no option at all.
+    const dashed = /^--[a-z][a-z0-9-]*$/.test(named)
+      ? ""
+      : " A word that begins with - and is no option goes after --.";
+    return `Not an option of this command: ${named}. ${takes}; --json, --project, --url and --account go with every command.${dashed}`;
+  }
+  if (code === "ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL") {
+    return `This command takes no word beside its options: ${named}.`;
+  }
+  return error.message;
 }
 
 type Values = ReturnType<typeof parse>["values"];
@@ -3498,6 +3531,9 @@ const task: Command = async (args, io) => {
   if (args[0] === "restore") {
     return taskRestore(args.slice(1), io);
   }
+  if (args[0] === "follow" || args[0] === "mute") {
+    return following(args[0] === "follow")(args.slice(1), io);
+  }
   const { values, positionals } = parse(args, {});
   const ref = theOne(positionals, "Say which task: console task <number|id>");
   const session = await open(io, values);
@@ -3690,8 +3726,8 @@ const notify: Command = async (args, io) => {
   );
 };
 
-// Whether one task tells a member anything (ADR-0157): `follow` turns its notifications on,
-// `mute` off. A task turned on that their settings would be silent of tells them of
+// Whether one task tells a member anything (ADR-0157): `task follow` turns its notifications
+// on, `task mute` off. A task turned on that their settings would be silent of tells them of
 // everything on it; one turned to what their settings say already is told by their kinds.
 const following =
   (turned: boolean): Command =>
@@ -3699,7 +3735,7 @@ const following =
     const { values, positionals } = parse(args, {});
     const ref = theOne(
       positionals,
-      `Say which task: console ${turned ? "follow" : "mute"} <number|id>`,
+      `Say which task: console task ${turned ? "follow" : "mute"} <number|id>`,
     );
     const session = await open(io, values);
     const project = await session.project();
@@ -4320,6 +4356,13 @@ const docs: Command = async (args, io) => {
 };
 
 const doc: Command = async (args, io) => {
+  // A word that names a form is one where a path follows it, and a page's path alone
+  // (ADR-0167): a page may be called `write`, and is read as any page is.
+  const [first, second] = args;
+  const form = first === undefined ? undefined : DOC_FORMS[first];
+  if (form !== undefined && second !== undefined && !second.startsWith("-")) {
+    return form(args.slice(1), io);
+  }
   const { values, positionals } = parse(args, {
     version: { type: "string" },
     versions: { type: "boolean" },
@@ -4358,7 +4401,7 @@ const write: Command = async (args, io) => {
   });
   const path = theOne(
     positionals,
-    'Say which page: console write <path> --title "<title>" --body <markdown>|--file <path>',
+    'Say which page: console doc write <path> --title "<title>" --body <markdown>|--file <path>',
   );
   const body = await bodyOf(io, values, text(values, "body"));
   if (body === undefined) {
@@ -4407,7 +4450,7 @@ const attach: Command = async (args, io) => {
   const { values, positionals } = parse(args, { label: { type: "string" } });
   const [path, file] = positionals;
   if (path === undefined || file === undefined || positionals.length > 2) {
-    throw misuse("Say the page and the file: console attach <path> <file> [--label <words>]");
+    throw misuse("Say the page and the file: console doc attach <path> <file> [--label <words>]");
   }
   const label = text(values, "label");
   const session = await open(io, values);
@@ -4438,7 +4481,7 @@ const attach: Command = async (args, io) => {
 
 const archive: Command = async (args, io) => {
   const { values, positionals } = parse(args, {});
-  const path = theOne(positionals, "Say which page: console archive <path>");
+  const path = theOne(positionals, "Say which page: console doc archive <path>");
   const session = await open(io, values);
   const project = await session.project();
   const put = await project.archiveDocument(path);
@@ -4454,13 +4497,16 @@ const archive: Command = async (args, io) => {
 
 const restore: Command = async (args, io) => {
   const { values, positionals } = parse(args, {});
-  const path = theOne(positionals, "Say which page: console restore <path>");
+  const path = theOne(positionals, "Say which page: console doc restore <path>");
   const session = await open(io, values);
   const project = await session.project();
   const back = await project.restoreDocument(path);
   answer(io, session, back, () => `Restored ${back.path} (${back.title}).`);
   return EXIT.ok;
 };
+
+/** The forms of `console doc` that change a page, by the word that picks each. */
+const DOC_FORMS: Readonly<Record<string, Command>> = { write, attach, archive, restore };
 
 const goals: Command = async (args, io) => {
   const { values } = parse(
@@ -5244,7 +5290,7 @@ const agents: Command = async (args, io) => {
 };
 
 const AGENT_USAGE =
-  'Say what to do: console agent <handle> [--avatar <file>]  |  console agent new <handle> [--login <login>] [--project <key>] [--name "<name>"] [--title "<title>"] [--manager <login|me>] [--host gh|google] [--seed <seed>] [--convert]';
+  "Say which agent account, or what to do: console agent <handle>, or console agent new|tell|interrupt|stop|restart|reset|wake|set|signals|messages|secrets|secret|invite|setup ...";
 
 // An administrator makes an agent account with flags, where the pages make one from a form
 // (ADR-0084): the member's row at once, its login let in. What is left out is proposed: the
@@ -7705,23 +7751,54 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   run,
   docs,
   doc,
+  // The words of before (COMMAND_ALIASES, ADR-0167): they run as they did, and no list names them.
   write,
   attach,
   archive,
   restore,
 };
 
-function help(io: CliIo, name: string | undefined): number {
-  if (name === undefined) {
+/** What a word that is no command is answered with: the nearest there are, and where all are listed. */
+function notCommand(word: string, near: readonly string[] = nearestCommands(word)): CliExit {
+  return misuse(
+    `Not a command: ${word}.${near.length === 0 ? "" : ` Nearest: ${near.join(", ")}.`} console help lists the commands.`,
+  );
+}
+
+/**
+ * The help the words ask for (ADR-0167): the table of the commands for none, else the page of
+ * a command, or of one of its forms. Flags among the words are left unread.
+ */
+function help(io: CliIo, words: readonly string[]): number {
+  const named = words.filter((word) => !word.startsWith("-"));
+  if (named.length === 0) {
     io.stdout(usage(io.version, io.skillsDir));
     return EXIT.ok;
   }
-  const found = helpFor(name, io.skillsDir);
-  if (found === undefined) {
-    throw misuse(`Not a command: ${name}. The commands: ${Object.keys(COMMAND_HELP).join(", ")}`);
+  const found = helpFor(named, io.skillsDir);
+  if ("page" in found) {
+    io.stdout(found.page);
+    return EXIT.ok;
   }
-  io.stdout(found);
-  return EXIT.ok;
+  if ("notCommand" in found) {
+    throw notCommand(found.notCommand, found.near);
+  }
+  throw misuse(
+    `Not a form of console ${found.command}: ${found.notForm}. Its forms with a page: ${found.forms.join(", ")}. console help ${found.command} says each in a line.`,
+  );
+}
+
+/**
+ * The line after a command that was not understood (ADR-0167): where its forms and flags are,
+ * the page of the form that was tried where it has one. Nothing where the words say it already.
+ */
+function helpPointer(name: string, rest: readonly string[], said: string): string {
+  if (said.includes("console help")) {
+    return "";
+  }
+  const [command, aliased] = COMMAND_ALIASES[name] ?? [name, undefined];
+  const form = aliased ?? rest.slice(0, 2).find((word) => isFormOf(command, word));
+  return `Its forms and flags: console help ${command}${form === undefined ? "" : ` ${form}`}\n`;
 }
 
 /**
@@ -7841,11 +7918,11 @@ function hintFor(error: ApiError, io: CliIo, seen: ConsoleSeen): string {
     case "project.not_found":
       return "No project has this key, or it is not yours to see. console projects lists the projects you may work in.\n";
     case "document.not_found":
-      return "No page has this path, in this project. console docs lists the pages of a folder; console write <path> writes one.\n";
+      return "No page has this path, in this project. console docs lists the pages of a folder; console doc write <path> writes one.\n";
     case "document.conflict":
       return "The page has moved on since the version you started from. Read it again, and write from there.\n";
     case "document.archived":
-      return "The page is archived. console restore <path> brings it back first.\n";
+      return "The page is archived. console doc restore <path> brings it back first.\n";
     case "task.invalid_category":
       return "No category has that key. console categories lists them.\n";
     case "task.invalid_goal":
@@ -7943,14 +8020,19 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       return EXIT.ok;
     }
     if (name === undefined || name === "help" || name === "--help" || name === "-h") {
-      return help(io, rest[0]);
+      return help(io, rest);
     }
     if (rest.includes("--help") || rest.includes("-h")) {
-      return help(io, name);
+      // The page of the form that was being typed, where it has one: the word after the
+      // command's name, or after a plugin's key.
+      const form = rest
+        .slice(0, 2)
+        .find((word) => isFormOf(COMMAND_ALIASES[name]?.[0] ?? name, word));
+      return help(io, form === undefined ? [name] : [name, form]);
     }
     const command = COMMANDS[name];
     if (command === undefined) {
-      throw misuse(`Not a command: ${name}. Run: console help`);
+      throw notCommand(name);
     }
     const exit = await command(rest, watched);
     if (name !== "whoami") {
@@ -7959,7 +8041,12 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     return exit;
   } catch (error) {
     if (error instanceof CliExit) {
-      io.stderr(`${error.message}\n`);
+      // A command that was not understood says where its forms and flags are, in a line.
+      const pointer =
+        error.exit === EXIT.usage && name !== undefined && COMMANDS[name] !== undefined
+          ? helpPointer(name, rest, error.message)
+          : "";
+      io.stderr(`${error.message}\n${pointer}`);
       return error.exit;
     }
     if (error instanceof UnseenProject) {

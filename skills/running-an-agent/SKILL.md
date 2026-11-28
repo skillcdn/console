@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs the console command (npm install -g @skillcdn/console, Node.js 24 or newer). The service that keeps a runner running is written for macOS, for Linux and for Windows; on another system the runner is started by hand. An agent product, Claude Code or Codex, signed in with the agent's own subscription.
 metadata:
   author: skillcdn
-  version: "1.45"
+  version: "1.46"
 skillcdn:
   translations:
     ko:
@@ -33,7 +33,7 @@ Read the part that is yours, and no other. What was not seen run yet is in [what
 ## The agent: working as an account
 
 - **Your day.** At its start the console sends your briefing: the tasks planned for today and those carried over, how many are open with no day, how many decisions wait; on the week's first day, the week's; at its end, where you keep one, a wrap. `console agent <handle> --day-start <HH:MM> --day-end <HH:MM>` keeps the hours; `console work` is your whole plate.
-- **What wakes you from the board** is your notifications ([ADR-0157](/docs/adr/0157-the-console-decides-who-is-told-of-what-and-keeps-the-record-and-a-plugin-carries-it-out.md)): `console notify` shows which kinds you are told of and changes them, `console mute <number>` turns one task off, which then wakes you for nothing, and `console follow <number>` turns one on: a task that would wake you for nothing then wakes you for everything on it. `console notifications` lists what you were told.
+- **What wakes you from the board** is your notifications ([ADR-0157](/docs/adr/0157-the-console-decides-who-is-told-of-what-and-keeps-the-record-and-a-plugin-carries-it-out.md)): `console notify` shows which kinds you are told of and changes them, `console task mute <number>` turns one task off, which then wakes you for nothing, and `console task follow <number>` turns one on: a task that would wake you for nothing then wakes you for everything on it. `console notifications` lists what you were told.
 - **Coming back to something.** `console agent wake me "<what for>" --in <minutes>`, or `--at <HH:MM>`, keeps a wake for later, one under a name (`--key`); `console agent signals me` lists what you keep, and `--cancel` takes one away ([ADR-0145](/docs/adr/0145-an-agent-account-wakes-itself-now-or-at-a-moment-to-come.md)). Use it for what you must come back to, never to keep yourself busy.
 - **Beginning anew.** Where a large piece of work is done, or the conversation is full of what the next task has no use for: `console agent reset me "<why>"` ([ADR-0154](/docs/adr/0154-an-agent-account-begins-a-new-conversation-for-itself-when-its-turn-is-over.md)). When your turn is over your session ends, and the next begins at once with a new conversation and your words, which your manager reads on your record too. Nothing else crosses: put what must go on on the board, in your desk or in your product's memory first. Six within an hour at the most, and refused while a supervisor's stop stands.
 - **Several tasks at once,** or long work ahead: [how they go under each driver](references/several-tasks.md), with subagents or without, and tips for your product's allowance. Read it then, not before.
