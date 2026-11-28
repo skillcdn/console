@@ -1,7 +1,7 @@
 // The registrar of an installation's GitHub App (ADR-0171), held against a stand-in for GitHub on
 // the loopback: nothing here leaves the machine. Run: node --test scripts/github-app.test.mjs
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
@@ -31,7 +31,9 @@ const { privateKey: PEM } = generateKeyPairSync("rsa", {
   privateKeyEncoding: { type: "pkcs1", format: "pem" },
   publicKeyEncoding: { type: "spki", format: "pem" },
 });
-const CLIENT_SECRET = "0123456789abcdef0123456789abcdef01234567";
+// Drawn when the test runs, as the key is: a secret written here, an invented one too, reads
+// as a committed secret to the scan of CI.
+const CLIENT_SECRET = randomBytes(20).toString("hex");
 const WEB = "https://github.test";
 
 /** What GitHub answers an exchange with, as its documentation lists the fields. */
@@ -338,9 +340,12 @@ test("refuses an answer that is too long, or is not an app's settings", async ()
     ],
     [
       "a secret a settings file would expand",
-      JSON.stringify(conversion({ client_secret: "0123456789abcdef$HOME" })),
+      JSON.stringify(conversion({ client_secret: `${CLIENT_SECRET.slice(0, 16)}$HOME` })),
     ],
-    ["a secret with a quote", JSON.stringify(conversion({ client_secret: '0123456789abcdef"x' }))],
+    [
+      "a secret with a quote",
+      JSON.stringify(conversion({ client_secret: `${CLIENT_SECRET.slice(0, 16)}"x` })),
+    ],
     ["a key that is none", JSON.stringify(conversion({ pem: "a key" }))],
     [
       "a key with a line of its own after it",
