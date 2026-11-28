@@ -411,7 +411,9 @@ describe("the console command", () => {
     expect(everywhere.out()).toContain("4 the\ncommand and the console do not go together");
     expect(everywhere.out()).toContain("auth.required: the token is not one the console knows");
     // Where the skill is, when the command knows; else where to ask.
-    expect(whole.out()).toContain("first command of a run (console whoami says where it is).");
+    expect(whole.out()).toContain(
+      "first command of a run (in the skills folder of the package @skillcdn/console, which this build has none of beside it).",
+    );
     const located = harness({
       fetch,
       skillsDir: "/usr/lib/node_modules/@skillcdn/console/skills/",
@@ -1233,7 +1235,7 @@ describe("the console command", () => {
     );
     // Its desk names no project, and the help sends an agent here for where the skill is.
     expect(who.out()).toContain(
-      "Before the first task, read console rules and the skill working-the-board (console skills says where it is); for one command's flags, console help <command>.",
+      "Before the first task, read console rules and the skill working-the-board (in the skills folder of the package @skillcdn/console, which this build has none of beside it); for one command's flags, console help <command>.",
     );
     // A login without --self asks for nothing in particular: an agent's token, as it always was.
     const plain = harness({ fetch, store: memoryStore().store, hostname: "laptop" });
@@ -1392,7 +1394,7 @@ describe("the console command", () => {
     });
     expect(await runCli(["whoami"], who.io)).toBe(EXIT.ok);
     expect(who.out()).toBe(
-      `alice (member) at Acme, ${ORIGIN}; project web (The web app), named by CONSOLE_PROJECT\nBefore the first task, read console rules and the skill working-the-board (console skills says where it is); for one command's flags, console help <command>.\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0; this command works with a console from 0.0.0 on.\n`,
+      `alice (member) at Acme, ${ORIGIN}; project web (The web app), named by CONSOLE_PROJECT\nBefore the first task, read console rules and the skill working-the-board (in the skills folder of the package @skillcdn/console, which this build has none of beside it); for one command's flags, console help <command>.\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0; this command works with a console from 0.0.0 on.\n`,
     );
   });
 
@@ -1766,7 +1768,7 @@ describe("the console command", () => {
     // The rules come with the run, under a line that says what follows: what the project adds
     // first, then the console's, before what to do next (ADR-0119, ADR-0120).
     expect(h.out()).toMatch(
-      /\nRules [0-9a-f]{8}: this project's additions first \(\d+ characters\), then the console's \(\d+ characters\), the earlier holding where they differ; the organization adds nothing\. A later take in this session leaves them out: console take <number> --rules [0-9a-f]{8}\n/,
+      /\nRules [0-9a-f]{8}: this project's additions first \(\d+ characters\), then the console's \(\d+ characters\), the earlier holding where they differ; the organization adds nothing\. Now that they are read, a take in this session leaves them out: console take <number> --rules [0-9a-f]{8}\n/,
     );
     expect(h.out()).toMatch(/Ask before pushing\.[\s\S]*Read these\.[\s\S]*Say how it goes/);
     // The discussion comes with the task, whole, each file with the command that reads it.
@@ -2087,7 +2089,7 @@ describe("the console command", () => {
     expect(h.out()).toContain("Ask before pushing.");
     // The first line says which parts follow, and carries the mark a later take names.
     expect(h.out()).toMatch(
-      /^Rules [0-9a-f]{8}: this project's additions first \(\d+ characters\), then the console's \(\d+ characters\), the earlier holding where they differ; the organization adds nothing\. A later take in this session leaves them out: console take <number> --rules [0-9a-f]{8}\n/,
+      /^Rules [0-9a-f]{8}: this project's additions first \(\d+ characters\), then the console's \(\d+ characters\), the earlier holding where they differ; the organization adds nothing\. Now that they are read, a take in this session leaves them out: console take <number> --rules [0-9a-f]{8}\n/,
     );
     const ruled = harness({ fetch, env: SIGNED_IN });
     expect(await runCli(["rules", "--json"], ruled.io)).toBe(EXIT.ok);
@@ -7252,7 +7254,10 @@ describe("a person's desk on the command line (ADR-0115)", () => {
       [
         "The desk at /work/desk is there already, and is left as it is.",
         // A command with no skills beside it says where their place is asked.
-        ...NEXT(SENTENCE, " (console skills says where it is)"),
+        ...NEXT(
+          SENTENCE,
+          " (in the skills folder of the package @skillcdn/console, which this build has none of beside it)",
+        ),
       ].join("\n"),
     );
     // The shell asked for in a desk that is there: its member is shaping the desk already, so
@@ -7546,7 +7551,7 @@ describe("a person's desk on the command line (ADR-0115)", () => {
     expect(own.out()).not.toContain("records/README.md");
     // The skill that shapes a desk is named with its place, as whoami names the board's.
     expect(own.out()).toContain(
-      "How a desk is shaped to what its member asks to keep and to see is the skill keeping-a-desk, shipped with this command (console skills says where it is).\n",
+      "How a desk is shaped to what its member asks to keep and to see is the skill keeping-a-desk, shipped with this command (in the skills folder of the package @skillcdn/console, which this build has none of beside it).\n",
     );
     const placed = harness({
       fetch,
@@ -7783,7 +7788,7 @@ describe("the versions of the command and the console (ADR-0025)", () => {
     expect(await runCli(["whoami"], h.io)).toBe(EXIT.ok);
     expect(new Headers(calls[0]?.init?.headers).get("user-agent")).toBe(userAgent);
     expect(h.out()).toBe(
-      `alice (member) at Acme, ${ORIGIN}; project web (The web app), named by CONSOLE_PROJECT\nBefore the first task, read console rules and the skill working-the-board (console skills says where it is); for one command's flags, console help <command>.\nThis command is 0.1.18, installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm; the console is 0.1.18 and takes >=0.1.18 <0.2.0; this command works with a console from 0.1.0 on.\n`,
+      `alice (member) at Acme, ${ORIGIN}; project web (The web app), named by CONSOLE_PROJECT\nBefore the first task, read console rules and the skill working-the-board (in the skills folder of the package @skillcdn/console, which this build has none of beside it); for one command's flags, console help <command>.\nThis command is 0.1.18, installed for the machine with npm in C:/Users/alice/AppData/Roaming/npm; the console is 0.1.18 and takes >=0.1.18 <0.2.0; this command works with a console from 0.1.0 on.\n`,
     );
     expect(h.err()).toBe("");
     // Where the skill working-the-board is, as the machine writes paths, when the command knows.
@@ -7973,7 +7978,7 @@ describe("the versions of the command and the console (ADR-0025)", () => {
     });
     expect(await runCli(["whoami"], h.io)).toBe(EXIT.ok);
     expect(h.out()).toBe(
-      `alice (member) at Acme, ${ORIGIN}; project web (The web app), named by CONSOLE_PROJECT\nBefore the first task, read console rules and the skill working-the-board (console skills says where it is); for one command's flags, console help <command>.\nThis command is 0.1.18; the console does not say its version, so it is older than 0.1.18.\n`,
+      `alice (member) at Acme, ${ORIGIN}; project web (The web app), named by CONSOLE_PROJECT\nBefore the first task, read console rules and the skill working-the-board (in the skills folder of the package @skillcdn/console, which this build has none of beside it); for one command's flags, console help <command>.\nThis command is 0.1.18; the console does not say its version, so it is older than 0.1.18.\n`,
     );
     expect(h.err()).toBe("");
   });
@@ -8258,7 +8263,7 @@ describe("the consoles the command is signed in to (ADR-0027)", () => {
 
   it("asks the console for the project a directory names, and says where its key came from (ADR-0112)", async () => {
     const LINES =
-      "Before the first task, read console rules and the skill working-the-board (console skills says where it is); for one command's flags, console help <command>.\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0; this command works with a console from 0.0.0 on.\n";
+      "Before the first task, read console rules and the skill working-the-board (in the skills folder of the package @skillcdn/console, which this build has none of beside it); for one command's flags, console help <command>.\nThis command is of a version it does not know; the console is 0.1.18 and takes >=0.1.18 <0.2.0; this command works with a console from 0.0.0 on.\n";
     const table = { "GET /api/v1/me": { body: ME }, [`GET ${IN}`]: { body: PROJECT } };
     const pair = { CONSOLE_URL: ORIGIN, CONSOLE_TOKEN: "cns_t_secret" };
     // Named by the directory's file: the directory that holds it is said, since a file of a

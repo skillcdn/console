@@ -980,7 +980,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     synopsis: "Hands in what was made: an https link, or a file from this machine.",
     about: `Hands in what was made: a link (a branch, a pull request, a document, a page), or a file from this machine, which the console keeps and shows on the task; a picture is shown there small and large, and a report that names it as ![words](its name) shows it where the words are. ${ON_THE_RUN}`,
     limits: [
-      "a link: https only",
+      "a link: over https; over http, only an address of this console itself, where it is served so",
       `a file: up to ${MAX_FILE_BYTES} bytes, not empty; it is called by its name, without the path`,
       `label: one line, up to ${MAX_LINK_LABEL_LENGTH} characters`,
       `at most ${MAX_ARTIFACTS_PER_RUN} links and files on one run`,
@@ -1370,7 +1370,7 @@ export function usage(version?: string, skillsDir?: string): string {
     `console${version === undefined ? "" : ` ${version}`}: your organization's board, worked from the command line. You act as the person whose token you hold.`,
     "Usage: console <command> [arguments] [--json] [--project <key>]",
     "A command in full, with its limits and its refusals: console help <command> [<form>]. What holds for every command: console help everywhere.",
-    `How the board is worked is the skill working-the-board; read it before the first command of a run${skillsDir === undefined ? " (console whoami says where it is)." : `:\n${ownSkillPath(skillsDir)}`}`,
+    `How the board is worked is the skill working-the-board; read it before the first command of a run${skillsDir === undefined ? " (in the skills folder of the package @skillcdn/console, which this build has none of beside it)." : `:\n${ownSkillPath(skillsDir)}`}`,
   ];
   for (const group of COMMAND_GROUPS) {
     lines.push("", group.title);
@@ -1427,7 +1427,7 @@ function renderPage(
   if (page.skill !== undefined) {
     parts.push(
       "",
-      `${page.skill.says} is the skill ${page.skill.name}, shipped with this command${skillsDir === undefined ? " (console skills says where it is)." : `: ${ownSkillPath(skillsDir, page.skill.name)}`}`,
+      `${page.skill.says} is the skill ${page.skill.name}, shipped with this command${skillsDir === undefined ? " (in the skills folder of the package @skillcdn/console, which this build has none of beside it)." : `: ${ownSkillPath(skillsDir, page.skill.name)}`}`,
     );
   }
   return `${parts.join("\n")}\n`;

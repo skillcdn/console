@@ -323,7 +323,7 @@ Takes `taskId` (a task of the project; `run.task_not_found` otherwise), and opti
 
 ### `POST .../runs/<id>/reports` and `POST .../runs/<id>/artifacts`
 
-How the work goes, and what was made. A report takes `body` (Markdown, `MAX_BODY_LENGTH`, not blank) and tells the board (`run.reported`, with the first words as `excerpt`); a link takes an https `url` and optionally a `label` (`run.handed_in`, with the label or the link's first words). Both answer `201` with the run. Only the run's person adds to it (`run.not_yours`), only while it is open (`run.over`), and only so many (`run.too_many_reports`, `run.too_many_artifacts`, counting links and files together).
+How the work goes, and what was made. A report takes `body` (Markdown, `MAX_BODY_LENGTH`, not blank) and tells the board (`run.reported`, with the first words as `excerpt`); a link takes a `url`, over https, or over http where it is an address of the console itself (of `PUBLIC_URL`'s origin), as a console on one machine is served, and optionally a `label` (`run.handed_in`, with the label or the link's first words). Both answer `201` with the run. Only the run's person adds to it (`run.not_yours`), only while it is open (`run.over`), and only so many (`run.too_many_reports`, `run.too_many_artifacts`, counting links and files together).
 
 ### `POST .../runs/<id>/files` and `GET /api/v1/projects/<key>/files/<id>`
 

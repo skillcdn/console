@@ -426,6 +426,8 @@ export interface RestDependencies {
   readonly signIn: readonly ProviderKey[];
   /** The organization at the git host whose members are in (ADR-0022), when one is named. */
   readonly organization: { readonly host: ProviderKey; readonly name: string } | undefined;
+  /** The origin people use (`PUBLIC_URL`): what an address of this console's own begins with. None where nobody signs in. */
+  readonly origin: string | undefined;
 }
 
 /** A task or a decision is a few fields and a body of bounded Markdown; this is far above both. */
@@ -654,6 +656,18 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
 
   const invalid = (c: Context<AppEnv>, message: string): Response =>
     c.json(errorBody("request.invalid", message), 400);
+
+  /** Whether an address is one of this console's own: of the origin its people use, where it names one. */
+  const ofThisConsole = (address: string): boolean => {
+    if (dependencies.origin === undefined) {
+      return false;
+    }
+    try {
+      return new URL(address).origin === new URL(dependencies.origin).origin;
+    } catch {
+      return false;
+    }
+  };
 
   const notFound = (c: Context<AppEnv>, code: string, message: string): Response =>
     c.json(errorBody(code, message), 404);
@@ -3461,6 +3475,15 @@ export function registerRest(app: Hono<AppEnv>, dependencies: RestDependencies):
     const input = await bodyOf(c, restArtifactInputSchema);
     if (input instanceof Response) {
       return input;
+    }
+    // A link is over https. Over plain http, only an address of this console itself: a
+    // console on one machine is served so, and a page of it is as safe to open as the page
+    // the link is read on. Anything else over http is refused, in words that say which.
+    if (new URL(input.url).protocol !== "https:" && !ofThisConsole(input.url)) {
+      return invalid(
+        c,
+        "url: a link is over https; over http, only an address of this console is taken",
+      );
     }
     const id = c.req.param("id");
     if (!UUID.test(id)) {

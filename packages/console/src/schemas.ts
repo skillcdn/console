@@ -3180,9 +3180,14 @@ export const restCommentInputSchema = z.object({
 });
 export type RestCommentInput = z.infer<typeof restCommentInputSchema>;
 
-/** What `POST .../runs/<id>/artifacts` is sent: a link to what was made. */
+/**
+ * What `POST .../runs/<id>/artifacts` is sent: a link to what was made. Over https; over plain
+ * http the console takes an address of its own alone, which a console on one machine is served
+ * at (`http://127.0.0.1:11199`), and refuses any other, so the schema lets both schemes through
+ * and the console says which.
+ */
 export const restArtifactInputSchema = z.object({
-  url,
+  url: z.string().check(z.trim(), z.maxLength(MAX_URL_LENGTH), z.url({ protocol: /^https?$/ })),
   label: z.optional(line(MAX_LINK_LABEL_LENGTH)),
 });
 export type RestArtifactInput = z.infer<typeof restArtifactInputSchema>;

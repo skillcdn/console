@@ -738,4 +738,63 @@ describe("the workers of a task taken (ADR-0037)", () => {
     await startRun(aliceToken, crewed.id);
     expect((await readTask(crewed.id)).workers).toHaveLength(2);
   });
+
+  it("take a link to the console itself over http where the console is served so, and no other link over http", async () => {
+    const task = await writeTask(bob, { title: "Write the page" });
+    const run = await startRun(aliceToken, task.id);
+    const handIn = (on: Harness, url: string) =>
+      on.request(`${IN}/runs/${run.id}/artifacts`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${aliceToken}`, ...JSON_HEADERS },
+        body: JSON.stringify({ url }),
+      });
+    const REFUSED = {
+      code: "request.invalid",
+      message: "url: a link is over https; over http, only an address of this console is taken",
+    };
+    // A console on one machine is served over plain http, and a page of its own is handed in
+    // by its address, which is what a take and a written page print.
+    const local = createHarness(testDatabase, {
+      providers: [createFixtureProvider()],
+      origin: "http://127.0.0.1:11199",
+    });
+    try {
+      const own = await handIn(local, "http://127.0.0.1:11199/projects/web/docs/notes/page");
+      expect(own.status).toBe(201);
+      expect(restRunSchema.parse(await own.json()).artifacts.at(-1)).toMatchObject({
+        url: "http://127.0.0.1:11199/projects/web/docs/notes/page",
+      });
+      // Another port, another name for the machine and a host that only begins the same are
+      // not this console; nor is anything else over http.
+      for (const other of [
+        "http://127.0.0.1:8080/x",
+        "http://localhost:11199/x",
+        "http://127.0.0.1:11199@elsewhere.test/x",
+        "http://insecure.test/x",
+      ]) {
+        const refused = await handIn(local, other);
+        expect(refused.status, other).toBe(400);
+        expect(restErrorSchema.parse(await refused.json()).error, other).toEqual(REFUSED);
+      }
+      // What is no address of the web is refused as before, by the schema.
+      for (const none of [
+        "javascript:alert(1)",
+        "ftp://127.0.0.1:11199/x",
+        "//127.0.0.1:11199/x",
+        "http://127.0.0.1:11199.elsewhere.test/x",
+      ]) {
+        const refused = await handIn(local, none);
+        expect(refused.status, none).toBe(400);
+        expect(await errorOf(refused), none).toBe("request.invalid");
+      }
+      // A link over https is taken wherever it leads, as it was.
+      expect((await handIn(local, "https://github.com/acme/app/pull/3")).status).toBe(201);
+    } finally {
+      await local.close();
+    }
+    // A console served over https takes nothing over http, its own host's name among it.
+    const downgraded = await handIn(h, "http://console.test/projects/web");
+    expect(downgraded.status).toBe(400);
+    expect(restErrorSchema.parse(await downgraded.json()).error).toEqual(REFUSED);
+  });
 });

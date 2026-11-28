@@ -692,7 +692,7 @@ export function formatRules(
   }
   // The mark ends the line bare, so that it is copied as it is.
   const later = parts.named
-    ? ` A later take in this session leaves them out: console take <number> --rules ${mark}`
+    ? ` Now that they are read, a take in this session leaves them out: console take <number> --rules ${mark}`
     : "";
   return [
     `Rules ${mark}: ${follows}${later}`,

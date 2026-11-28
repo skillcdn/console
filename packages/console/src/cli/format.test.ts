@@ -312,7 +312,7 @@ describe("the rules as they are printed (ADR-0119, ADR-0120)", () => {
     roles: ["member"],
   });
   const laterTake = (mark: string) =>
-    ` A later take in this session leaves them out: console take <number> --rules ${mark}`;
+    ` Now that they are read, a take in this session leaves them out: console take <number> --rules ${mark}`;
 
   it("begins with a line that says which parts follow and how long each is: what differs first, what always holds last", () => {
     const rules = { workspace: adding(), project: own, plugins: [plugin] };
@@ -364,7 +364,7 @@ describe("the rules as they are printed (ADR-0119, ADR-0120)", () => {
     expect(text).not.toContain("What this organization adds");
     const withPlugins = formatRules({ workspace: alone, project: none, plugins: [plugin] }, "en");
     expect(withPlugins.split("\n")[0]).toContain(
-      `: this project and the organization add nothing; its 1 plugin first, then the console's (${CONSOLE.length} characters). A later take`,
+      `: this project and the organization add nothing; its 1 plugin first, then the console's (${CONSOLE.length} characters). Now that they are read, a take`,
     );
     expect(withPlugins.indexOf("## Plugins")).toBeLessThan(withPlugins.indexOf("Read these."));
     // No project named: the organization's additions and the console's; the same mark as a
