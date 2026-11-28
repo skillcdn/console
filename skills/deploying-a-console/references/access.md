@@ -65,7 +65,21 @@ curl -s https://api.cloudflare.com/client/v4/accounts -H @scratch/auth.txt
 
 ### The GitHub App, for signing in with GitHub, and for the organization to say who is in
 
-One app does both ([ADR-0022](/docs/adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)): its client signs people in, and, installed on the organization, it lets the console read who is a member, at sign-in and every ten minutes after. Once the console's address is known, the person, signed in to GitHub as an owner of the organization (checked 2026-10): Your organizations, Settings next to the organization, Developer settings, GitHub Apps, New GitHub App.
+One app does both ([ADR-0022](/docs/adr/0022-who-is-in-is-the-consoles-own-record-and-an-administrator-keeps-it.md)): its client signs people in, and, installed on the organization, it lets the console read who is a member, at sign-in and every ten minutes after. It is made once the console's address is known, by the script first and by hand where that does not go.
+
+**With one press, by the script** ([github-app.mjs](../scripts/github-app.mjs), [ADR-0171](/docs/adr/0171-the-smallest-install-registers-its-github-app-from-a-manifest-with-one-press.md)), on the machine whose browser the person is signed in to GitHub with:
+
+```sh
+node scratch/github-app.mjs --url https://<hostname> --org <the organization's login> --secrets "$SECRETS" --wait 100
+```
+
+- Tell the person first, in a message of its own, since the command prints its words when it ends: "Open `http://127.0.0.1:11196/` in the browser where you are signed in to GitHub as an owner of `<organization>`, and press **Create GitHub App** once. The app reads who is a member of the organization, and nothing of your repositories." Then run the command. It waits for the press as long as `--wait` says, which is kept under what the host gives a command; where it ends with nothing registered, say so and run it again.
+- It writes `GITHUB_CLIENT_SECRET` and `GITHUB_APP_PRIVATE_KEY` into the secrets file itself, and prints what is no secret: `GITHUB_CLIENT_ID` and `GITHUB_APP_ID` for the plan, the app's owner and its page. No secret passes through the chat or a command line, and none is left for the person to rotate.
+- Then the person installs the app on the organization, from the address the command's last line names: Install, and confirm. No repository access is asked for. Everyone of the organization is in from then on; the plan's `GITHUB_ORG` is the organization's login.
+- Without an organization, leave `--org` out: the app signs people in, the key is not kept, and an administrator lets each person in on the People page.
+- Where GitHub refuses the settings, its page says why: go on by hand, below; and so where the person's browser is on another device than this machine, since the page is this machine's own. The script was run against a stand-in for GitHub and not yet against GitHub itself ([ADR-0171](/docs/adr/0171-the-smallest-install-registers-its-github-app-from-a-manifest-with-one-press.md)): say in the record which way the app was made.
+
+**By hand**, the person, signed in to GitHub as an owner of the organization (checked 2026-10): Your organizations, Settings next to the organization, Developer settings, GitHub Apps, New GitHub App.
 
 - GitHub App name: the board's name (34 characters at most, unique across GitHub).
 - Homepage URL: the console's address, `https://<hostname>`.
