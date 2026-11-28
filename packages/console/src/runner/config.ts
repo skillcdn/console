@@ -1,5 +1,6 @@
 import * as z from "zod/mini";
 import { isSecretName } from "../schemas.js";
+import { hasForbiddenCodePoint } from "../text.js";
 
 // `runner.json` (docs/specs/runner.md): in the desk, the working directory the runner is started
 // in; written by setup, the agent's from then on. It names things and holds no secret. A file
@@ -32,6 +33,58 @@ const channel = z
     z.regex(/^[A-Z0-9]{2,24}$/, "is a channel's id at the messenger, as C0123ABCD, never its name"),
   );
 const MAX_ENTRIES = 50;
+/**
+ * An emoji of a status (ADR-0170), by its name between colons as a messenger spells one: never
+ * the character itself, and nothing a messenger would read as words.
+ */
+const statusEmoji = z
+  .string()
+  .check(
+    z.regex(/^:[a-z0-9_+-]{1,64}:$/, "is an emoji by its name between colons, as :hourglass:"),
+  );
+/** The words of a status: one line of plain words, within what a messenger shows of one. */
+const statusText = (most: number) =>
+  z
+    .string()
+    .check(
+      z.refine(
+        (text) =>
+          text.length > 0 &&
+          text.length <= most &&
+          text.trim() === text &&
+          !hasForbiddenCodePoint(text),
+        `is one line of plain words, ${most} characters at the most`,
+      ),
+    );
+/** The most a status says: what the messenger of the one source that shows one takes. */
+const MAX_STATUS_TEXT = 100;
+/**
+ * What the words of the usage limit go on with where the moment is known: `{time}` stands for
+ * it. Short enough that the two together, with the longest moment, stay within a status.
+ */
+const MAX_STATUS_LIMITED_TEXT = 60;
+const MAX_STATUS_BACK = 24;
+const statusBack = z
+  .string()
+  .check(
+    z.refine(
+      (text) =>
+        text.length <= MAX_STATUS_BACK &&
+        text.trim() === text &&
+        !hasForbiddenCodePoint(text) &&
+        text.split("{time}").length === 2,
+      `is a few plain words with {time} in them once, ${MAX_STATUS_BACK} characters at the most`,
+    ),
+  );
+/** The seconds a turn is given before the agent is shown as at work: where the desk says none, and the least and the most it may say. */
+export const STATUS_AFTER = 30;
+const MIN_STATUS_AFTER = 5;
+const MAX_STATUS_AFTER = 600;
+/** How a status is shown: its emoji and its words, each the source's own where left out. */
+const statusLook = (most: number) =>
+  z.optional(
+    z.strictObject({ emoji: z.optional(statusEmoji), text: z.optional(statusText(most)) }),
+  );
 /**
  * The browsers a desk may name (ADR-0151): `headless`, a Google Chrome with no window and a
  * profile of its own, driven by a program the product is started with; `window`, the same
@@ -89,6 +142,42 @@ export const runnerConfigSchema = z.object({
    * wakes the agent only where it is named.
    */
   channels: z.optional(z.array(channel).check(z.maxLength(MAX_ENTRIES))),
+  /**
+   * How the agent stands to whoever waits for it, shown where a wake source has a place for it
+   * (ADR-0170): that it is thinking over what was said to it there, that it has been at work
+   * for longer than `after` seconds, and that the usage limit of its product stopped it, until
+   * when. Each with an emoji and words of the desk's own, or the source's where it says none;
+   * `false` shows nothing at all. Left out, as in a desk written before there was such a key
+   * and in a config put together by hand, it is shown in the source's own way, and a turn is
+   * given `STATUS_AFTER` seconds.
+   */
+  status: z.optional(
+    z.union(
+      [
+        z.literal(false),
+        z.strictObject({
+          after: z.optional(
+            z
+              .int("is a whole number of seconds")
+              .check(
+                z.gte(MIN_STATUS_AFTER, `is ${MIN_STATUS_AFTER} seconds at the least`),
+                z.lte(MAX_STATUS_AFTER, `is ${MAX_STATUS_AFTER} seconds at the most`),
+              ),
+          ),
+          thinking: statusLook(MAX_STATUS_TEXT),
+          working: statusLook(MAX_STATUS_TEXT),
+          limited: z.optional(
+            z.strictObject({
+              emoji: z.optional(statusEmoji),
+              text: z.optional(statusText(MAX_STATUS_LIMITED_TEXT)),
+              back: z.optional(statusBack),
+            }),
+          ),
+        }),
+      ],
+      "is false, or what is shown: after, thinking, working, limited",
+    ),
+  ),
 });
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
 
@@ -118,7 +207,7 @@ export function parseRunnerConfig(
   }
   const parsed = runnerConfigSchema.safeParse(json);
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
+    const issue = nearest(parsed.error.issues[0]);
     const path = (issue?.path ?? []).map(String).join(".");
     return {
       ok: false,
@@ -126,4 +215,28 @@ export function parseRunnerConfig(
     };
   }
   return { ok: true, config: parsed.data };
+}
+
+/** What is wrong, as the schema says it, and where. */
+interface Problem {
+  readonly path: readonly PropertyKey[];
+  readonly message: string;
+}
+
+/**
+ * The problem as said nearest to what is wrong. A value that may be one of several shapes is
+ * refused as none of them, which names the key and not the word under it that does not read:
+ * where one of the shapes was read further in before it failed, its own problem is the one said.
+ */
+function nearest(issue: z.core.$ZodIssue | undefined): Problem | undefined {
+  if (issue === undefined || issue.code !== "invalid_union") {
+    return issue;
+  }
+  const within = issue.errors
+    .map((problems) => nearest(problems[0]))
+    .filter((inner) => inner !== undefined && inner.path.length > 0)
+    .sort((one, other) => (other?.path.length ?? 0) - (one?.path.length ?? 0))[0];
+  return within === undefined
+    ? issue
+    : { path: [...issue.path, ...within.path], message: within.message };
 }

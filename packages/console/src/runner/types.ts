@@ -394,14 +394,25 @@ export interface WakeHost {
    * yet, with why in a few words of the source's own. Never what a message says.
    */
   stands(state: "connected" | "waiting", why?: string): void;
+  /**
+   * Asks an address of the source's messenger. `body` is what a call that writes sends, as its
+   * text. Of the answer, what it says as JSON, and beside it the status of the answer and its
+   * headers where the host has them: a messenger that asks to be left alone for a while says so
+   * there.
+   */
   fetch(
     url: string,
     init: {
       readonly method: string;
       readonly headers: Readonly<Record<string, string>>;
+      readonly body?: string | undefined;
       readonly signal: AbortSignal;
     },
-  ): Promise<{ json(): Promise<unknown> }>;
+  ): Promise<{
+    json(): Promise<unknown>;
+    readonly status?: number | undefined;
+    readonly headers?: { get(name: string): string | null } | undefined;
+  }>;
   socket(url: string): WakeSocket;
   /** Waits so long, or less where the signal ends the wait. */
   wait(ms: number, signal: AbortSignal): Promise<void>;
@@ -413,6 +424,40 @@ export interface WakeHost {
    * of it, one older than this say: the source then says of an account what the messenger does.
    */
   writers?(accounts: readonly WakeAccount[], signal: AbortSignal): Promise<readonly WakeWriter[]>;
+}
+
+/**
+ * How an agent stands to whoever waits for it where a wake source listens (ADR-0170), as the
+ * runner says it and the source shows it where it can:
+ *
+ * - `idle`: nothing to show. With `last`, the runner ends and says nothing after it: what the
+ *   source showed is taken back now or not at all;
+ * - `thinking`: what that source raised reached the runner, and the turn it began is under way;
+ * - `working`: the agent has been at work for longer than `runner.json` gives a turn before it
+ *   is said, whatever woke it, sub-agents in its background among it;
+ * - `limited`: the usage limit of its product stopped it, until the moment `until` where the
+ *   product said one, in milliseconds since the epoch.
+ */
+export type AgentStatus =
+  | { readonly state: "idle"; readonly last?: boolean | undefined }
+  | { readonly state: "thinking" }
+  | { readonly state: "working" }
+  | { readonly state: "limited"; readonly until?: number | undefined };
+
+/**
+ * What `runner.json` says of how each of them is shown, under `status`: an emoji by its name
+ * and a line of words, each the source's own where the desk says none. `back` is what the
+ * words of `limited` go on with where the moment is known, `{time}` in it standing for the
+ * moment.
+ */
+export interface StatusWords {
+  readonly thinking?: StatusLook | undefined;
+  readonly working?: StatusLook | undefined;
+  readonly limited?: (StatusLook & { readonly back?: string | undefined }) | undefined;
+}
+export interface StatusLook {
+  readonly emoji?: string | undefined;
+  readonly text?: string | undefined;
 }
 
 /** A module that raises wakes from outside the console. `console`, the console's own stream of signals, is the runner's own. */
@@ -441,6 +486,30 @@ export interface WakeSource {
       readonly signal: AbortSignal;
     },
   ): Promise<WakeRead>;
+  /**
+   * Shows how the agent stands, where the source's messenger has a place for it (ADR-0170): the
+   * runner decides which, and the source how. Said when it changes, and again every half
+   * minute while it stands, so that a source keeps what it shows from lapsing and tries again
+   * what failed; with the host the source runs with, the same one every time. It never rejects
+   * for what the messenger answered, and what it cannot show costs the agent nothing: said
+   * once, in the runner's lines. Left out by a source that shows nothing.
+   */
+  show?(
+    host: Pick<WakeHost, "secret" | "fetch" | "wait" | "log" | "kept">,
+    status: AgentStatus,
+    options: {
+      /** What `runner.json` says of the emoji and the words. */
+      readonly words: StatusWords;
+      /** The language of the workspace, where the runner knows it: the source's own words are in it where it has them. */
+      readonly language?: string | undefined;
+      /** The moment, in milliseconds since the epoch. */
+      now(): number;
+      /** A moment as people read one, in the workspace's zone: the hour and the minute, with the day where it is not within the day to come. */
+      time(at: number): string;
+      /** Ends when the runner does, and with the last thing said a few seconds after it. */
+      readonly signal: AbortSignal;
+    },
+  ): Promise<void>;
 }
 
 /** What a service is told of the runner it keeps running. */

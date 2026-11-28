@@ -92,6 +92,7 @@ export {
   taskScript,
 } from "./runner/task-scheduler.js";
 export type {
+  AgentStatus,
   Boundary,
   Child,
   Cut,
@@ -109,6 +110,8 @@ export type {
   ServicePlan,
   Spawn,
   StartOptions,
+  StatusLook,
+  StatusWords,
   WakeAccount,
   WakeHost,
   WakePart,

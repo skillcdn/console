@@ -2453,6 +2453,14 @@ export const en = {
         submit: "Add the agent account",
       },
     },
+    // What an agent account's status says at a messenger while it works (ADR-0170): the
+    // runner's words, shown there and on no page. `{time}` stands for the moment it is back.
+    status: {
+      thinking: "Thinking",
+      working: "Working · a reply may take a while",
+      limited: "Out of usage",
+      back: "back at {time}",
+    },
   },
 
   sessions: {

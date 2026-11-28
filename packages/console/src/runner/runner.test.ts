@@ -17,7 +17,15 @@ import {
   type RunnerOptions,
   type RunnerState,
 } from "./runner.js";
-import type { Driver, DriverEvent, DriverMessage, StartOptions, WakeSource } from "./types.js";
+import type {
+  AgentStatus,
+  Driver,
+  DriverEvent,
+  DriverMessage,
+  StartOptions,
+  WakeHost,
+  WakeSource,
+} from "./types.js";
 
 // The runner against a console and a product that are both the test's: what it asks of the
 // one and hands the other, in order. The durations are shortened; nothing waits on a clock the
@@ -436,6 +444,8 @@ function setup(
     outboxBytes?: number;
     /** The clock the runner reads; the machine's own where left out. */
     now?: () => number;
+    /** The language of the workspace, where the runner is told one. */
+    language?: string;
     /** How often the runner's heartbeat timer fires; every forty milliseconds where left out. */
     heartbeatMs?: number;
     /** How long the runner waits for sub-agents in the background, and for the turn that hands in a report; its own durations where left out. */
@@ -477,6 +487,7 @@ function setup(
     now: over.now ?? (() => Date.now()),
     random: () => 0.5,
     time: () => "14:02",
+    language: over.language,
     files: {
       write: async (path, text) => {
         if (files.refused.has(path)) {
@@ -4431,5 +4442,314 @@ describe("the runner, of what it keeps on the machine (ADR-0166)", () => {
       "what the wake source chat keeps could not be written; it is kept while the runner runs";
     expect(second.log.filter((one) => one === line)).toHaveLength(1);
     expect(JSON.stringify(second.log)).not.toContain("1762800600");
+  });
+});
+
+describe("how the agent stands, as a wake source shows it (ADR-0170)", () => {
+  /** A wake source that listens to nothing, raises what the test has it raise, and notes what it is told to show. */
+  function chat(over: { readonly fails?: boolean } = {}) {
+    const shown: AgentStatus[] = [];
+    const handed: {
+      readonly words: unknown;
+      readonly language: string | undefined;
+      readonly near: string;
+      readonly far: string;
+    }[] = [];
+    const hosts: WakeHost[] = [];
+    const source: WakeSource = {
+      name: "chat",
+      async run(host, signal) {
+        hosts.push(host);
+        await host.wait(60_000, signal);
+      },
+      show: async (host, status, options) => {
+        shown.push(status);
+        handed.push({
+          words: options.words,
+          language: options.language,
+          near: options.time(options.now() + 3_600_000),
+          far: options.time(Date.UTC(2031, 0, 5, 6, 7)),
+        });
+        // Said with the host the source runs with, the same one every time.
+        expect(host).toBe(hosts[0]);
+        if (over.fails === true) {
+          throw new Error("the messenger is away");
+        }
+      },
+    };
+    return {
+      source,
+      shown,
+      handed,
+      /** Raises a wake as the source does for a message, once the runner keeps it listening. */
+      async raise(key = "chat:ops:17", text = "Tom: can you look?"): Promise<boolean> {
+        await until("the source to listen", () => hosts.length > 0);
+        return (await hosts[0]?.raise({ key, text })) ?? false;
+      },
+      /** What it was told to show, one after another, each once however often it was said again. */
+      states(): string[] {
+        const said = shown.map((status) =>
+          status.state === "idle" && status.last === true ? "last" : status.state,
+        );
+        return said.filter((state, index) => state !== said[index - 1]);
+      },
+    };
+  }
+  /** A clock the test moves on, so that the half minute a turn is given passes when the test says so. */
+  function clock() {
+    let ahead = 0;
+    return {
+      now: () => Date.now() + ahead,
+      pass(ms: number): void {
+        ahead += ms;
+      },
+    };
+  }
+  /** Past the half minute a turn is given before the agent is said to be at work. */
+  const HALF_MINUTE = 31_000;
+
+  it("shows that the agent thinks over what the source raised, from when it reached the runner until the turn it began is over", async () => {
+    const at = chat();
+    const { product } = setup({ sources: [at.source] });
+    // It begins with nothing to show, which the source is told.
+    await until("the first word", () => at.shown.length > 0);
+    expect(at.states()).toEqual(["idle"]);
+    expect(await at.raise()).toBe(true);
+    const session = await sessionOf(product);
+    await until("the wake to reach the agent", () => session.sent.length === 1);
+    await until("the source to be told", () => at.states().at(-1) === "thinking");
+    expect(at.states()).toEqual(["idle", "thinking"]);
+    session.emit(...STARTED, { type: "taken" });
+    await sleep(60);
+    expect(at.states()).toEqual(["idle", "thinking"]);
+    session.emit({ type: "turn_completed" });
+    await until("the turn's end to be shown", () => at.states().at(-1) === "idle");
+    // A turn shorter than the half minute is never one the agent is said to be at work in.
+    expect(at.states()).toEqual(["idle", "thinking", "idle"]);
+  });
+
+  it("shows nothing for what the board, a supervisor or another source woke it for, until the turn has gone on for longer than runner.json gives one", async () => {
+    const at = chat();
+    const time = clock();
+    const { console, product } = setup({ sources: [at.source], now: time.now });
+    console.signal({ text: "Begin." });
+    console.signal({ kind: "wake", by: null, source: "board", key: "#7" });
+    // A wake another source raised, which is none of this one's.
+    console.signal({ kind: "wake", by: null, source: "messenger", key: "pager:9", text: "Up?" });
+    const session = await sessionOf(product);
+    await until("the messages", () => session.sent.length >= 1);
+    await sleep(60);
+    expect(at.states()).toEqual(["idle"]);
+    time.pass(HALF_MINUTE);
+    await until("the agent to be shown at work", () => at.states().at(-1) === "working");
+    expect(at.states()).toEqual(["idle", "working"]);
+    session.emit(...STARTED, { type: "turn_completed" });
+    await until("the turn's end to be shown", () => at.states().at(-1) === "idle");
+    expect(at.states()).toEqual(["idle", "working", "idle"]);
+  });
+
+  it("shows the agent at work once the turn a message began goes on, and leaves it so when another arrives meanwhile", async () => {
+    const at = chat();
+    const time = clock();
+    const { product } = setup({ sources: [at.source], now: time.now });
+    await at.raise();
+    const session = await sessionOf(product);
+    await until("the wake to reach the agent", () => session.sent.length === 1);
+    await until("the source to be told", () => at.states().at(-1) === "thinking");
+    time.pass(HALF_MINUTE);
+    await until("the agent to be shown at work", () => at.states().at(-1) === "working");
+    expect(at.states()).toEqual(["idle", "thinking", "working"]);
+    await at.raise("chat:ops:18", "Tom: and the report?");
+    await until("the second wake to reach the agent", () => session.sent.length === 2);
+    await sleep(60);
+    expect(at.states()).toEqual(["idle", "thinking", "working"]);
+    session.emit(...STARTED, { type: "turn_completed" });
+    await until("the turn's end to be shown", () => at.states().at(-1) === "idle");
+    expect(at.states()).toEqual(["idle", "thinking", "working", "idle"]);
+  });
+
+  it("keeps the agent shown as at work while sub-agents work on in its background, and until the turn that hands in what they did may begin", async () => {
+    const at = chat();
+    const time = clock();
+    const { console, product } = setup({ sources: [at.source], now: time.now, reportMs: 40 });
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    session.emit(...STARTED, { type: "background", agents: 2 }, { type: "turn_completed" });
+    await until("the turn's end", () =>
+      console.events().some(([, , said]) => said === "The turn completed."),
+    );
+    expect(at.states()).toEqual(["idle"]);
+    time.pass(HALF_MINUTE);
+    await until("the agent to be shown at work", () => at.states().at(-1) === "working");
+    // The turn is over, and two sub-agents work on: at work still, for as long as they do.
+    await sleep(150);
+    expect(at.states()).toEqual(["idle", "working"]);
+    session.emit({ type: "background", agents: 0 });
+    await until("the end of it to be shown", () => at.states().at(-1) === "idle");
+    expect(at.states()).toEqual(["idle", "working", "idle"]);
+  });
+
+  it("shows that the usage limit stopped the agent, until the moment the product named, and nothing from then on", async () => {
+    const at = chat();
+    const time = clock();
+    const { console, product } = setup({ sources: [at.source], now: time.now });
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    const resets = time.now() + 30_000;
+    session.emit(
+      ...STARTED,
+      { type: "taken" },
+      { type: "cannot_go_on", state: "failed", reason: "usage_limit", until: resets },
+    );
+    await until("the limit to be shown", () => at.states().at(-1) === "limited");
+    expect(at.shown.at(-1)).toEqual({ state: "limited", until: resets });
+    // What reaches the agent meanwhile is kept, and is nothing it thinks over.
+    await at.raise();
+    await sleep(60);
+    expect(at.states()).toEqual(["idle", "limited"]);
+    // Past the moment the runner brings the agent back, in a turn as any other: it holds what
+    // the source raised meanwhile, which the agent thinks over from then on.
+    time.pass(HALF_MINUTE);
+    await until("the agent to be brought back", () => session.sent.length === 2);
+    await until("the turn to be shown", () => at.states().at(-1) === "thinking");
+    session.emit({ type: "taken" }, { type: "event", kind: "assistant", text: "Back." });
+    session.emit({ type: "turn_completed" });
+    await until("the turn's end to be shown", () => at.states().at(-1) === "idle");
+    // Between the moment and the turn, nothing: the status ended by itself at the moment.
+    expect(at.states().filter((state) => state !== "idle")).toEqual(["limited", "thinking"]);
+  });
+
+  it("shows a usage limit of no known end until the agent is back from it", async () => {
+    const at = chat();
+    const { console, product } = setup({ sources: [at.source] });
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the message", () => session.sent.length === 1);
+    session.emit(
+      ...STARTED,
+      { type: "taken" },
+      { type: "cannot_go_on", state: "failed", reason: "usage_limit" },
+    );
+    await until("the limit to be shown", () => at.states().at(-1) === "limited");
+    expect(at.shown.at(-1)).toEqual({ state: "limited" });
+    // A supervisor's word is tried at once, and the agent answers: the limit is over.
+    console.signal({ text: "Are you back?" });
+    await until("the try", () => session.sent.length === 2);
+    expect(at.states()).toEqual(["idle", "limited"]);
+    session.emit({ type: "taken" }, { type: "event", kind: "assistant", text: "Back." });
+    session.emit({ type: "turn_completed" });
+    await until("the limit's end to be shown", () => at.states().at(-1) === "idle");
+    expect(at.states()).toEqual(["idle", "limited", "idle"]);
+  });
+
+  it("shows nothing once the session fails for another reason, or is stopped", async () => {
+    const failing = chat();
+    const failed = setup({ sources: [failing.source] });
+    await failing.raise();
+    const session = await sessionOf(failed.product);
+    await until("the wake to reach the agent", () => session.sent.length === 1);
+    await until("the source to be told", () => failing.states().at(-1) === "thinking");
+    session.emit(...STARTED, { type: "cannot_go_on", state: "failed", reason: "crashed" });
+    await until("the failure to be shown", () => failing.states().at(-1) === "idle");
+    expect(failing.states()).toEqual(["idle", "thinking", "idle"]);
+    // A supervisor's stop: what was raised meanwhile waits, and nobody thinks it over.
+    const stopping = chat();
+    const stopped = setup({ sources: [stopping.source] });
+    await stopping.raise();
+    const other = await sessionOf(stopped.product);
+    await until("the wake to reach the agent", () => other.sent.length === 1);
+    await until("the source to be told", () => stopping.states().at(-1) === "thinking");
+    stopped.console.signal({ kind: "stop" });
+    await until("the stop", () => other.state.interrupted > 0 || other.state.stopped);
+    other.emit({ type: "turn_completed" });
+    await stopping.raise("chat:ops:18", "Tom: hello?");
+    await until("the stop to be shown", () => stopping.states().at(-1) === "idle");
+    await sleep(60);
+    expect(stopping.states()).toEqual(["idle", "thinking", "idle"]);
+  });
+
+  it("has the source take back what it showed as the runner stops, as the last thing it is said", async () => {
+    const at = chat();
+    const { product, runner, done } = setup({ sources: [at.source] });
+    await at.raise();
+    const session = await sessionOf(product);
+    await until("the wake to reach the agent", () => session.sent.length === 1);
+    await until("the source to be told", () => at.states().at(-1) === "thinking");
+    runner.stop();
+    await done;
+    expect(at.shown.at(-1)).toEqual({ state: "idle", last: true });
+    expect(at.states()).toEqual(["idle", "thinking", "last"]);
+  });
+
+  it("says nothing to a source where runner.json turned the status off", async () => {
+    const at = chat();
+    const { console, product, runner, done } = setup({
+      sources: [at.source],
+      config: { status: false },
+    });
+    await at.raise();
+    console.signal({ text: "Begin." });
+    const session = await sessionOf(product);
+    await until("the messages", () => session.sent.length >= 1);
+    await sleep(100);
+    session.emit(...STARTED, { type: "turn_completed" });
+    runner.stop();
+    await done;
+    expect(at.shown).toEqual([]);
+  });
+
+  it("says it again every heartbeat while it stands, with the desk's words, the workspace's language and a moment as a status says one", async () => {
+    const at = chat();
+    const status = {
+      after: 30,
+      thinking: { emoji: ":eyes:", text: "Reading" },
+      limited: { back: "until {time}" },
+    };
+    const { product } = setup({ sources: [at.source], config: { status }, language: "ko" });
+    await at.raise();
+    const session = await sessionOf(product);
+    await until("the wake to reach the agent", () => session.sent.length === 1);
+    // Every forty milliseconds here: a source keeps what it shows from lapsing by it.
+    await until(
+      "the source to be told again",
+      () => at.shown.filter((one) => one.state === "thinking").length >= 3,
+    );
+    expect(at.states().at(-1)).toBe("thinking");
+    expect(at.handed.at(-1)).toEqual({
+      words: status,
+      language: "ko",
+      // The hour and the minute, as a header says them; and with its day where the moment is
+      // most of a day away, as the command writes one: in UTC where it knows no zone.
+      near: "14:02",
+      far: "01-05 06:07 UTC",
+    });
+  });
+
+  it("goes on as it would where a source cannot show how the agent stands, and says so once", async () => {
+    const at = chat({ fails: true });
+    const { product, log, runner, done } = setup({ sources: [at.source] });
+    await at.raise();
+    const session = await sessionOf(product);
+    await until("the wake to reach the agent", () => session.sent.length === 1);
+    session.emit(...STARTED, { type: "turn_completed" });
+    await until("the turn's end to be said", () => at.states().at(-1) === "idle");
+    runner.stop();
+    await done;
+    expect(at.states()).toEqual(["idle", "thinking", "idle", "last"]);
+    expect(log.filter((line) => line.includes("could not show how the agent stands"))).toEqual([
+      "the wake source chat could not show how the agent stands (Error)",
+    ]);
+  });
+
+  it("shows nothing for a wake the console did not take", async () => {
+    const at = chat();
+    const { console, product } = setup({ sources: [at.source] });
+    console.says.full.wakes = true;
+    expect(await at.raise()).toBe(false);
+    await sleep(80);
+    expect(product.sessions).toHaveLength(0);
+    expect(at.states().at(-1)).toBe("idle");
   });
 });

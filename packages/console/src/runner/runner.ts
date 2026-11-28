@@ -13,7 +13,7 @@ import {
 import { type RestSignal, type RestTranscriptEventInput, RUNNER_CHOICE } from "../schemas.js";
 import { hasForbiddenCodePoint } from "../text.js";
 import type { AgentStateReason, TranscriptKind } from "../vocabulary.js";
-import type { RunnerConfig } from "./config.js";
+import { type RunnerConfig, STATUS_AFTER } from "./config.js";
 import {
   type Attached,
   composeSignals,
@@ -27,6 +27,7 @@ import {
 } from "./message.js";
 import { cutShown, cutShownEnd, type Redactor, redactorOf } from "./redact.js";
 import type {
+  AgentStatus,
   Driver,
   DriverEvent,
   DriverSession,
@@ -62,6 +63,15 @@ import {
 // a signal received, a word of the driver's, a timer that fired. What the product prints is
 // numbered and kept for the next batch as it arrives, so that nothing of a session is left
 // behind when the session ends.
+
+/** How long a wake a source raised is waited for on the stream before the source is shown nothing of it. */
+const RAISED_MS = 60_000;
+/** From how far away a moment is said with its day in a status. */
+const FAR_MS = 20 * 60 * 60_000;
+/** How long the runner's end waits for the wake sources to take back what they showed. */
+const SHOWN_END_MS = 3000;
+/** What the wake sources are said as the runner ends. */
+const LAST_STATUS: AgentStatus = { state: "idle", last: true };
 
 /** How often the runner says it is there. */
 export const HEARTBEAT_MS = 30_000;
@@ -289,6 +299,12 @@ export interface RunnerOptions {
       }
     | undefined;
   /**
+   * The language of the workspace, where whoever starts the runner knows it: what a wake source
+   * shows of the agent to the people at its messenger is in it, where the source has the words
+   * (ADR-0170). Left out, the source's own.
+   */
+  readonly language?: string | undefined;
+  /**
    * How the desk's `runner.json` stands against the one this runner was started with (ADR-0144):
    * the same, another that reads, or one that does not read, with what is wrong with it in a few
    * words. Left out, the runner never ends for its file.
@@ -458,6 +474,8 @@ type Message =
   | { readonly t: "answered"; readonly session: OpenSession }
   | { readonly t: "deliver" }
   | { readonly t: "flush" }
+  /** A wake source raised something, or what it raised was not taken: how the agent stands to it is looked at again. */
+  | { readonly t: "shown" }
   | { readonly t: "heartbeat" }
   | { readonly t: "stop" };
 
@@ -731,6 +749,28 @@ export function createRunner(options: RunnerOptions): Runner {
     string,
     { state: "connected" | "waiting" | "failing"; since: number; why: string | undefined }
   >();
+  /**
+   * The wake sources that show how the agent stands (ADR-0170), by name: the host each runs
+   * with, and what it was last said and when.
+   */
+  const shows = new Map<
+    string,
+    { readonly source: WakeSource; readonly host: WakeHost; said: string; at: number }
+  >();
+  /**
+   * What `runner.json` says of how the agent stands is shown: `false` for not at all, and the
+   * sources' own way where it says nothing, a desk of before and a config put together by hand
+   * among them.
+   */
+  const shownAs: NonNullable<RunnerConfig["status"]> = config.status ?? {};
+  /** Since when the agent is at work without a pause: a turn under way, or something that goes on in its session with none. */
+  let atWorkSince: number | undefined;
+  /**
+   * What each wake source raised that the stream has not brought back yet: when it was raised,
+   * and its number once the console took it. A message that reached the runner is on its way
+   * to the agent from then on, which its source shows.
+   */
+  const raising = new Map<string, Set<{ readonly at: number; number: number | undefined }>>();
   /**
    * The signals a product was handed and never took, since it did not start or was not signed
    * in, which are kept to be sent again; and, of those, the ones a reset gave one more try: a
@@ -2499,6 +2539,140 @@ export function createRunner(options: RunnerOptions): Runner {
   };
 
   /**
+   * Whether the agent is thinking over what a wake source raised (ADR-0170): the turn a wake
+   * of that source's was handed over in is under way, or one is on its way to the agent,
+   * raised and not back on the stream yet or waiting to be handed over. What waits is nothing
+   * the agent thinks over while nothing is handed over at all, a supervisor's stop standing
+   * or the agent unable to go on.
+   */
+  const thinksOf = (name: string, now: number): boolean => {
+    const own = (signal: RestSignal): boolean =>
+      signal.kind === "wake" &&
+      signal.source === "messenger" &&
+      signal.key?.startsWith(`${name}:`) === true;
+    if (session?.turn === true && session.sent.some(own)) {
+      return true;
+    }
+    if (held || waits !== undefined) {
+      return false;
+    }
+    const raised = raising.get(name);
+    for (const one of raised ?? []) {
+      // Back on the stream, and among what waits from then on; or never to come, for all the
+      // runner waits for it.
+      if ((one.number !== undefined && one.number <= handled) || now - one.at >= RAISED_MS) {
+        raised?.delete(one);
+      }
+    }
+    return (raised?.size ?? 0) > 0 || pending.some(own);
+  };
+
+  /**
+   * How the agent stands to whoever waits for it at a wake source (ADR-0170). Its usage limit
+   * first, until the moment the product named where it named one: nothing is answered before
+   * it, whatever else goes on, and past it the runner brings the agent back in a turn as any
+   * other. Then that it has been at work for longer than `runner.json` gives a turn, whatever
+   * woke it; then that it thinks over what this source raised.
+   */
+  const statusFor = (name: string, now: number): AgentStatus => {
+    if (limited !== undefined && (limited.until === undefined || now < limited.until)) {
+      return limited.until === undefined
+        ? { state: "limited" }
+        : { state: "limited", until: limited.until };
+    }
+    if (
+      atWorkSince !== undefined &&
+      shownAs !== false &&
+      now - atWorkSince >= (shownAs.after ?? STATUS_AFTER) * 1000
+    ) {
+      return { state: "working" };
+    }
+    return { state: thinksOf(name, now) ? "thinking" : "idle" };
+  };
+
+  /**
+   * A moment as a status says one: the hour and the minute in the workspace's zone, and with
+   * its day where it is most of a day away, as the command writes a moment's.
+   */
+  const statusTime = (at: number): string => {
+    const iso = new Date(at).toISOString();
+    const written = moment(iso);
+    const day = /^\d{4}-(\d{2}-\d{2})T(\d{2}:\d{2})/.exec(written);
+    return at - options.now() < FAR_MS || day === null
+      ? options.time(iso)
+      : `${day[1]} ${day[2]}${written.endsWith("Z") ? " UTC" : ""}`;
+  };
+
+  /** Says to a wake source how the agent stands. What the source cannot show costs the agent nothing. */
+  const say = (
+    one: { readonly source: WakeSource; readonly host: WakeHost },
+    status: AgentStatus,
+    signal: AbortSignal,
+  ): Promise<void> =>
+    Promise.resolve()
+      .then(() =>
+        one.source.show?.(one.host, status, {
+          words: shownAs === false ? {} : shownAs,
+          language: options.language,
+          now: options.now,
+          time: statusTime,
+          signal,
+        }),
+      )
+      .catch((error: unknown) => {
+        sayOnce(
+          `status ${one.source.name}`,
+          `the wake source ${one.source.name} could not show how the agent stands (${codeOf(error)})`,
+        );
+      });
+
+  /**
+   * Has the wake sources show how the agent stands (ADR-0170): each is said when that changed,
+   * and again every heartbeat while it stands, so that a source keeps what it shows from
+   * lapsing. Nothing is said where `runner.json` turned it off.
+   */
+  const showStatus = (): void => {
+    if (shownAs === false) {
+      return;
+    }
+    const now = options.now();
+    const active = session !== undefined && (session.turn || goesOn(session));
+    atWorkSince = active ? (atWorkSince ?? now) : undefined;
+    for (const [name, one] of shows) {
+      const status = statusFor(name, now);
+      const word = `${status.state} ${status.state === "limited" ? (status.until ?? "") : ""}`;
+      if (word === one.said && now - one.at < timing.heartbeatMs) {
+        continue;
+      }
+      one.said = word;
+      one.at = now;
+      void say(one, status, abort.signal);
+    }
+  };
+
+  /**
+   * The last thing the sources are said: nothing to show, as the runner ends, so that what they
+   * showed is taken back. Waited for a few seconds and no longer: a messenger that does not
+   * answer holds no runner's end, and what stays there ends by itself.
+   */
+  const showLast = async (): Promise<void> => {
+    if (shownAs === false || shows.size === 0) {
+      return;
+    }
+    const ending = new AbortController();
+    const over = new Promise<void>((resolve) => {
+      ending.signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    const timer = setTimeout(() => ending.abort(), SHOWN_END_MS);
+    await Promise.race([
+      Promise.all([...shows.values()].map((one) => say(one, LAST_STATUS, ending.signal))),
+      over,
+    ]);
+    clearTimeout(timer);
+    ending.abort();
+  };
+
+  /**
    * Why the agent stands as it does, and until when where the runner knows: when its usage
    * limit resets. A console of before the word `usage_limit` refuses a heartbeat that says it,
    * and with it everything else the heartbeat carries: such a console is said `crashed`, the
@@ -2771,9 +2945,22 @@ export function createRunner(options: RunnerOptions): Runner {
         // what someone else wrote, and a text with no line of the source's as words whole, so
         // that no word of a message reads as a line of the source's when the signal returns.
         const text = wakeTextOf("parts" in raised ? raised.parts : [{ words: raised.text }]);
+        // On its way to the agent from here, which the source shows (ADR-0170): until the
+        // stream brings it back, or the console did not take it.
+        const underWay: { readonly at: number; number: number | undefined } = {
+          at: options.now(),
+          number: undefined,
+        };
+        const others = raising.get(source.name) ?? new Set();
+        raising.set(source.name, others.add(underWay));
+        push({ t: "shown" });
         try {
-          await client.raiseWake({ source: "messenger", key: raised.key, text });
+          underWay.number = (
+            await client.raiseWake({ source: "messenger", key: raised.key, text })
+          ).number;
         } catch (error) {
+          others.delete(underWay);
+          push({ t: "shown" });
           if (codeOf(error) !== "signal.too_many") {
             throw error;
           }
@@ -2810,6 +2997,9 @@ export function createRunner(options: RunnerOptions): Runner {
           }),
     };
     sourceStands(source.name, "waiting");
+    if (source.show !== undefined) {
+      shows.set(source.name, { source, host, said: "", at: 0 });
+    }
     let wait = timing.reconnectMs;
     while (!stopped) {
       const startedAt = options.now();
@@ -3029,6 +3219,8 @@ export function createRunner(options: RunnerOptions): Runner {
                 await flush(session);
               }
               await keepKept();
+            } else if (message.t === "shown") {
+              // Looked at below, as after anything else.
             } else {
               // A timer counts no time the machine sleeps in, and rings late by as much: what
               // was to be handed over at a moment is looked for by the clock at every heartbeat.
@@ -3085,6 +3277,9 @@ export function createRunner(options: RunnerOptions): Runner {
           } catch (error) {
             log(`the runner could not do what it was about to (${codeOf(error)}); it goes on`);
           }
+          // Whatever was done may have changed how the agent stands to whoever waits for it,
+          // and so does the time that passed: looked at once a second at the least.
+          showStatus();
         }
       } finally {
         stopped = true;
@@ -3093,9 +3288,13 @@ export function createRunner(options: RunnerOptions): Runner {
         for (const timer of timers) {
           clearTimeout(timer);
         }
+        // What the wake sources showed of the agent is taken back while its session ends
+        // (ADR-0170): a runner that is gone shows nothing.
+        const shown = showLast();
         // A session ended for an update goes on, in the runner started after, as one a
         // supervisor restarted does: with the same conversation.
         await end(how === "stopped" ? "exited" : "restarted");
+        await shown;
         abort.abort();
         await listening;
         await Promise.all(sourcing);

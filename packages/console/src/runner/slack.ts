@@ -2,6 +2,13 @@ import * as z from "zod/mini";
 import { MAX_SIGNAL_LENGTH } from "../limits.js";
 import { withoutForbiddenCodePoints } from "../text.js";
 import { wakeTextOf } from "./message.js";
+import {
+  KEPT_STATUS,
+  keptStatusFits,
+  showSlackStatus,
+  slackStatusNote,
+  slackStatusNoted,
+} from "./slack-status.js";
 import type { WakeAccount, WakeHost, WakePart, WakeRead, WakeSource, WakeWriter } from "./types.js";
 
 // The `slack` wake source (ADR-0085): one app for one agent account, which receives over its
@@ -1232,13 +1239,16 @@ const KEPT_MOMENT = /^[0-9]{1,12}\.[0-9]{1,9}$/;
  * place, `woke` or `said` under a message. It is read back from a file of the desk, where
  * anything may stand, and compared as it is: a moment that is none, a number without end say,
  * would count everything said in a place as brought, for good. Anything else is nothing kept
- * for that name.
+ * for that name. Beside them, until when a status of the source's own stands (ADR-0170).
  */
 function ownShapes(kept: Map<string, string>): void {
   for (const [name, value] of [...kept]) {
-    const fits = KEPT_PLACE.test(name)
-      ? KEPT_MOMENT.test(value)
-      : KEPT_MESSAGE.test(name) && (value === "woke" || value === "said");
+    const fits =
+      name === KEPT_STATUS
+        ? keptStatusFits(value)
+        : KEPT_PLACE.test(name)
+          ? KEPT_MOMENT.test(value)
+          : KEPT_MESSAGE.test(name) && (value === "woke" || value === "said");
     if (!fits) {
       kept.delete(name);
     }
@@ -1581,8 +1591,15 @@ async function raiseOf(host: WakeHost, heard: Heard, reading: AbortSignal): Prom
     );
     return { parts: heard.saying(await writer), prior };
   });
+  // Why the agent's status is not shown, where the messenger refused it (ADR-0170): said to
+  // the agent once, as a line of the source's own in a wake that has room for it.
+  const carried: readonly WakePart[] = [...parts, ...prior.parts];
+  const note = slackStatusNote(host);
+  const withNote: readonly WakePart[] | undefined =
+    note === undefined ? undefined : [...carried, { says: note }];
+  const noted = withNote !== undefined && wakeTextOf(withNote).length <= MAX_SIGNAL_LENGTH;
   const taken = await host
-    .raise({ key: heard.key, parts: [...parts, ...prior.parts] })
+    .raise({ key: heard.key, parts: noted ? withNote : carried })
     .catch((error: unknown) => {
       host.log(
         `a wake from slack was not raised (${error instanceof Error ? error.name : "error"})`,
@@ -1591,6 +1608,9 @@ async function raiseOf(host: WakeHost, heard: Heard, reading: AbortSignal): Prom
     });
   if (!taken) {
     return;
+  }
+  if (noted) {
+    slackStatusNoted(host);
   }
   for (const ts of prior.carried) {
     // One that woke stays one that woke, though it is carried again among what led up to this
@@ -1843,4 +1863,5 @@ export const slack: WakeSource = {
     }
   },
   read: (host, where, options) => readOf(host, where, options),
+  show: (host, status, options) => showSlackStatus(host, SLACK_USER_TOKEN, status, options),
 };

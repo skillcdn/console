@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { restRunnerWakeSchema } from "../schemas.js";
 import { wakeTextOf } from "./message.js";
@@ -3648,6 +3649,95 @@ describe("the slack wake source", () => {
       await run(stopped.host);
       expect(stopped.askedOf).toHaveLength(1);
       expect(firstOf(stopped.raised[1])).toBe(bare);
+    });
+  });
+
+  describe("the agent's status, where the messenger refuses it (ADR-0170)", () => {
+    const NOTE =
+      'Your status at Slack is not shown while you work (missing_scope): your app lacks the user scope users.profile:write. The skill running-an-agent says how to add it (references/slack-app.md); "status": false in runner.json shows none';
+    /** The member's token, invented when the test runs. */
+    const drawn = (): string => ["xoxp", "invented", randomBytes(6).toString("hex")].join("-");
+    /** A messenger that reads a conversation and refuses a status. */
+    const refusing = (url: URL): unknown =>
+      url.pathname === "/api/users.profile.set"
+        ? { ok: false, error: "missing_scope" }
+        : { ok: true, messages: [] };
+    const showing = () => ({
+      words: {},
+      now: () => 1_762_800_000_000,
+      time: () => "05:40",
+      signal: new AbortController().signal,
+    });
+    const saidIn = (wake: RaisedWake | undefined): string[] =>
+      (wake !== undefined && "parts" in wake ? wake.parts : []).flatMap((part) =>
+        "says" in part ? [part.says] : [],
+      );
+
+    it("tells the agent why, once, in a line of its own at the end of the next wake", async () => {
+      const member = drawn();
+      const at = fakeHost({
+        token: "xapp-x",
+        member,
+        arrives: [
+          { type: "events_api", envelope_id: "e-1", payload: payload(direct()) },
+          {
+            type: "events_api",
+            envelope_id: "e-2",
+            payload: payload(direct({ ts: "1762800060.000100", text: "Still there?" })),
+          },
+        ],
+        read: refusing,
+      });
+      // The runner says the agent thinks, and the messenger refuses the status.
+      await slack.show?.(at.host, { state: "thinking" }, showing());
+      await run(at.host);
+      expect(at.raised).toHaveLength(2);
+      expect(saidIn(at.raised[0])).toEqual([DIRECT, NOTE]);
+      // Said: the wake after it carries nothing of it.
+      expect(saidIn(at.raised[1])).toEqual([DIRECT]);
+      // Nothing of the token is in a wake or in a line of the runner's.
+      expect(JSON.stringify([at.raised, at.log])).not.toContain(member);
+    });
+
+    it("says it with the wake after where the console did not take the one that carried it, and with none where the status is shown", async () => {
+      const refused = fakeHost({
+        token: "xapp-x",
+        member: drawn(),
+        arrives: [
+          { type: "events_api", envelope_id: "e-1", payload: payload(direct()) },
+          {
+            type: "events_api",
+            envelope_id: "e-2",
+            payload: payload(direct({ ts: "1762800060.000100", text: "Still there?" })),
+          },
+        ],
+        read: refusing,
+        takes: (raisedBefore) => raisedBefore > 0,
+      });
+      await slack.show?.(refused.host, { state: "thinking" }, showing());
+      await run(refused.host);
+      expect(refused.raised.map(saidIn)).toEqual([
+        [DIRECT, NOTE],
+        [DIRECT, NOTE],
+      ]);
+      const shown = fakeHost({
+        token: "xapp-x",
+        member: drawn(),
+        arrives: [{ type: "events_api", envelope_id: "e-1", payload: payload(direct()) }],
+      });
+      await slack.show?.(shown.host, { state: "thinking" }, showing());
+      await run(shown.host);
+      expect(saidIn(shown.raised[0])).toEqual([DIRECT]);
+    });
+
+    it("keeps until when a status of its own stands among what it keeps, and nothing else under that name", async () => {
+      const kept = new Map([["shown", "1762800120"]]);
+      const at = fakeHost({ token: "xapp-x", kept });
+      await run(at.host);
+      expect(Object.fromEntries(kept)).toEqual({ shown: "1762800120" });
+      const odd = new Map([["shown", "tomorrow"]]);
+      await run(fakeHost({ token: "xapp-x", kept: odd }).host);
+      expect(odd.size).toBe(0);
     });
   });
 });

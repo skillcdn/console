@@ -245,6 +245,99 @@ describe("runner.json", () => {
     });
   });
 
+  it("says how the agent's status is shown, each state with an emoji and words of the desk's own, or that none is (ADR-0170)", () => {
+    expect(parseRunnerConfig(JSON.stringify({ status: false }))).toMatchObject({
+      ok: true,
+      config: { status: false },
+    });
+    const own = {
+      after: 45,
+      thinking: { emoji: ":hourglass_flowing_sand:", text: "Reading" },
+      working: { text: "Heads down · back soon" },
+      limited: { emoji: ":zzz:", text: "Resting", back: "until {time}" },
+    };
+    expect(parseRunnerConfig(JSON.stringify({ status: own }))).toEqual({
+      ok: true,
+      config: expect.objectContaining({ status: own }),
+    });
+    // What the desk leaves out is the source's own, and the half minute: said by leaving it out.
+    expect(parseRunnerConfig(JSON.stringify({ status: { working: {} } }))).toEqual({
+      ok: true,
+      config: expect.objectContaining({ status: { working: {} } }),
+    });
+    expect(parseRunnerConfig(JSON.stringify({ status: {} }))).toMatchObject({ ok: true });
+    // The least and the most a turn is given before the agent is said to be at work.
+    for (const after of [5, 600]) {
+      expect(parseRunnerConfig(JSON.stringify({ status: { after } })).ok, String(after)).toBe(true);
+    }
+    // The longest words a status holds, and an emoji as a messenger names one.
+    expect(
+      parseRunnerConfig(
+        JSON.stringify({ status: { thinking: { emoji: ":+1:", text: "x".repeat(100) } } }),
+      ).ok,
+    ).toBe(true);
+  });
+
+  it("refuses a status that does not read, in the words of what is wrong with it: an emoji that is no name, words too long or of more than a line, a wait out of bounds", () => {
+    const control = String.fromCodePoint(0x1b);
+    const hidden = String.fromCodePoint(0x202e);
+    const line = String.fromCodePoint(0x0a);
+    for (const [status, word] of [
+      [true, "status: is false, or what is shown: after, thinking, working, limited"],
+      ["off", "status: is false, or what is shown"],
+      [[], "status: is false, or what is shown"],
+      [{ after: 4 }, "status.after: is 5 seconds at the least"],
+      [{ after: 601 }, "status.after: is 600 seconds at the most"],
+      [{ after: 30.5 }, "status.after: is a whole number of seconds"],
+      [{ after: "30" }, "status.after: is a whole number of seconds"],
+      [{ after: -1 }, "status.after"],
+      // An emoji is named between colons, as a messenger spells one: never the character, a
+      // name with a space in it, two of them, or anything a messenger would read as words.
+      [{ thinking: { emoji: "hourglass" } }, "status.thinking.emoji: is an emoji by its name"],
+      [{ thinking: { emoji: ":thought balloon:" } }, "status.thinking.emoji"],
+      [{ thinking: { emoji: String.fromCodePoint(0x1f4ad) } }, "status.thinking.emoji"],
+      [{ working: { emoji: ":a::b:" } }, "status.working.emoji"],
+      [{ working: { emoji: `:a${control}b:` } }, "status.working.emoji"],
+      [{ working: { emoji: ":A:" } }, "status.working.emoji"],
+      [{ limited: { emoji: `:${"a".repeat(65)}:` } }, "status.limited.emoji"],
+      [{ limited: { emoji: `:a:${line}:b:` } }, "status.limited.emoji"],
+      [{ thinking: { emoji: 1 } }, "status.thinking.emoji"],
+      // The words are one line of plain words, within what a messenger shows of a status.
+      [
+        { thinking: { text: "x".repeat(101) } },
+        "status.thinking.text: is one line of plain words, 100 characters at the most",
+      ],
+      [{ thinking: { text: "" } }, "status.thinking.text"],
+      [{ thinking: { text: " Thinking" } }, "status.thinking.text"],
+      [{ working: { text: `one${line}two` } }, "status.working.text: is one line of plain words"],
+      [{ working: { text: `at work${control}[2J` } }, "status.working.text"],
+      [{ working: { text: `at work${hidden}` } }, "status.working.text"],
+      [{ working: { text: ["at work"] } }, "status.working.text"],
+      // The words of the usage limit leave room for the moment the agent is back, which
+      // `back` names once.
+      [
+        { limited: { text: "x".repeat(61) } },
+        "status.limited.text: is one line of plain words, 60 characters at the most",
+      ],
+      [
+        { limited: { back: "back soon" } },
+        "status.limited.back: is a few plain words with {time} in them once",
+      ],
+      [{ limited: { back: "{time} or {time}" } }, "status.limited.back"],
+      [{ limited: { back: `${"x".repeat(20)}{time}` } }, "status.limited.back"],
+      [{ limited: { back: `back${line}at {time}` } }, "status.limited.back"],
+      // A key the runner does not know is a word spelled wrong, said and not passed over.
+      [{ thinking: { emoji: ":a:", colour: "red" } }, "status.thinking"],
+      [{ away: { text: "Out" } }, "status"],
+      [{ thinking: false }, "status.thinking"],
+    ] as const) {
+      const config = JSON.stringify({ status });
+      const read = parseRunnerConfig(config);
+      expect(read.ok, config.slice(0, 80)).toBe(false);
+      expect(read.ok ? "" : read.problem, config.slice(0, 80)).toContain(word);
+    }
+  });
+
   it("names the driver, the wake sources, the conversation and the secrets a session is handed", () => {
     const read = parseRunnerConfig(
       JSON.stringify({

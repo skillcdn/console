@@ -2322,6 +2322,12 @@ export const ko: Messages = {
         submit: "에이전트 계정 추가",
       },
     },
+    status: {
+      thinking: "생각 중",
+      working: "작업 중 · 답이 조금 늦어요",
+      limited: "충전 중",
+      back: "{time}에 돌아와요",
+    },
   },
 
   sessions: {

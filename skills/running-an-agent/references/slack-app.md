@@ -1,6 +1,6 @@
 # The app of an agent account at Slack
 
-An agent account is a member of the messenger as a person is, with its own address and its own name. It has an app of its own there, one app for one agent account, installed by the agent as itself, for two things: to be woken by what is said to it, and to send as the member it is. The app receives over Socket Mode the events the agent's own member can see, and the runner's `slack` wake source listens on it ([the runner's specification](/docs/specs/runner.md#wake-sources)); the token it holds for the member is what the agent sends with ([Sending](#sending)).
+An agent account is a member of the messenger as a person is, with its own address and its own name. It has an app of its own there, one app for one agent account, installed by the agent as itself, for three things: to be woken by what is said to it, to send as the member it is, and to show whoever waits for it that it is at work. The app receives over Socket Mode the events the agent's own member can see, and the runner's `slack` wake source listens on it ([the runner's specification](/docs/specs/runner.md#wake-sources)); the token it holds for the member is what the agent sends with ([Sending](#sending)), and what the runner sets the member's status with ([Your status](#your-status)).
 
 The agent reads at the messenger with the messenger's own MCP server, added to its product. With the member's token the runner reads one thing more: the conversation a wake is raised in, for what the wake carries of it, and for `console agent messages` ([What a wake carries](#what-a-wake-carries)).
 
@@ -21,6 +21,7 @@ oauth_config:
       - groups:history
       - chat:write
       - files:write
+      - users.profile:write
 settings:
   event_subscriptions:
     user_events:
@@ -33,7 +34,7 @@ settings:
   token_rotation_enabled: false
 ```
 
-The scopes are the member's own, not a bot's: the app sees the conversations the agent is in, and no other, and what is sent with its token is the member's own message, under the agent's name and picture, with no app named beside it. They are the least that waking and sending take: the four that end in `history` for the events, and for reading the conversation an event was said in, `chat:write` for a message and `files:write` for a file or a picture. Add no other, for a search, a profile or a list of channels: the MCP server reads those. The member's token reads the conversations the agent is in and writes there as the agent, and with no scope beyond these, one that leaked does no more. A workspace whose administrators approve apps asks one of them to approve it; that is asked as a decision on the board, of whoever administers the messenger.
+The scopes are the member's own, not a bot's: the app sees the conversations the agent is in, and no other, and what is sent with its token is the member's own message, under the agent's name and picture, with no app named beside it. They are the least that waking, sending and a status take: the four that end in `history` for the events, and for reading the conversation an event was said in, `chat:write` for a message, `files:write` for a file or a picture, and `users.profile:write` for the status the runner sets on your own profile while you work, which is all it writes there ([Your status](#your-status)). Add no other, for a search, another member's profile or a list of channels: the MCP server reads those. The member's token reads the conversations the agent is in, writes there as the agent and writes the agent's own profile, and with no scope beyond these, one that leaked does no more. A workspace whose administrators approve apps asks one of them to approve it; that is asked as a decision on the board, of whoever administers the messenger.
 
 ## The tokens
 
@@ -42,7 +43,7 @@ The app has two. Each is kept in the account's store, and nowhere else, typed un
 1. On the app's own settings, under its basic information, make an app-level token with the scope `connections:write`. It begins with `xapp-`, and the wake source reads it: `console secret slack.app_token --set`.
 2. Install the app to the workspace, as the agent. The token the installation hands back is the member's own and begins with `xoxp-`. The agent sends with it, and the wake source reads the conversation a wake is raised in with it: `console secret slack.user_token --set`. Without it you are woken with the message alone.
 
-An app made before the manifest asked for the two scopes to send with: add them to its manifest on the app's own settings, install the app again as the messenger then asks, and keep the member's token after that.
+An app made before the manifest asked for a scope, the two to send with or `users.profile:write` for your status: add it to its manifest on the app's own settings, and install the app again as the messenger then asks. The member's token stayed the one it was where that was done at a trial; where the messenger hands back another, keep that one (`console secret slack.user_token --set`). Your runner takes a token that changed by itself.
 
 ## Sending
 
@@ -55,6 +56,22 @@ The agent sends with the messenger's Web API and the member's token, and never w
 ## Working hours
 
 A workspace gives a new member working hours, the weekdays from nine to five where this was seen. Outside them the messenger pauses the member's notifications and shows it on its profile as paused until the next morning, which reads as a member who is away. An agent account is there at every hour: in the member's preferences, under Availability, set Working hours to every day, from 12:00 AM to midnight. No call of the API sets them: it is done on the messenger's own pages, in the browser, signed in as the agent.
+
+## Your status
+
+Whoever writes to you sees nothing of a turn until your answer, and takes a long one for an agent that is away. So your runner sets your member's status while you work, with your member's token, and takes it back when you are done ([ADR-0170](/docs/adr/0170-a-runner-says-how-its-agent-stands-to-whoever-waits-for-it-and-a-wake-source-shows-it.md)). You do nothing for it but give your app the scope:
+
+- `:thought_balloon:` Thinking, from when a message at the messenger reaches your runner until the turn it began is over.
+- `:hammer_and_wrench:` Working · a reply may take a while, once you have been at work for more than thirty seconds, whatever woke you, and for as long as sub-agents work on in your background.
+- `:low_battery:` Out of usage · back at 05:40, while the usage limit of your product stops you, until the moment it resets.
+
+The words are in the workspace's language where the console speaks it. `status` in your `runner.json` names an emoji or words of your own for each, how many seconds a turn is given before you are shown at work, or `false` to show nothing ([the runner's specification](/docs/specs/runner.md#runnerjson) says what each takes):
+
+```json
+{ "status": { "after": 60, "working": { "emoji": ":construction:", "text": "Heads down" } } }
+```
+
+The status is the runner's while it shows one: it writes over a status you set yourself, and where none of its own stands it leaves yours as it is. Where your app lacks the scope, or the workspace does not let a member's status be set so, nothing else is the worse for it: your runner says so in its lines and tells you once, in the last line of a wake from the messenger, and tries no more until it starts again or your token changes. Add the scope as [The tokens](#the-tokens) says, or name `"status": false`.
 
 ## The runner
 
@@ -115,4 +132,4 @@ Your wake gives you what to judge by, and no list of cases: who wrote; what the 
 
 ## Not seen run yet
 
-This is written from the messenger's documentation of app manifests, Socket Mode, the Events API, a message's blocks and the Web API's methods for a message, for a file and for reading a conversation. Sending with the member's token was seen in a workspace on 2026-11-23, a message as `markdown_text` and a picture put in a direct conversation by the three steps, with words to go with it: each was the member's own, with no line under it. A member's working hours were seen there too. Seen there on 2026-11-25: what you send with the member's token is marked as an app's (`bot_id`), so another agent in the same group conversation or channel is not woken by it unless you name it. Not seen: a wake in a group conversation, in a named channel or by a call of everyone, what a wake says of an account of another workspace or of a conversation shared with another organization, a wake that carries what was said before it, a message someone passed on, and who else is there. The reads themselves were run by hand there on 2026-11-25, of a conversation and of a thread, and `console agent messages` with them: an agent account's message read back as written through an app, a person's as not. Where the messenger's pages say otherwise, they are right: say so in a report on the onboarding task, with what the page showed.
+This is written from the messenger's documentation of app manifests, Socket Mode, the Events API, a message's blocks and the Web API's methods for a message, for a file and for reading a conversation. Sending with the member's token was seen in a workspace on 2026-11-23, a message as `markdown_text` and a picture put in a direct conversation by the three steps, with words to go with it: each was the member's own, with no line under it. A member's working hours were seen there too. Seen there on 2026-11-25: what you send with the member's token is marked as an app's (`bot_id`), so another agent in the same group conversation or channel is not woken by it unless you name it. Not seen: a wake in a group conversation, in a named channel or by a call of everyone, what a wake says of an account of another workspace or of a conversation shared with another organization, a wake that carries what was said before it, a message someone passed on, and who else is there. The reads themselves were run by hand there on 2026-11-25, of a conversation and of a thread, and `console agent messages` with them: an agent account's message read back as written through an app, a person's as not. Your status is written from the messenger's documentation of `users.profile.set` and from what a trial found, the scope it takes and that the fourth call in a row was refused: it was not seen set by a runner in a workspace. Where the messenger's pages say otherwise, they are right: say so in a report on the onboarding task, with what the page showed.

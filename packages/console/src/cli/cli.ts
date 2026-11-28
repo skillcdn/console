@@ -5071,6 +5071,8 @@ const runner: Command = async (args, io) => {
       now: io.now,
       random: host.random,
       time: (iso) => clock.format(new Date(iso)),
+      // What a wake source shows of the agent at its messenger is in the workspace's language (ADR-0170).
+      language: me.workspace.language ?? undefined,
       // A moment that may be on another day, a stretch the runner did not run in or when a
       // usage limit resets, is said as the command prints any moment: with its day, in the
       // workspace's zone where the login kept one.
